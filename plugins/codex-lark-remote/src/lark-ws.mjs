@@ -1,3 +1,5 @@
+import { createRequire } from "node:module";
+import path from "node:path";
 import { nowIso } from "./config.mjs";
 
 export class LarkWebSocketReceiver {
@@ -108,7 +110,27 @@ export function larkWebSocketEnabled(config = {}) {
 }
 
 export async function loadLarkSdk() {
-  return import("@larksuiteoapi/node-sdk");
+  try {
+    return await import("@larksuiteoapi/node-sdk");
+  } catch (error) {
+    const sdk = requireFromPathNodeModules("@larksuiteoapi/node-sdk");
+    if (sdk) return sdk;
+    throw error;
+  }
+}
+
+function requireFromPathNodeModules(specifier) {
+  for (const entry of String(process.env.PATH || "").split(path.delimiter)) {
+    const normalized = path.normalize(entry);
+    if (!normalized.endsWith(`${path.sep}node_modules${path.sep}.bin`)) continue;
+    try {
+      const nodeModules = path.dirname(normalized);
+      return createRequire(path.join(nodeModules, "codex-lark-remote-loader.cjs"))(specifier);
+    } catch {
+      // Try the next PATH entry. npx exposes --package dependencies this way.
+    }
+  }
+  return null;
 }
 
 async function withTimeout(promise, timeoutMs, message) {

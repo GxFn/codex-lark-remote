@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { LarkWebSocketReceiver, larkWebSocketEnabled } from "../plugins/codex-lark-remote/src/lark-ws.mjs";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { LarkWebSocketReceiver, larkWebSocketEnabled, loadLarkSdk } from "../plugins/codex-lark-remote/src/lark-ws.mjs";
 
 test("larkWebSocketEnabled defaults to websocket-first", () => {
   assert.equal(larkWebSocketEnabled({ lark: {} }), true);
@@ -36,6 +39,25 @@ test("LarkWebSocketReceiver reports missing credentials without throwing", async
   const status = await receiver.start();
   assert.equal(status.connected, false);
   assert.equal(status.message, "Missing Lark appId/appSecret");
+});
+
+test("loadLarkSdk can resolve SDK packages provided by npx", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-sdk-"));
+  const packageDir = path.join(root, "node_modules", "@larksuiteoapi", "node-sdk");
+  const binDir = path.join(root, "node_modules", ".bin");
+  await fs.mkdir(packageDir, { recursive: true });
+  await fs.mkdir(binDir, { recursive: true });
+  await fs.writeFile(path.join(packageDir, "package.json"), JSON.stringify({ name: "@larksuiteoapi/node-sdk" }));
+  await fs.writeFile(path.join(packageDir, "index.js"), "module.exports = { WSClient: class {}, EventDispatcher: class {} };\n");
+
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${binDir}${path.delimiter}${previousPath || ""}`;
+  try {
+    const sdk = await loadLarkSdk();
+    assert.equal(typeof sdk.WSClient, "function");
+  } finally {
+    process.env.PATH = previousPath;
+  }
 });
 
 function createFakeLarkSdk() {
