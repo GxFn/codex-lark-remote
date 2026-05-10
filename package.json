@@ -24,6 +24,12 @@
     "name": "Codex Lark Remote Contributors"
   },
   "license": "MIT",
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.63.1"
+  },
+  "overrides": {
+    "axios": "^1.16.0"
+  },
   "engines": {
     "node": ">=20"
   }

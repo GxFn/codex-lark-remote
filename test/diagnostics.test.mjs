@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { diagnoseLarkRemote, formatDiagnostics } from "../src/diagnostics.mjs";
+import { diagnoseLarkRemote, formatDiagnostics, formatHandoff } from "../src/diagnostics.mjs";
 
-test("diagnoseLarkRemote reports sanitized webhook readiness", async () => {
+test("diagnoseLarkRemote reports sanitized websocket-first readiness", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-diagnostics-"));
   const repoDir = path.join(dir, "repo");
   await fs.mkdir(repoDir);
@@ -40,11 +40,13 @@ test("diagnoseLarkRemote reports sanitized webhook readiness", async () => {
   const diagnostics = await diagnoseLarkRemote({ dataDir: dir, configPath });
   assert.equal(diagnostics.ok, false);
   assert.equal(diagnostics.checks.bridgeRunning, false);
+  assert.equal(diagnostics.checks.webSocketEnabled, true);
   assert.equal(diagnostics.checks.allowedUsersConfigured, true);
   assert.equal(diagnostics.bridge.webhookUrl, "https://codex.example.test/bridge/lark/event");
   assert.equal(diagnostics.lark.appIdPrefix, "cli_1234...");
   assert.equal(diagnostics.lark.allowedUsersCount, 1);
   assert.equal(diagnostics.repos[0].pathExists, true);
-  assert.match(formatDiagnostics(diagnostics), /Webhook URL: https:\/\/codex\.example\.test\/bridge\/lark\/event/);
+  assert.match(formatDiagnostics(diagnostics), /Lark transport: websocket/);
+  assert.match(formatHandoff(diagnostics), /long connection/);
   assert.doesNotMatch(formatDiagnostics(diagnostics), /secret_value|token_value|0123456789abcdef/);
 });

@@ -4,7 +4,10 @@
     "appSecret": "xxx",
     "verificationToken": "",
     "encryptKey": "",
-    "allowedUsers": []
+    "allowedUsers": [],
+    "transport": "websocket",
+    "websocket": true,
+    "websocketStartTimeoutMs": 10000
   },
   "defaultRepo": "example",
   "repos": {

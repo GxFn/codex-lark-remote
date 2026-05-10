@@ -4,7 +4,7 @@ Remote Codex programming from Feishu/Lark chat.
 
 This plugin keeps the first version intentionally small:
 
-- a local bridge process receives Feishu/Lark events,
+- a local bridge process receives Feishu/Lark events over WebSocket first,
 - a local queue records remote tasks,
 - Codex CLI runs each task in an isolated git worktree,
 - concise status, validation, and review actions are sent back to chat.
@@ -37,9 +37,12 @@ IDs. Keep that config out of git.
 
 ```text
 codex_lark_check_auth
-codex_lark_start
+codex_lark_handoff
 codex_lark_diagnose
 ```
+
+In Feishu Event Subscriptions, choose long connection and add
+`im.message.receive_v1`. This default path does not need a public callback URL.
 
 4. For local testing without Feishu/Lark, create a task manually:
 
@@ -47,9 +50,10 @@ codex_lark_diagnose
 codex_lark_send prompt="fix the failing test" repoKey="example"
 ```
 
-The bridge exposes a loopback HTTP API for MCP tools and a `/bridge/lark/event`
-webhook route for Feishu/Lark event delivery. For a real Feishu webhook, put a
-trusted tunnel or reverse proxy in front of that route.
+The bridge exposes a loopback HTTP API for MCP tools and still keeps
+`/bridge/lark/event` as a webhook fallback/testing route. If you set
+`lark.transport` to `webhook`, put a trusted tunnel or reverse proxy in front of
+that route.
 
 To simulate a Feishu/Lark message locally:
 
@@ -64,9 +68,9 @@ To simulate URL verification:
 npm run fixture -- --sign --encrypt --challenge
 ```
 
-For a real Feishu/Lark callback, set `CODEX_LARK_PUBLIC_URL` or `publicUrl` to
-the trusted tunnel/reverse proxy base URL, then use the webhook URL reported by
-`codex_lark_diagnose` in Feishu Event Subscriptions.
+For the normal WebSocket path, send a Feishu message after `codex_lark_handoff`
+reports the bridge is running. For webhook fallback, set `CODEX_LARK_PUBLIC_URL`
+or `publicUrl`, then use the webhook URL reported by `codex_lark_diagnose`.
 
 ## Chat Commands
 

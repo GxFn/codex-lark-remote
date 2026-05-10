@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import { DEFAULT_BRIDGE_HOST, ensureDir, loadConfig, nowIso, stateFilePath } from "./config.mjs";
 import { runApprovedAction } from "./actions.mjs";
 import { decryptLarkPayload, verifyLarkSignature } from "./crypto.mjs";
+import { LarkWebSocketReceiver } from "./lark-ws.mjs";
 import { parseLarkEvent, isUserAllowed, classifyChatText } from "./lark.mjs";
 import { LarkNotifier } from "./notifier.mjs";
 import { formatBridgeStatus, formatHelp, formatQueued, formatTask } from "./presenter.mjs";
@@ -15,28 +16,36 @@ export async function startBridge(options = {}) {
   const queue = new RemoteCommandQueue({ dataDir: config.dataDir });
   const notifier = new LarkNotifier(config.lark || {});
   const runner = new CodexCliRunner({ queue, config, notifier });
+  const bridge = { config, queue, notifier, runner, token: null, server: null, larkWs: null };
   const token = options.token || process.env.CODEX_LARK_BRIDGE_TOKEN || crypto.randomBytes(24).toString("hex");
+  bridge.token = token;
   const host = options.host || DEFAULT_BRIDGE_HOST;
   const port = Number(options.port ?? 0);
 
   const server = http.createServer(async (req, res) => {
     try {
-      await route({ req, res, config, queue, notifier, runner, token, server });
+      await route({ ...bridge, req, res });
     } catch (error) {
       sendJson(res, 500, { success: false, error: error.message });
     }
+  });
+  bridge.server = server;
+  bridge.larkWs = new LarkWebSocketReceiver({
+    config,
+    onEvent: (eventBody) => processLarkEvent(bridge, eventBody),
   });
 
   await new Promise((resolve) => server.listen(port, host, resolve));
   const address = server.address();
   const url = `http://${host}:${address.port}`;
   await writeState(config.dataDir, { pid: process.pid, host, port: address.port, url, token, startedAt: nowIso() });
+  await bridge.larkWs.start();
 
   if (config.runner?.workerEnabled !== false) {
     setInterval(() => runner.processAll().catch(() => {}), 2000).unref();
   }
 
-  return { server, config, queue, runner, url, token };
+  return { ...bridge, url, token };
 }
 
 async function route(ctx) {
@@ -59,20 +68,28 @@ async function route(ctx) {
         url: publicUrl(ctx.config),
         counts,
         workerBusy: ctx.runner.busy,
+        larkWs: ctx.larkWs?.status(),
         repos: Object.keys(ctx.config.repos || {}),
-        text: formatBridgeStatus({ config: ctx.config, counts, workerBusy: ctx.runner.busy, url: publicUrl(ctx.config) }),
+        text: formatBridgeStatus({
+          config: ctx.config,
+          counts,
+          workerBusy: ctx.runner.busy,
+          larkWs: ctx.larkWs?.status(),
+          url: publicUrl(ctx.config),
+        }),
       },
     });
   }
 
   if (req.method === "POST" && ["/bridge/stop", "/bridge/lark/stop"].includes(url.pathname)) {
     sendJson(res, 200, { success: true, message: "Stopping bridge" });
+    ctx.larkWs?.stop();
     setTimeout(() => ctx.server.close(() => process.exit(0)), 50).unref();
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/bridge/lark/start") {
-    return sendJson(res, 200, { success: true, message: "Bridge already running" });
+    return sendJson(res, 200, { success: true, data: await ctx.larkWs?.start(), message: "Bridge already running" });
   }
 
   if (req.method === "GET" && url.pathname === "/bridge/tasks") {
@@ -137,24 +154,30 @@ async function handleLarkEvent(ctx, incomingBody, rawBody, headers) {
 
   const event = parseLarkEvent(body);
   if (event.kind === "url_verification") return sendJson(ctx.res, 200, { challenge: event.challenge });
-  if (event.kind !== "message") return sendJson(ctx.res, 200, { success: true });
+  await processLarkEvent(ctx, body);
+  return sendJson(ctx.res, 200, { success: true });
+}
+
+export async function processLarkEvent(ctx, body) {
+  const event = parseLarkEvent(body);
+  if (event.kind !== "message") return { success: true, ignored: true };
 
   if (!isUserAllowed(event.senderId, ctx.config)) {
     await ctx.notifier.reply(event.messageId, "Permission denied.");
-    return sendJson(ctx.res, 200, { success: true });
+    return { success: true, rejected: true };
   }
   if (event.messageType && event.messageType !== "text") {
     await ctx.notifier.reply(event.messageId, "Please send a text message.");
-    return sendJson(ctx.res, 200, { success: true });
+    return { success: true, rejected: true };
   }
-  if (!event.text) return sendJson(ctx.res, 200, { success: true });
+  if (!event.text) return { success: true, ignored: true };
 
   const duplicate = await ctx.queue.findByMessageId(event.messageId);
-  if (duplicate) return sendJson(ctx.res, 200, { success: true, duplicate: true });
+  if (duplicate) return { success: true, duplicate: true };
 
   const action = classifyChatText(event.text, ctx.config);
   await handleChatAction(ctx, event, action);
-  return sendJson(ctx.res, 200, { success: true });
+  return { success: true };
 }
 
 async function handleChatAction(ctx, event, action) {

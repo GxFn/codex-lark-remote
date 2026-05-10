@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import readline from "node:readline";
 import { loadConfig, readPackageVersion } from "../src/config.mjs";
-import { diagnoseLarkRemote, formatDiagnostics } from "../src/diagnostics.mjs";
+import { diagnoseLarkRemote, formatDiagnostics, formatHandoff } from "../src/diagnostics.mjs";
 import { LarkNotifier } from "../src/notifier.mjs";
 import { bridgeFetch, bridgeStatus, readBridgeState, startBridgeProcess, stopBridgeProcess } from "../src/supervisor.mjs";
 
@@ -30,7 +30,7 @@ const tools = [
   },
   {
     name: "codex_lark_diagnose",
-    description: "Return a sanitized Feishu/Lark webhook readiness checklist, including bridge status, callback URL, allowlist, and repo configuration.",
+    description: "Return a sanitized Feishu/Lark readiness checklist, including WebSocket status, webhook fallback URL, allowlist, and repo configuration.",
     inputSchema: {
       type: "object",
       properties: {
@@ -49,6 +49,18 @@ const tools = [
       properties: {
         dataDir: { type: "string" },
         configPath: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "codex_lark_handoff",
+    description: "Start the bridge and return concise instructions for taking over the current Codex work from Feishu/Lark.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dataDir: { type: "string" },
+        configPath: { type: "string" },
+        checkAuth: { type: "boolean", description: "Also call Feishu/Lark auth API. Defaults to false." },
       },
     },
   },
@@ -178,6 +190,10 @@ async function handleRequest(request) {
 async function callTool(name, args) {
   if (name === "codex_lark_start") {
     return textContent(formatStatus(await startBridgeProcess(args)));
+  }
+  if (name === "codex_lark_handoff") {
+    await startBridgeProcess(args);
+    return textContent(formatHandoff(await diagnoseLarkRemote(args)));
   }
   if (name === "codex_lark_stop") {
     return textContent(formatJson(await stopBridgeProcess(args)));

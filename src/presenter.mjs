@@ -17,11 +17,13 @@ export function formatHelp() {
   ].join("\n");
 }
 
-export function formatBridgeStatus({ config, counts, workerBusy, url }) {
+export function formatBridgeStatus({ config, counts, workerBusy, url, larkWs }) {
   const repos = Object.keys(config.repos || {});
+  const transport = config.lark?.transport || "websocket";
   return [
     "Codex Lark Remote status",
     `Bridge: ${url || "running"}`,
+    `Lark: ${formatLarkTransport({ transport, larkWs })}`,
     `Repos: ${repos.length ? repos.join(", ") : "none configured"}`,
     `Queue: ${formatCounts(counts)}`,
     `Worker: ${workerBusy ? "busy" : "idle"}`,
@@ -84,4 +86,12 @@ export function formatFinal(command) {
 function formatCounts(counts = {}) {
   const keys = ["pending", "running", "waiting_review", "completed", "failed", "timeout", "cancelled"];
   return keys.map((key) => `${key}=${counts[key] || 0}`).join(" ");
+}
+
+function formatLarkTransport({ transport, larkWs }) {
+  if (transport === "webhook") return "webhook";
+  if (!larkWs?.enabled) return "websocket disabled";
+  if (larkWs.connected) return "websocket connected";
+  if (larkWs.starting) return "websocket connecting";
+  return `websocket ${larkWs.message || "not connected"}`;
 }
