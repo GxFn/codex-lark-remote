@@ -9,6 +9,7 @@ const entries = [
   ".codex-plugin",
   ".mcp.json",
   "README.md",
+  "README.zh-CN.md",
   "assets",
   "bin",
   "config",

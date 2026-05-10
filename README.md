@@ -2,6 +2,8 @@
 
 Remote Codex programming from Feishu/Lark chat.
 
+Chinese version: [README.zh-CN.md](README.zh-CN.md)
+
 This plugin keeps the first version intentionally small:
 
 - a local bridge process receives Feishu/Lark events over WebSocket first,
@@ -13,9 +15,37 @@ This plugin keeps the first version intentionally small:
 
 ## Codex Plugin Install
 
-This repository includes a Codex marketplace bundle at
-`plugins/codex-lark-remote`. For local development, add this repository as a
-Codex marketplace in `~/.codex/config.toml` and enable the plugin:
+First-time users do not need to clone this repository. In Codex, open the plugin
+marketplace settings, choose **Add plugin marketplace**, and fill the dialog like
+this:
+
+```text
+Source:
+https://github.com/GxFn/codex-lark-remote.git
+
+Git ref:
+main
+
+Sparse path:
+leave empty
+```
+
+The marketplace file lives at the repository root:
+`.agents/plugins/marketplace.json`. It points Codex at the bundled plugin under
+`plugins/codex-lark-remote`.
+
+After adding the marketplace, enable the `codex-lark-remote` plugin from the
+plugin list. Start a new Codex conversation and mention the plugin, for example:
+
+```text
+Start codex-lark-remote and help me configure Feishu/Lark remote handoff.
+```
+
+For a tagged release, set **Git ref** to the release tag instead of `main`, for
+example `v0.1.1`.
+
+For local plugin development only, add this repository as a local marketplace in
+`~/.codex/config.toml`:
 
 ```toml
 [marketplaces.codex-lark-remote]
@@ -26,26 +56,9 @@ source = "/absolute/path/to/codex-lark-remote"
 enabled = true
 ```
 
-After Codex reloads plugins, start a new Codex conversation and mention the
-plugin, for example:
-
-```text
-启动 codex-lark-remote，并帮我配置飞书远程接管。
-```
-
 The installed plugin reads runtime data and private credentials from
 `~/.codex-lark-remote/config.json` unless a tool call passes `dataDir` or
 `configPath`. Keep that file out of git.
-
-For a published git marketplace, keep the same plugin id and point the
-marketplace source at the release repository/tag:
-
-```toml
-[marketplaces.codex-lark-remote]
-source_type = "git"
-source = "https://github.com/<owner>/codex-lark-remote.git"
-revision = "v0.1.1"
-```
 
 ## Configure From Codex Chat
 
@@ -57,25 +70,26 @@ auth, then start handoff.
 Use a prompt like this:
 
 ```text
-请配置 codex-lark-remote。
+Please configure codex-lark-remote.
 
-飞书应用：
+Feishu/Lark app:
 - appId: cli_xxx
 - appSecret: xxx
 - verificationToken: xxx
 - encryptKey: xxx
 
-允许使用者：
+Allowed users:
 - allowedUsers: ["ou_xxx"]
 
-远程编程仓库：
-- defaultRepo: codex-lark-remote
-- repos.codex-lark-remote.path: /absolute/path/to/codex-lark-remote
-- repos.codex-lark-remote.baseBranch: main
-- repos.codex-lark-remote.testCommand: npm test
+Optional remote coding repository:
+- defaultRepo: my-project
+- repos.my-project.path: /absolute/path/to/my-project
+- repos.my-project.baseBranch: main
+- repos.my-project.testCommand: npm test
 
-请写入 ~/.codex-lark-remote/config.json，然后运行 codex_lark_check_auth、
-codex_lark_diagnose，最后在当前对话里启动 codex_lark_handoff。
+Please write ~/.codex-lark-remote/config.json, then run
+codex_lark_check_auth and codex_lark_diagnose. Finally, start
+codex_lark_handoff in this current Codex conversation.
 ```
 
 Notes:
@@ -87,8 +101,9 @@ Notes:
 - `allowedUsers` should contain Feishu/Lark sender ids. If you do not know your
   sender id yet, leave `allowedUsers` empty during first setup, send
   `/codex whoami` to the bot from Feishu, then add the returned `senderId`.
-- `repos` is only required for isolated worktree tasks. Current-thread handoff
-  can work with just the Feishu/Lark app credentials and allowlist.
+- `repos` is only required when you want Feishu/Lark to create isolated
+  worktree coding tasks for a target project. Current-thread handoff can work
+  with just the Feishu/Lark app credentials and allowlist.
 - Paste secrets only into your trusted local Codex conversation. Do not send
   them through Feishu chat and do not commit `~/.codex-lark-remote/config.json`.
 
@@ -105,10 +120,10 @@ The equivalent JSON shape is:
     "transport": "websocket",
     "websocket": true
   },
-  "defaultRepo": "codex-lark-remote",
+  "defaultRepo": "my-project",
   "repos": {
-    "codex-lark-remote": {
-      "path": "/absolute/path/to/codex-lark-remote",
+    "my-project": {
+      "path": "/absolute/path/to/my-project",
       "remote": "origin",
       "baseBranch": "main",
       "testCommand": "npm test"
@@ -122,7 +137,8 @@ The equivalent JSON shape is:
 In Codex chat, ask the agent to start the plugin for the current conversation:
 
 ```text
-启动 codex-lark-remote handoff，让我接下来可以从飞书继续这个 Codex 对话。
+Start codex-lark-remote handoff so I can continue this Codex conversation
+from Feishu/Lark.
 ```
 
 Codex should call:
