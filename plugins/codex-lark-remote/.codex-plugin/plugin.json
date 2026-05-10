@@ -31,7 +31,8 @@
       "Show Lark remote status",
       "List recent Lark remote tasks"
     ],
-    "brandColor": "#00B96B"
+    "brandColor": "#00B96B",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/icon.png"
   }
 }
-

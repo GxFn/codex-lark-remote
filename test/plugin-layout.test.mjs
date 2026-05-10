@@ -11,6 +11,7 @@ const mirroredEntries = [
   ".codex-plugin",
   ".mcp.json",
   "README.md",
+  "assets",
   "bin",
   "config",
   "package-lock.json",
@@ -37,9 +38,9 @@ test("keeps the local Codex plugin bundle in sync with the root implementation",
     assert.equal(bundledStat.isSymbolicLink(), false, `${entry} must be a real bundled file or directory`);
 
     if (rootStat.isFile()) {
-      const rootText = await fs.readFile(rootPath, "utf8");
-      const bundledText = await fs.readFile(bundledPath, "utf8");
-      assert.equal(bundledText, rootText, `${entry} drifted from the root implementation`);
+      const rootBytes = await fs.readFile(rootPath);
+      const bundledBytes = await fs.readFile(bundledPath);
+      assert.deepEqual(bundledBytes, rootBytes, `${entry} drifted from the root implementation`);
       continue;
     }
 
@@ -48,9 +49,9 @@ test("keeps the local Codex plugin bundle in sync with the root implementation",
     assert.deepEqual(bundledFiles, rootFiles, `${entry} file list drifted from the root implementation`);
 
     for (const relativePath of rootFiles) {
-      const rootText = await fs.readFile(path.join(rootPath, relativePath), "utf8");
-      const bundledText = await fs.readFile(path.join(bundledPath, relativePath), "utf8");
-      assert.equal(bundledText, rootText, `${entry}/${relativePath} drifted from the root implementation`);
+      const rootBytes = await fs.readFile(path.join(rootPath, relativePath));
+      const bundledBytes = await fs.readFile(path.join(bundledPath, relativePath));
+      assert.deepEqual(bundledBytes, rootBytes, `${entry}/${relativePath} drifted from the root implementation`);
     }
   }
 });
