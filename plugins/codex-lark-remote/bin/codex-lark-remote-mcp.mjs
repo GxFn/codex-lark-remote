@@ -3,7 +3,6 @@ import readline from "node:readline";
 import { formatConfigUpdate, updateRuntimeConfig } from "../src/config-writer.mjs";
 import { loadConfig, readPackageVersion } from "../src/config.mjs";
 import { diagnoseLarkRemote, formatDiagnostics, formatHandoff } from "../src/diagnostics.mjs";
-import { activateHandoff } from "../src/handoff.mjs";
 import { LarkNotifier } from "../src/notifier.mjs";
 import { formatMissingLarkCredentials, hasLarkAppCredentials } from "../src/setup-guide.mjs";
 import { bridgeFetch, bridgeStatus, readBridgeState, startBridgeProcess, stopBridgeProcess } from "../src/supervisor.mjs";
@@ -255,8 +254,19 @@ async function callTool(name, args) {
     if (!hasLarkAppCredentials(config)) {
       return textContent(formatHandoff(await diagnoseLarkRemote(args)));
     }
-    await ensureBridge(args);
-    await activateHandoff({ ...args, activatedBy: "mcp" });
+    const bridge = await ensureBridge(args);
+    const state = bridge.state || await readBridgeState(args);
+    if (!state?.url || !state?.token) {
+      return textContent("Codex Lark Remote bridge is not running. Use codex_lark_start first.");
+    }
+    await bridgeFetch(state, "/bridge/handoff", {
+      method: "POST",
+      body: {
+        threadId: args.threadId,
+        cwd: args.cwd,
+        activatedBy: "mcp",
+      },
+    });
     return textContent(formatHandoff(await diagnoseLarkRemote(args)));
   }
   if (name === "codex_lark_stop") {

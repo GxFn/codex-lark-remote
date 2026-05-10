@@ -29,13 +29,14 @@ export function formatWhoami(event) {
     .join("\n");
 }
 
-export function formatBridgeStatus({ config, counts, workerBusy, url, larkWs, handoff }) {
+export function formatBridgeStatus({ config, counts, workerBusy, url, larkWs, handoff, keepAwake }) {
   const transport = config.lark?.transport || "websocket";
   return [
     "Codex Lark Remote status",
     `Bridge: ${url || "running"}`,
     `Feishu/Lark: ${formatLarkTransport({ transport, larkWs })}`,
     `Conversation: ${formatHandoffState(handoff)}`,
+    `Mac keep-awake: ${formatKeepAwake(keepAwake)}`,
     `Pending replies: ${formatCounts(counts)}`,
     `Codex worker: ${workerBusy ? "busy" : "idle"}`,
   ].join("\n");
@@ -146,4 +147,13 @@ function formatHandoffState(handoff) {
   const thread = handoff.threadId ? handoff.threadId.slice(0, 8) : "unknown";
   const name = handoff.name ? ` ${handoff.name}` : "";
   return `attached ${thread}${name}`;
+}
+
+function formatKeepAwake(keepAwake) {
+  if (!keepAwake) return "unknown";
+  if (!keepAwake.enabled) return "disabled";
+  if (keepAwake.active) return keepAwake.pid ? `active pid=${keepAwake.pid}` : "active";
+  if (keepAwake.platform && keepAwake.platform !== "darwin") return "macOS only";
+  if (keepAwake.lastError) return `failed ${keepAwake.lastError}`;
+  return "idle";
 }

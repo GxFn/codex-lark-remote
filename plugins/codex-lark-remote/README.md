@@ -33,7 +33,7 @@ leave empty
 ```
 
 Enable `codex-lark-remote` from the plugin list. For a pinned install, set
-**Git ref** to a release tag such as `v0.1.12`.
+**Git ref** to a release tag such as `v0.1.13`.
 
 ## Configure Feishu/Lark
 
@@ -90,6 +90,10 @@ plugin attaches the current Codex thread to the local bridge.
 Then send normal messages to the Feishu/Lark bot. They will continue the same
 Codex conversation.
 
+On macOS, handoff also starts `caffeinate -dimsu` so the display may turn off
+while the Mac stays awake. The keep-awake process is stopped when handoff or the
+bridge stops.
+
 Useful commands:
 
 ```text
@@ -111,6 +115,23 @@ Remote replies are optimized for coding on a phone or in chat:
 - Source/code inspection output is summarized when it comes from commands such
   as `cat`, `nl`, `sed`, `grep`, or ordinary `rg` searches.
 - Test output, errors, warnings, and git summaries are kept.
+
+## Mac keep-awake
+
+Enabled by default:
+
+```json
+{
+  "handoff": {
+    "keepAwake": true,
+    "keepAwakeCommand": "caffeinate",
+    "keepAwakeArgs": ["-dimsu"]
+  }
+}
+```
+
+Set `handoff.keepAwake` to `false` in `~/.codex-lark-remote/config.json` to turn
+this off. This feature is macOS-only.
 
 ## Troubleshooting
 

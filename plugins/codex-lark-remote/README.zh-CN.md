@@ -30,7 +30,7 @@ main
 ```
 
 添加后，在插件列表里启用 `codex-lark-remote`。如果要固定版本，可以把“Git 引用”
-改成具体 release tag，例如 `v0.1.12`。
+改成具体 release tag，例如 `v0.1.13`。
 
 ## 配置飞书/Lark
 
@@ -83,6 +83,9 @@ Codex 必须先请求你的明确同意，才会启动接管。确认后，插�
 
 之后直接给飞书/Lark 机器人发送普通消息即可，它会继续同一个 Codex 对话。
 
+在 macOS 上，接管还会启动 `caffeinate -dimsu`，让屏幕可以熄灭但 Mac 保持唤醒。
+关闭接管或停止 bridge 时，这个 keep-awake 进程会一起停止。
+
 常用命令：
 
 ```text
@@ -103,6 +106,23 @@ Codex 必须先请求你的明确同意，才会启动接管。确认后，插�
 - 有价值的输出会保留换行。
 - `cat`、`nl`、`sed`、`grep`、普通 `rg` 搜索这类源码查看输出会被摘要化。
 - 测试结果、错误、warning、git 摘要等高价值输出会保留。
+
+## Mac 保持唤醒
+
+默认启用：
+
+```json
+{
+  "handoff": {
+    "keepAwake": true,
+    "keepAwakeCommand": "caffeinate",
+    "keepAwakeArgs": ["-dimsu"]
+  }
+}
+```
+
+如果要关闭，可以在 `~/.codex-lark-remote/config.json` 里把 `handoff.keepAwake`
+设为 `false`。这个功能只在 macOS 上运行。
 
 ## 排查
 

@@ -47,6 +47,7 @@ export async function diagnoseLarkRemote(options = {}) {
       bridgeRunning: Boolean(status.running),
       webSocketEnabled,
       webSocketConnected: Boolean(status.data?.larkWs?.connected),
+      keepAwakeActive: Boolean(status.data?.keepAwake?.active),
       publicUrlConfigured: Boolean(publicUrl),
       appCredentialsConfigured,
       verificationTokenConfigured: Boolean(config.lark?.verificationToken || process.env.CODEX_LARK_VERIFICATION_TOKEN),
@@ -60,6 +61,7 @@ export async function diagnoseLarkRemote(options = {}) {
       webhookUrl,
       route: "/bridge/lark/event",
       larkWs: status.data?.larkWs || null,
+      keepAwake: status.data?.keepAwake || null,
     },
     paths: {
       dataDir: config.dataDir,
@@ -90,6 +92,7 @@ export function formatDiagnostics(diagnostics) {
     `Config: ${diagnostics.paths?.configPath || "-"}`,
     `Feishu/Lark: ${formatTransport(diagnostics)}`,
     diagnostics.handoff?.active ? `Conversation: attached ${formatThread(diagnostics.handoff.threadId)}` : "Conversation: not attached",
+    `Mac keep-awake: ${formatKeepAwake(diagnostics.bridge?.keepAwake)}`,
     `Lark app: ${diagnostics.lark.appIdPrefix || "-"}`,
     `Allowed users: ${diagnostics.lark.allowedUsersCount || 0}`,
     diagnostics.issues.length ? `Issues:\n${diagnostics.issues.map((item) => `- ${item}`).join("\n")}` : "Issues: none",
@@ -121,6 +124,7 @@ export function formatHandoff(diagnostics) {
     diagnostics.ok ? "Status: ready for Feishu/Lark" : "Status: needs attention",
     `Feishu/Lark: ${formatTransport(diagnostics)}`,
     handoff?.active ? `Conversation: attached ${formatThread(handoff.threadId)}` : "Conversation: not attached",
+    `Mac keep-awake: ${formatKeepAwake(diagnostics.bridge?.keepAwake)}`,
     diagnostics.checks.webSocketEnabled
       ? "Feishu setup: Event Subscriptions -> long connection -> im.message.receive_v1"
       : `Feishu setup: webhook URL ${diagnostics.bridge.webhookUrl || "-"}`,
@@ -194,6 +198,15 @@ function formatTransport(diagnostics) {
 
 function formatThread(threadId) {
   return threadId ? String(threadId).slice(0, 8) : "unknown";
+}
+
+function formatKeepAwake(keepAwake) {
+  if (!keepAwake) return "unknown";
+  if (!keepAwake.enabled) return "disabled";
+  if (keepAwake.active) return keepAwake.pid ? `active pid=${keepAwake.pid}` : "active";
+  if (keepAwake.platform && keepAwake.platform !== "darwin") return "macOS only";
+  if (keepAwake.lastError) return `failed ${keepAwake.lastError}`;
+  return "idle";
 }
 
 function cleanPublicUrl(url) {

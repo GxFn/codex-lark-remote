@@ -47,7 +47,7 @@ leave empty
 ```
 
 After adding the marketplace, enable `codex-lark-remote` from the plugin list.
-For a tagged release, set **Git ref** to a release tag, for example `v0.1.12`.
+For a tagged release, set **Git ref** to a release tag, for example `v0.1.13`.
 
 ## Configure Feishu/Lark
 
@@ -110,6 +110,10 @@ messages.
 When startup succeeds, send any normal message to the Feishu/Lark bot. Codex
 will continue the same conversation and reply in Feishu/Lark.
 
+On macOS, the bridge starts `caffeinate -dimsu` while handoff is active so the
+Mac can turn the display off without going to sleep. It stops that keep-awake
+process when handoff is turned off or the bridge stops.
+
 Useful Feishu/Lark commands:
 
 ```text
@@ -136,6 +140,23 @@ The Feishu/Lark replies are optimized for remote coding:
 
 This keeps Feishu/Lark focused on what Codex did, what changed, and what needs
 attention.
+
+## Mac keep-awake
+
+The default handoff config keeps the Mac awake during remote takeover:
+
+```json
+{
+  "handoff": {
+    "keepAwake": true,
+    "keepAwakeCommand": "caffeinate",
+    "keepAwakeArgs": ["-dimsu"]
+  }
+}
+```
+
+Set `handoff.keepAwake` to `false` in `~/.codex-lark-remote/config.json` if you
+prefer to manage sleep manually. This feature only runs on macOS.
 
 ## Troubleshooting
 

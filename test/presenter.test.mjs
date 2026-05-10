@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatFinal, formatHelp, formatProgress, formatTask, formatWhoami } from "../plugins/codex-lark-remote/src/presenter.mjs";
+import { formatBridgeStatus, formatFinal, formatHelp, formatProgress, formatTask, formatWhoami } from "../plugins/codex-lark-remote/src/presenter.mjs";
 
 test("formatHelp includes whoami command", () => {
   assert.match(formatHelp(), /\/codex whoami/);
@@ -21,6 +21,21 @@ test("formatWhoami returns the sender id needed for allowlist setup", () => {
   assert.match(text, /unionId: on_union_123/);
   assert.match(text, /Add senderId to lark\.allowedUsers/);
 });
+
+test("formatBridgeStatus includes Mac keep-awake state", () => {
+  const text = formatBridgeStatus({
+    config: { lark: { transport: "websocket" } },
+    counts: {},
+    workerBusy: false,
+    url: "http://127.0.0.1:1234",
+    larkWs: { enabled: true, connected: true },
+    handoff: { active: true, threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2" },
+    keepAwake: { enabled: true, active: true, pid: 1234, platform: "darwin" },
+  });
+
+  assert.match(text, /Mac keep-awake: active pid=1234/);
+});
+
 
 test("formatTask exposes the last notification delivery error", () => {
   const text = formatTask({

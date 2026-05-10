@@ -32,7 +32,8 @@ When the user says "start this plugin" or similar:
 4. After the user explicitly approves that external Feishu/Lark handoff, call
    `codex_lark_handoff` with `confirmedExternalHandoff: true`, preferably with
    auth checking enabled when available. This is the default startup action
-   after consent.
+   after consent. On macOS, handoff starts the plugin's built-in keep-awake
+   process unless `handoff.keepAwake` is disabled.
 5. If Feishu/Lark `appId` or `appSecret` is missing, ask for the missing values
    and give the short platform path: create an internal/custom app in
    Feishu/Lark Open Platform, enable bot capability, copy App ID/App Secret from

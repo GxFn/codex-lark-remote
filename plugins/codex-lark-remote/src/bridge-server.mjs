@@ -5,6 +5,7 @@ import { DEFAULT_BRIDGE_HOST, ensureDir, loadConfig, nowIso, readPackageVersion,
 import { runApprovedAction } from "./actions.mjs";
 import { decryptLarkPayload, verifyLarkSignature } from "./crypto.mjs";
 import { activateHandoff, clearHandoff, readHandoff } from "./handoff.mjs";
+import { KeepAwakeController } from "./keep-awake.mjs";
 import { LarkWebSocketReceiver } from "./lark-ws.mjs";
 import { parseLarkEvent, isUserAllowed, classifyChatText } from "./lark.mjs";
 import { LarkNotifier } from "./notifier.mjs";
@@ -19,7 +20,21 @@ export async function startBridge(options = {}) {
   const queue = new RemoteCommandQueue({ dataDir: config.dataDir });
   const notifier = new LarkNotifier(config.lark || {});
   const runner = new CodexCliRunner({ queue, config, notifier });
-  const bridge = { config, queue, notifier, runner, token: null, server: null, larkWs: null, seenMessageIds: new Map() };
+  const logger = options.logger || console;
+  const keepAwake = new KeepAwakeController({ config, logger });
+  const bridge = { config, queue, notifier, runner, token: null, server: null, larkWs: null, keepAwake, seenMessageIds: new Map() };
+  const cleanup = () => {
+    bridge.larkWs?.stop();
+    bridge.keepAwake?.stop();
+  };
+  process.once("SIGTERM", () => {
+    cleanup();
+    process.exit(0);
+  });
+  process.once("SIGINT", () => {
+    cleanup();
+    process.exit(0);
+  });
   const version = await readPackageVersion();
   const token = options.token || process.env.CODEX_LARK_BRIDGE_TOKEN || crypto.randomBytes(24).toString("hex");
   bridge.token = token;
@@ -37,7 +52,7 @@ export async function startBridge(options = {}) {
   bridge.larkWs = new LarkWebSocketReceiver({
     config,
     onEvent: (eventBody) => processLarkEvent(bridge, eventBody),
-    logger: options.logger || console,
+    logger,
   });
 
   await new Promise((resolve) => server.listen(port, host, resolve));
@@ -45,6 +60,9 @@ export async function startBridge(options = {}) {
   const url = `http://${host}:${address.port}`;
   await writeState(config.dataDir, { pid: process.pid, version, host, port: address.port, url, token, startedAt: nowIso() });
   await bridge.larkWs.start();
+  if (await readHandoff({ dataDir: config.dataDir })) {
+    bridge.keepAwake.start();
+  }
 
   if (config.runner?.workerEnabled !== false) {
     setInterval(() => runner.processAll().catch(() => {}), 2000).unref();
@@ -75,6 +93,7 @@ async function route(ctx) {
         counts,
         workerBusy: ctx.runner.busy,
         handoff: await readHandoff({ dataDir: ctx.config.dataDir }),
+        keepAwake: ctx.keepAwake?.status(),
         larkWs: ctx.larkWs?.status(),
         repos: Object.keys(ctx.config.repos || {}),
         text: formatBridgeStatus({
@@ -82,6 +101,7 @@ async function route(ctx) {
           counts,
           workerBusy: ctx.runner.busy,
           handoff: await readHandoff({ dataDir: ctx.config.dataDir }),
+          keepAwake: ctx.keepAwake?.status(),
           larkWs: ctx.larkWs?.status(),
           url: publicUrl(ctx.config),
         }),
@@ -92,6 +112,7 @@ async function route(ctx) {
   if (req.method === "POST" && ["/bridge/stop", "/bridge/lark/stop"].includes(url.pathname)) {
     sendJson(res, 200, { success: true, message: "Stopping bridge" });
     ctx.larkWs?.stop();
+    ctx.keepAwake?.stop();
     setTimeout(() => ctx.server.close(() => process.exit(0)), 50).unref();
     return;
   }
@@ -119,11 +140,14 @@ async function route(ctx) {
       name: body.name,
       activatedBy: body.activatedBy || "bridge",
     });
-    return sendJson(res, 200, { success: true, data });
+    const keepAwake = ctx.keepAwake?.start();
+    return sendJson(res, 200, { success: true, data, keepAwake });
   }
 
   if (req.method === "DELETE" && url.pathname === "/bridge/handoff") {
-    return sendJson(res, 200, { success: true, data: await clearHandoff({ dataDir: ctx.config.dataDir }) });
+    const data = await clearHandoff({ dataDir: ctx.config.dataDir });
+    const keepAwake = ctx.keepAwake?.stop();
+    return sendJson(res, 200, { success: true, data, keepAwake });
   }
 
   if (req.method === "POST" && url.pathname === "/bridge/tasks") {
@@ -223,6 +247,7 @@ async function handleChatAction(ctx, event, action) {
         counts,
         workerBusy: ctx.runner.busy,
         handoff,
+        keepAwake: ctx.keepAwake?.status(),
         larkWs: ctx.larkWs?.status(),
         url: publicUrl(ctx.config),
       }),
@@ -232,9 +257,11 @@ async function handleChatAction(ctx, event, action) {
     return ctx.notifier.reply(event.messageId, formatHandoffStatus(handoff));
   }
   if (action.kind === "handoff_disable") {
+    const handoffState = await clearHandoff({ dataDir: ctx.config.dataDir });
+    ctx.keepAwake?.stop();
     return ctx.notifier.reply(
       event.messageId,
-      formatHandoffStatus(await clearHandoff({ dataDir: ctx.config.dataDir })),
+      formatHandoffStatus(handoffState),
     );
   }
   if (action.kind === "task_status" || action.kind === "task_diff") {
