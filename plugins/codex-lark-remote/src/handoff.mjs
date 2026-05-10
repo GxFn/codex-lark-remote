@@ -70,6 +70,7 @@ async function findSession(files, requestedCwd) {
   for (const file of files) {
     const meta = await readSessionMeta(file.path);
     if (!meta?.id) continue;
+    if (isHiddenSession(meta)) continue;
     const candidate = {
       threadId: meta.id,
       threadPath: file.path,
@@ -124,6 +125,10 @@ async function readSessionMeta(filePath) {
       cwd: payload.cwd || "",
       name: payload.name || "",
       source: payload.source || "",
+      threadSource: payload.thread_source || "",
+      agentRole: payload.agent_role || "",
+      agentNickname: payload.agent_nickname || "",
+      baseInstructions: payload.base_instructions?.text || "",
     };
   } catch {
     return { id: idFromPath(filePath), cwd: "" };
@@ -133,9 +138,26 @@ async function readSessionMeta(filePath) {
 async function readFirstLine(filePath) {
   const handle = await fs.open(filePath, "r");
   try {
-    const buffer = Buffer.alloc(128 * 1024);
-    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    return buffer.subarray(0, bytesRead).toString("utf8").split(/\r?\n/, 1)[0] || "";
+    const chunks = [];
+    let offset = 0;
+    let total = 0;
+    const chunkSize = 128 * 1024;
+    const maxFirstLineBytes = 2 * 1024 * 1024;
+    while (total < maxFirstLineBytes) {
+      const buffer = Buffer.alloc(chunkSize);
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, offset);
+      if (!bytesRead) break;
+      const chunk = buffer.subarray(0, bytesRead);
+      const newline = chunk.indexOf(10);
+      if (newline >= 0) {
+        chunks.push(chunk.subarray(0, newline));
+        break;
+      }
+      chunks.push(chunk);
+      offset += bytesRead;
+      total += bytesRead;
+    }
+    return Buffer.concat(chunks).toString("utf8").replace(/\r$/, "");
   } finally {
     await handle.close();
   }
@@ -154,4 +176,13 @@ function cwdMatches(sessionCwd, requestedCwd) {
     requestedPath.startsWith(`${sessionPath}${path.sep}`) ||
     sessionPath.startsWith(`${requestedPath}${path.sep}`)
   );
+}
+
+function isHiddenSession(meta) {
+  if (meta.threadSource === "subagent") return true;
+  if (meta.source === "exec") return true;
+  if (typeof meta.source === "object" && meta.source?.subagent) return true;
+  if (meta.agentRole || meta.agentNickname) return true;
+  if (/judging one planned coding-agent action|guardian/i.test(meta.baseInstructions || "")) return true;
+  return false;
 }

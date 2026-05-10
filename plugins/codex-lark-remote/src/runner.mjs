@@ -1,9 +1,9 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { nowIso, safeFileName, worktreeRoot } from "./config.mjs";
-import { formatFinal } from "./presenter.mjs";
+import { formatFinal, formatProgress } from "./presenter.mjs";
 import { buildRunnerPrompt } from "./prompt.mjs";
 
 const execFileP = promisify(execFile);
@@ -119,8 +119,13 @@ export class CodexCliRunner {
       if (command.notifyStarted || this.config.handoff?.notifyStarted === true) {
         await this.#notify(command, `Codex started: ${command.id}`);
       }
+      const progressNotifier = createProgressNotifier({
+        command,
+        config: this.config,
+        notify: (text) => this.#notify(command, text),
+      });
       const prompt = buildHandoffPrompt(command, { promptStyle: this.config.handoff?.promptStyle || "direct" });
-      const result = await this.#runCodexResume(command, prompt);
+      const result = await this.#runCodexResume(command, prompt, { onEvent: progressNotifier });
       const diffSummary = command.projectRoot ? await gitMaybe(["-C", command.projectRoot, "diff", "--stat"]) : "";
 
       const updated = await this.queue.update(
@@ -128,6 +133,7 @@ export class CodexCliRunner {
         {
           status: result.exitCode === 0 ? "completed" : "failed",
           result: result.finalMessage || result.stdoutTail || "",
+          progressSummary: result.progressSummary || "",
           diffSummary: diffSummary.trim(),
           testSummary: "",
           error: result.exitCode === 0 ? "" : result.stderrTail || `Codex exited with ${result.exitCode}`,
@@ -150,7 +156,7 @@ export class CodexCliRunner {
     }
   }
 
-  async #runCodexResume(command, prompt) {
+  async #runCodexResume(command, prompt, { onEvent } = {}) {
     const runner = this.config.runner || {};
     const resultsDir = path.join(this.config.dataDir, "results");
     await fs.mkdir(resultsDir, { recursive: true });
@@ -165,6 +171,7 @@ export class CodexCliRunner {
     const result = await runProcess(runner.codexPath || "codex", args, {
       timeoutMs: Number(runner.timeoutMs || 30 * 60 * 1000),
       cwd: command.projectRoot || undefined,
+      onEvent,
     });
     try {
       const finalFromFile = (await fs.readFile(outputFile, "utf8")).trim();
@@ -239,10 +246,25 @@ function normalizeDelivery(delivery) {
   return delivery;
 }
 
-async function runProcess(command, args, { timeoutMs, cwd }) {
+async function runProcess(command, args, { timeoutMs, cwd, onEvent }) {
   return new Promise((resolve) => {
-    const child = execFile(command, args, { timeout: timeoutMs, maxBuffer: 1024 * 1024 * 8, cwd }, (error, stdout, stderr) => {
-      const exitCode = typeof error?.code === "number" ? error.code : error ? 1 : 0;
+    const child = spawn(command, args, { cwd, stdio: ["pipe", "pipe", "pipe"] });
+    const progress = [];
+    let stdout = "";
+    let stderr = "";
+    let stdoutLineBuffer = "";
+    let timedOut = false;
+    let progressChain = Promise.resolve();
+    let resolved = false;
+
+    const finish = async ({ code, signal, error } = {}) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timer);
+      if (error) stderr = appendLimited(stderr, error.message);
+      if (stdoutLineBuffer.trim()) handleJsonLine(stdoutLineBuffer);
+      await progressChain.catch(() => {});
+      const exitCode = timedOut ? 124 : typeof code === "number" ? code : error ? 1 : signal ? 1 : 0;
       resolve({
         exitCode,
         stdout,
@@ -250,8 +272,46 @@ async function runProcess(command, args, { timeoutMs, cwd }) {
         stdoutTail: tail(stdout),
         stderrTail: tail(stderr),
         finalMessage: extractFinalMessage(stdout),
+        progressSummary: progress.slice(-12).join("\n"),
       });
+    };
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+      setTimeout(() => child.kill("SIGKILL"), 2000).unref();
+    }, timeoutMs);
+    timer.unref?.();
+
+    const handleJsonLine = (line) => {
+      if (!line.trim()) return;
+      try {
+        const event = JSON.parse(line);
+        const summary = summarizeCodexEvent(event);
+        if (summary && progress[progress.length - 1] !== summary) progress.push(summary);
+        if (onEvent && summary) {
+          progressChain = progressChain
+            .then(() => onEvent(event, summary))
+            .catch(() => {});
+        }
+      } catch {
+        // Non-JSON output is kept in stdout for final fallback.
+      }
+    };
+
+    child.stdout?.on("data", (chunk) => {
+      const text = chunk.toString("utf8");
+      stdout = appendLimited(stdout, text);
+      stdoutLineBuffer += text;
+      const lines = stdoutLineBuffer.split(/\r?\n/);
+      stdoutLineBuffer = lines.pop() || "";
+      for (const line of lines) handleJsonLine(line);
     });
+    child.stderr?.on("data", (chunk) => {
+      stderr = appendLimited(stderr, chunk.toString("utf8"));
+    });
+    child.on("error", (error) => finish({ error }));
+    child.on("close", (code, signal) => finish({ code, signal }));
     child.stdin?.end();
   });
 }
@@ -271,8 +331,14 @@ export function extractFinalMessage(stdout) {
     if (!line.trim()) continue;
     try {
       const event = JSON.parse(line);
-      const text = event.item?.text || event.message || event.text || event.content || event.delta;
+      const text = textFromEvent(event);
       if (event.type === "item.completed" && event.item?.type === "agent_message" && typeof text === "string") {
+        final = text.trim();
+      }
+      if (event.type === "response_item" && event.payload?.type === "message" && event.payload?.phase === "final_answer") {
+        final = text.trim();
+      }
+      if (event.type === "event_msg" && event.payload?.type === "agent_message" && event.payload?.phase === "final_answer") {
         final = text.trim();
       }
       if (typeof text === "string" && text.trim()) final = text.trim();
@@ -286,7 +352,159 @@ export function extractFinalMessage(stdout) {
   return final;
 }
 
+export function extractProgressSummary(stdout) {
+  const progress = [];
+  for (const line of String(stdout || "").split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try {
+      const summary = summarizeCodexEvent(JSON.parse(line));
+      if (summary && progress[progress.length - 1] !== summary) progress.push(summary);
+    } catch {
+      // Ignore non-JSON output.
+    }
+  }
+  return progress.join("\n");
+}
+
+export function summarizeCodexEvent(event) {
+  const type = String(event?.type || event?.method || "");
+  const params = event?.params || {};
+  const item = event?.item || params.item || event?.payload || params;
+  const itemType = String(item?.type || "");
+
+  if (/turn[./]started/i.test(type)) return "Started working on the Feishu/Lark message.";
+  if (/turn[./]completed/i.test(type)) return formatUsage(event?.usage || params.turn?.usage || params.usage);
+
+  if (itemType === "message" && item.role === "assistant") {
+    if (item.phase === "final_answer") return "";
+    const text = textFromEvent(event);
+    return text ? `Codex: ${oneLine(text, 900)}` : "";
+  }
+
+  if (itemType === "agent_message" || /agentMessage/i.test(type)) {
+    if (item.phase === "final_answer") return "";
+    return item.message ? `Codex: ${oneLine(item.message, 900)}` : "";
+  }
+
+  const command = commandFromEvent(event, item);
+  if (command) {
+    const output = item.aggregated_output || item.output || item.stdout || item.stderr || event.output || "";
+    return [`Ran command: ${oneLine(command, 220)}`, output ? `Output: ${oneLine(output, 700)}` : ""]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  const files = filesFromEvent(event, item);
+  if (files.length) return `Updated files: ${files.slice(0, 8).join(", ")}${files.length > 8 ? " ..." : ""}`;
+
+  const toolName = item.name || item.tool_name || item.toolName || event.tool_name || event.toolName;
+  if (toolName && /tool|mcp/i.test(`${type} ${itemType}`)) return `Used tool: ${toolName}`;
+
+  if (itemType === "custom_tool_call_output") {
+    const output = item.output || event.output || "";
+    return output ? `Tool output: ${oneLine(output, 900)}` : "";
+  }
+
+  if (/error|failed/i.test(type)) {
+    const message = event.message || event.error?.message || event.error || item.message || "Codex reported an error.";
+    return `Error: ${oneLine(message, 700)}`;
+  }
+
+  return "";
+}
+
+function createProgressNotifier({ command, config, notify }) {
+  const handoff = config.handoff || {};
+  if (handoff.notifyProgress === false || command.mode !== "thread_handoff") return async () => {};
+  const minIntervalMs = Number(handoff.progressIntervalMs || 2500);
+  const maxMessages = Number(handoff.maxProgressMessages || 5);
+  let sent = 0;
+  let lastAt = 0;
+  let lastText = "";
+
+  return async (_event, summary) => {
+    if (!summary || summary === lastText || sent >= maxMessages) return;
+    const now = Date.now();
+    if (sent > 0 && now - lastAt < minIntervalMs && !isImportantProgress(summary)) return;
+    sent += 1;
+    lastAt = now;
+    lastText = summary;
+    await notify(formatProgress(command, summary));
+  };
+}
+
+function isImportantProgress(summary) {
+  return /^(Ran command|Updated files|Used tool|Error:)/.test(summary);
+}
+
+function formatUsage(usage) {
+  if (!usage) return "Codex turn completed.";
+  const input = usage.input_tokens ?? usage.inputTokens;
+  const output = usage.output_tokens ?? usage.outputTokens;
+  if (input || output) return `Codex turn completed. Tokens: input=${input || 0} output=${output || 0}`;
+  return "Codex turn completed.";
+}
+
+function commandFromEvent(event, item) {
+  if (item?.command) return item.command;
+  if (item?.raw_command) return item.raw_command;
+  if (item?.action?.command) return item.action.command;
+  if (Array.isArray(item?.argv)) return item.argv.join(" ");
+  if (event?.command) return event.command;
+  if (/command/i.test(`${event?.type || ""} ${item?.type || ""}`)) return item?.cmd || item?.name || "";
+  return "";
+}
+
+function filesFromEvent(event, item) {
+  const values = [];
+  for (const source of [event?.files, item?.files, item?.changes, item?.edits, item?.updates]) {
+    if (!source) continue;
+    for (const entry of Array.isArray(source) ? source : Object.values(source)) {
+      if (typeof entry === "string") values.push(entry);
+      else if (entry?.path) values.push(entry.path);
+      else if (entry?.file) values.push(entry.file);
+      else if (entry?.filePath) values.push(entry.filePath);
+    }
+  }
+  const patchInput = item?.input || event?.input || "";
+  if (typeof patchInput === "string" && patchInput.includes("*** Begin Patch")) {
+    for (const match of patchInput.matchAll(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/gm)) {
+      values.push(match[1].trim());
+    }
+  }
+  const single = item?.path || item?.file || item?.filePath || event?.path;
+  if (single) values.push(single);
+  return [...new Set(values.map((value) => String(value)).filter(Boolean))];
+}
+
+function textFromEvent(event) {
+  const payload = event?.payload || {};
+  if (typeof payload.message === "string") return payload.message;
+  if (Array.isArray(payload.content)) {
+    return payload.content
+      .map((part) => part?.text || "")
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+  }
+  const item = event?.item || {};
+  if (typeof item.text === "string") return item.text;
+  return event?.message || event?.text || event?.content || event?.delta || "";
+}
+
+function oneLine(value, max) {
+  const text = String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > max ? `${text.slice(0, max - 1)}...` : text;
+}
+
 function tail(value, max = 3000) {
   const text = String(value || "");
   return text.length > max ? text.slice(-max) : text;
+}
+
+function appendLimited(base, chunk, max = 1024 * 1024 * 8) {
+  const next = `${base || ""}${chunk || ""}`;
+  return next.length > max ? next.slice(-max) : next;
 }

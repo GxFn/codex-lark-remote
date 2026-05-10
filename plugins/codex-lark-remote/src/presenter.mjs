@@ -54,6 +54,7 @@ export function formatTask(command) {
     command.worktreePath ? `Worktree: ${command.worktreePath}` : "",
     command.diffSummary ? `Diff:\n${command.diffSummary}` : "",
     command.testSummary ? `Validation:\n${command.testSummary}` : "",
+    command.progressSummary ? `Agent progress:\n${truncateForLark(command.progressSummary, 1200)}` : "",
     command.error ? `Error:\n${command.error}` : "",
     command.lastNotifyError ? `Last notify error:\n${command.lastNotifyError}` : "",
     command.result ? `Result:\n${truncateForLark(command.result, 1200)}` : "",
@@ -85,6 +86,7 @@ export function formatFinal(command) {
     return [
       `Task failed: ${command.id}`,
       command.error || "Unknown error.",
+      command.progressSummary ? `\nAgent progress:\n${truncateForLark(command.progressSummary, 1200)}` : "",
       "",
       `Use /codex status ${command.id} for details.`,
     ].join("\n");
@@ -120,6 +122,17 @@ export function formatFinal(command) {
     `/codex approve ${command.id} commit`,
     `/codex cancel ${command.id}`,
   ].join("\n");
+}
+
+export function formatProgress(command, text) {
+  return [
+    "Codex progress",
+    command.id ? `Task: ${command.id}` : "",
+    "",
+    truncateForLark(text, 1800),
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function formatCounts(counts = {}) {

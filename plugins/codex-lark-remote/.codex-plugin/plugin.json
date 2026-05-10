@@ -1,6 +1,6 @@
 {
   "name": "codex-lark-remote",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Remote Codex programming from Feishu/Lark chat.",
   "author": {
     "name": "Codex Lark Remote Contributors"

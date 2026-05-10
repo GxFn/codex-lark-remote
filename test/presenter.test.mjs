@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatFinal, formatHelp, formatTask, formatWhoami } from "../plugins/codex-lark-remote/src/presenter.mjs";
+import { formatFinal, formatHelp, formatProgress, formatTask, formatWhoami } from "../plugins/codex-lark-remote/src/presenter.mjs";
 
 test("formatHelp includes whoami command", () => {
   assert.match(formatHelp(), /\/codex whoami/);
@@ -35,6 +35,18 @@ test("formatTask exposes the last notification delivery error", () => {
   assert.match(text, /message not found/);
 });
 
+test("formatTask includes agent progress summaries", () => {
+  const text = formatTask({
+    id: "rcmd_test",
+    status: "completed",
+    repoKey: "repo",
+    progressSummary: "Ran command: npm test",
+  });
+
+  assert.match(text, /Agent progress:/);
+  assert.match(text, /Ran command: npm test/);
+});
+
 test("formatFinal returns only the Codex answer for chat handoff completions", () => {
   const text = formatFinal({
     id: "rcmd_chat",
@@ -47,4 +59,12 @@ test("formatFinal returns only the Codex answer for chat handoff completions", (
   });
 
   assert.equal(text, "这是 Codex 的直接回复。");
+});
+
+test("formatProgress creates a compact Feishu progress reply", () => {
+  const text = formatProgress({ id: "rcmd_test" }, "Ran command: npm test");
+
+  assert.match(text, /Codex progress/);
+  assert.match(text, /Task: rcmd_test/);
+  assert.match(text, /Ran command: npm test/);
 });
