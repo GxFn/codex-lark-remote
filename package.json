@@ -10,7 +10,8 @@
   "scripts": {
     "test": "node --test",
     "bridge": "node ./bin/codex-lark-bridge.mjs",
-    "mcp": "node ./bin/codex-lark-remote-mcp.mjs"
+    "mcp": "node ./bin/codex-lark-remote-mcp.mjs",
+    "fixture": "node ./scripts/lark-event-fixture.mjs"
   },
   "keywords": [
     "codex",
@@ -27,4 +28,3 @@
     "node": ">=20"
   }
 }
-

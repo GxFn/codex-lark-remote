@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import { DEFAULT_BRIDGE_HOST, ensureDir, loadConfig, nowIso, stateFilePath } from "./config.mjs";
 import { runApprovedAction } from "./actions.mjs";
+import { decryptLarkPayload, verifyLarkSignature } from "./crypto.mjs";
 import { parseLarkEvent, isUserAllowed, classifyChatText } from "./lark.mjs";
 import { LarkNotifier } from "./notifier.mjs";
 import { formatBridgeStatus, formatHelp, formatQueued, formatTask } from "./presenter.mjs";
@@ -42,7 +43,8 @@ async function route(ctx) {
   const { req, res, token } = ctx;
   const url = new URL(req.url || "/", "http://localhost");
   if (req.method === "POST" && url.pathname === "/bridge/lark/event") {
-    return handleLarkEvent(ctx, await readJson(req));
+    const { body, raw } = await readJson(req);
+    return handleLarkEvent(ctx, body, raw, req.headers);
   }
 
   if (url.pathname.startsWith("/bridge/") && !isAuthorized(req, token)) {
@@ -79,7 +81,7 @@ async function route(ctx) {
   }
 
   if (req.method === "POST" && url.pathname === "/bridge/tasks") {
-    const body = await readJson(req);
+    const { body } = await readJson(req);
     const created = await enqueueTask(ctx, {
       repoKey: body.repoKey || ctx.config.defaultRepo,
       text: body.prompt || body.text || "",
@@ -100,7 +102,7 @@ async function route(ctx) {
       return sendJson(res, 200, { success: true, data: await ctx.queue.cancel(id) });
     }
     if (req.method === "POST" && action === "approve") {
-      const body = await readJson(req);
+      const { body } = await readJson(req);
       return sendJson(res, 200, {
         success: true,
         data: await runApprovedAction({
@@ -116,7 +118,17 @@ async function route(ctx) {
   return sendJson(res, 404, { success: false, error: "Not found" });
 }
 
-async function handleLarkEvent(ctx, body) {
+async function handleLarkEvent(ctx, incomingBody, rawBody, headers) {
+  const signature = verifyLarkSignature({
+    rawBody,
+    headers,
+    encryptKey: ctx.config.lark?.encryptKey || process.env.CODEX_LARK_ENCRYPT_KEY || "",
+  });
+  if (signature.checked && !signature.ok) {
+    return sendJson(ctx.res, 401, { success: false, error: signature.reason || "Invalid Lark signature" });
+  }
+
+  const body = normalizeLarkBody(incomingBody, ctx.config);
   const token = ctx.config.lark?.verificationToken || process.env.CODEX_LARK_VERIFICATION_TOKEN || "";
   const headerToken = body?.header?.token || body?.token || "";
   if (token && headerToken !== token) {
@@ -216,8 +228,8 @@ function isAuthorized(req, token) {
 async function readJson(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
-  if (chunks.length === 0) return {};
-  return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+  const raw = chunks.length === 0 ? "" : Buffer.concat(chunks).toString("utf8");
+  return { body: raw ? JSON.parse(raw) : {}, raw };
 }
 
 function sendJson(res, status, body) {
@@ -232,4 +244,11 @@ async function writeState(dataDir, state) {
 
 function publicUrl(config) {
   return process.env.CODEX_LARK_PUBLIC_URL || config.publicUrl || "";
+}
+
+function normalizeLarkBody(body, config) {
+  if (body?.encrypt) {
+    return decryptLarkPayload(body.encrypt, config.lark?.encryptKey || process.env.CODEX_LARK_ENCRYPT_KEY || "");
+  }
+  return body;
 }
