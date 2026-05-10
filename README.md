@@ -93,6 +93,19 @@ For the normal WebSocket path, send a Feishu message after `codex_lark_handoff`
 reports the bridge is running. For webhook fallback, set `CODEX_LARK_PUBLIC_URL`
 or `publicUrl`, then use the webhook URL reported by `codex_lark_diagnose`.
 
+### Worker Runtime Notes
+
+Remote tasks run with `codex exec --ignore-user-config` by default. This keeps
+the child Codex process focused on the task worktree and prevents it from
+loading this same Feishu/Lark plugin as a nested MCP server. Set
+`runner.ignoreUserConfig` to `false` only when the worker must load tools from
+your personal Codex config.
+
+Each task records notification delivery metadata in the queue. If Feishu/Lark
+accepts the HTTP request but returns a non-zero API `code`, the task now records
+`lastNotifyError` and `/codex status rcmd_xxx` can be used to inspect the
+completed result.
+
 ## Chat Commands
 
 ```text

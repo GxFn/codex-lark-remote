@@ -85,6 +85,7 @@ export function defaultConfig(dataDir = resolveDataDir()) {
     runner: {
       sandbox: "workspace-write",
       askForApproval: "never",
+      ignoreUserConfig: true,
       model: "",
       codexPath: "codex",
       timeoutMs: 30 * 60 * 1000,

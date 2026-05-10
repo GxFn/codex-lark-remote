@@ -20,9 +20,10 @@ export class LarkNotifier {
   }
 
   async reply(messageId, text) {
-    if (!messageId || !this.appId || !this.appSecret) return false;
+    if (!messageId) return { ok: false, error: "Missing Lark message id" };
+    if (!this.appId || !this.appSecret) return { ok: false, error: "Missing Lark appId/appSecret" };
     const token = await this.#tenantToken();
-    if (!token) return false;
+    if (!token) return { ok: false, error: "Missing Lark tenant access token" };
     const response = await fetch(`https://open.feishu.cn/open-apis/im/v1/messages/${messageId}/reply`, {
       method: "POST",
       headers: {
@@ -34,7 +35,23 @@ export class LarkNotifier {
         content: JSON.stringify({ text: truncateForLark(text) }),
       }),
     });
-    return response.ok;
+    const data = await readJsonSafe(response);
+    const code = data?.code;
+    const larkOk = code === undefined || code === 0;
+    if (!response.ok || !larkOk) {
+      return {
+        ok: false,
+        status: response.status,
+        code,
+        error: data?.msg || data?.message || data?.error || response.statusText || "Lark reply failed",
+      };
+    }
+    return {
+      ok: true,
+      status: response.status,
+      code: code ?? 0,
+      messageId: data?.data?.message_id || data?.data?.messageId || "",
+    };
   }
 
   async #tenantToken() {
@@ -59,4 +76,12 @@ export function truncateForLark(text, max = 3000) {
   const value = String(text || "");
   if (value.length <= max) return value;
   return `${value.slice(0, max)}\n\n... truncated`;
+}
+
+async function readJsonSafe(response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
 }

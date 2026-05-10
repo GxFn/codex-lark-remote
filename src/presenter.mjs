@@ -57,6 +57,7 @@ export function formatTask(command) {
     command.diffSummary ? `Diff:\n${command.diffSummary}` : "",
     command.testSummary ? `Validation:\n${command.testSummary}` : "",
     command.error ? `Error:\n${command.error}` : "",
+    command.lastNotifyError ? `Last notify error:\n${command.lastNotifyError}` : "",
     command.result ? `Result:\n${truncateForLark(command.result, 1200)}` : "",
   ]
     .filter(Boolean)

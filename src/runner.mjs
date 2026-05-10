@@ -112,10 +112,19 @@ export class CodexCliRunner {
   }
 
   async #notify(command, text) {
+    if (!this.notifier) return;
     try {
-      const ok = await this.notifier?.reply(command.messageId, text);
-      if (ok === false) throw new Error("Lark reply returned false");
-      await this.queue.update(command.id, { lastNotifyError: "", lastNotifyAt: nowIso() }, "notify_sent");
+      const delivery = normalizeDelivery(await this.notifier.reply(command.messageId, text));
+      if (!delivery.ok) throw new Error(delivery.error || "Lark reply failed");
+      await this.queue.update(
+        command.id,
+        {
+          lastNotifyError: "",
+          lastNotifyAt: nowIso(),
+          lastNotifyMessageId: delivery.messageId || command.lastNotifyMessageId || "",
+        },
+        "notify_sent",
+      );
     } catch (error) {
       await this.queue
         .update(command.id, { lastNotifyError: error.message, lastNotifyAt: nowIso() }, "notify_failed")
@@ -125,10 +134,18 @@ export class CodexCliRunner {
 }
 
 export function buildCodexExecArgs({ runner = {}, worktreePath, prompt }) {
-  const args = ["exec", "--json", "--sandbox", runner.sandbox || "workspace-write", "-C", worktreePath];
+  const args = ["exec", "--json"];
+  if (runner.ignoreUserConfig !== false) args.push("--ignore-user-config");
+  args.push("--sandbox", runner.sandbox || "workspace-write", "-C", worktreePath);
   if (runner.model) args.push("-m", runner.model);
   args.push(prompt);
   return args;
+}
+
+function normalizeDelivery(delivery) {
+  if (delivery === true) return { ok: true };
+  if (delivery === false || !delivery) return { ok: false, error: "Lark reply returned false" };
+  return delivery;
 }
 
 async function runProcess(command, args, { timeoutMs }) {

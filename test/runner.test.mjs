@@ -12,6 +12,7 @@ test("buildCodexExecArgs uses supported codex exec flags", () => {
   assert.deepEqual(args, [
     "exec",
     "--json",
+    "--ignore-user-config",
     "--sandbox",
     "workspace-write",
     "-C",
@@ -21,6 +22,16 @@ test("buildCodexExecArgs uses supported codex exec flags", () => {
     "fix tests",
   ]);
   assert.equal(args.includes("--ask-for-approval"), false);
+});
+
+test("buildCodexExecArgs can load user config when explicitly requested", () => {
+  const args = buildCodexExecArgs({
+    runner: { ignoreUserConfig: false },
+    worktreePath: "/tmp/worktree",
+    prompt: "fix tests",
+  });
+
+  assert.equal(args.includes("--ignore-user-config"), false);
 });
 
 test("extractFinalMessage reads Codex JSONL agent messages", () => {
