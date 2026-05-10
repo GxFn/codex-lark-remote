@@ -8,7 +8,9 @@ export function parseLarkEvent(body) {
   const event = body?.event || body;
   const message = event?.message || body?.message || {};
   const sender = event?.sender || body?.sender || {};
-  const senderId = sender?.sender_id?.user_id || sender?.sender_id?.open_id || "";
+  const senderIds = sender?.sender_id || {};
+  const senderId = senderIds.user_id || senderIds.open_id || "";
+  const senderIdType = senderIds.user_id ? "user_id" : senderIds.open_id ? "open_id" : "";
   const messageType = message.message_type || "";
   const messageId = message.message_id || "";
   const chatId = message.chat_id || "";
@@ -30,6 +32,9 @@ export function parseLarkEvent(body) {
     messageId,
     chatId,
     senderId,
+    senderIdType,
+    openId: senderIds.open_id || "",
+    unionId: senderIds.union_id || "",
     senderName: senderId || "lark_user",
     text,
     chatIdHash: chatId ? `c_${shortHash(chatId)}` : "",
@@ -90,6 +95,7 @@ function parseManagementCommand(text) {
   const rest = normalizeText(match[1] || "help");
   const [action, id, subAction] = rest.split(/\s+/);
   if (!action || action === "help") return { kind: "help" };
+  if (action === "whoami") return { kind: "whoami" };
   if (action === "status") return id ? { kind: "task_status", id } : { kind: "status" };
   if (action === "diff" && id) return { kind: "task_diff", id };
   if (action === "cancel" && id) return { kind: "cancel", id };

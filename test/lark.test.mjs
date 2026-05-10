@@ -12,7 +12,7 @@ test("parseLarkEvent extracts text message fields and hashes sensitive ids", () 
         content: JSON.stringify({ text: "@_user_1 [demo] fix tests" }),
       },
       sender: {
-        sender_id: { user_id: "ou_secret_user" },
+        sender_id: { user_id: "ou_secret_user", open_id: "ou_open_secret", union_id: "on_union_secret" },
       },
     },
   });
@@ -20,6 +20,10 @@ test("parseLarkEvent extracts text message fields and hashes sensitive ids", () 
   assert.equal(parsed.kind, "message");
   assert.equal(parsed.messageId, "om_123");
   assert.equal(parsed.text, "[demo] fix tests");
+  assert.equal(parsed.senderId, "ou_secret_user");
+  assert.equal(parsed.senderIdType, "user_id");
+  assert.equal(parsed.openId, "ou_open_secret");
+  assert.equal(parsed.unionId, "on_union_secret");
   assert.match(parsed.chatIdHash, /^c_[a-f0-9]{12}$/);
   assert.match(parsed.userIdHash, /^u_[a-f0-9]{12}$/);
 });
@@ -37,6 +41,10 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
   assert.deepEqual(classifyChatText("/codex status rcmd_1", config), {
     kind: "task_status",
     id: "rcmd_1",
+  });
+
+  assert.deepEqual(classifyChatText("/codex whoami", config), {
+    kind: "whoami",
   });
 });
 

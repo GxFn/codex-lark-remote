@@ -7,7 +7,7 @@ import { decryptLarkPayload, verifyLarkSignature } from "./crypto.mjs";
 import { LarkWebSocketReceiver } from "./lark-ws.mjs";
 import { parseLarkEvent, isUserAllowed, classifyChatText } from "./lark.mjs";
 import { LarkNotifier } from "./notifier.mjs";
-import { formatBridgeStatus, formatHelp, formatQueued, formatTask } from "./presenter.mjs";
+import { formatBridgeStatus, formatHelp, formatQueued, formatTask, formatWhoami } from "./presenter.mjs";
 import { RemoteCommandQueue } from "./queue.mjs";
 import { CodexCliRunner } from "./runner.mjs";
 
@@ -162,10 +162,6 @@ export async function processLarkEvent(ctx, body) {
   const event = parseLarkEvent(body);
   if (event.kind !== "message") return { success: true, ignored: true };
 
-  if (!isUserAllowed(event.senderId, ctx.config)) {
-    await ctx.notifier.reply(event.messageId, "Permission denied.");
-    return { success: true, rejected: true };
-  }
   if (event.messageType && event.messageType !== "text") {
     await ctx.notifier.reply(event.messageId, "Please send a text message.");
     return { success: true, rejected: true };
@@ -176,12 +172,17 @@ export async function processLarkEvent(ctx, body) {
   if (duplicate) return { success: true, duplicate: true };
 
   const action = classifyChatText(event.text, ctx.config);
+  if (action.kind !== "whoami" && !isUserAllowed(event.senderId, ctx.config)) {
+    await ctx.notifier.reply(event.messageId, "Permission denied.");
+    return { success: true, rejected: true };
+  }
   await handleChatAction(ctx, event, action);
   return { success: true };
 }
 
 async function handleChatAction(ctx, event, action) {
   if (action.kind === "help") return ctx.notifier.reply(event.messageId, formatHelp());
+  if (action.kind === "whoami") return ctx.notifier.reply(event.messageId, formatWhoami(event));
   if (action.kind === "status") {
     const counts = await ctx.queue.counts();
     return ctx.notifier.reply(

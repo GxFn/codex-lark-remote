@@ -37,8 +37,8 @@ Risks:
 - ...
 
 Next actions:
+- /codex whoami
 - /codex diff <task_id>
 - /codex approve <task_id> commit
 - /codex cancel <task_id>
 ```
-

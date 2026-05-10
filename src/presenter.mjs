@@ -7,6 +7,7 @@ export function formatHelp() {
     "Examples:",
     "[repo] fix the failing test",
     "> force a coding task",
+    "/codex whoami",
     "/codex status",
     "/codex status rcmd_xxx",
     "/codex diff rcmd_xxx",
@@ -15,6 +16,21 @@ export function formatHelp() {
     "/codex approve rcmd_xxx commit",
     "/codex approve rcmd_xxx push",
   ].join("\n");
+}
+
+export function formatWhoami(event) {
+  return [
+    "Codex Lark Remote whoami",
+    `senderIdType: ${event.senderIdType || "unknown"}`,
+    `senderId: ${event.senderId || "unknown"}`,
+    event.openId && event.openId !== event.senderId ? `openId: ${event.openId}` : "",
+    event.unionId ? `unionId: ${event.unionId}` : "",
+    `userHash: ${event.userIdHash || "-"}`,
+    "",
+    "Add senderId to lark.allowedUsers.",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export function formatBridgeStatus({ config, counts, workerBusy, url, larkWs }) {

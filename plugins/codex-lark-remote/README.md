@@ -98,6 +98,7 @@ or `publicUrl`, then use the webhook URL reported by `codex_lark_diagnose`.
 ```text
 [repo-key] fix the failing test
 > force this message into a coding task
+/codex whoami
 /codex status
 /codex status rcmd_xxx
 /codex diff rcmd_xxx
