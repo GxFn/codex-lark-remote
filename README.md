@@ -47,7 +47,7 @@ leave empty
 ```
 
 After adding the marketplace, enable `codex-lark-remote` from the plugin list.
-For a tagged release, set **Git ref** to a release tag, for example `v0.1.13`.
+For a tagged release, set **Git ref** to a release tag, for example `v0.1.14`.
 
 ## Configure Feishu/Lark
 
@@ -102,10 +102,10 @@ From the Codex conversation you want to continue remotely, ask:
 Start codex-lark-remote.
 ```
 
-Codex will ask for explicit consent before sending the current conversation and
-necessary routing metadata to the local bridge. After you confirm, the plugin
-starts the bridge, attaches the current Codex thread, and waits for Feishu/Lark
-messages.
+Codex will ask for explicit consent before storing local routing state for the
+current thread in the local bridge. Existing chat history is not sent to
+Feishu/Lark. After you confirm, the plugin starts the bridge, attaches the
+current Codex thread, and waits for Feishu/Lark messages.
 
 When startup succeeds, send any normal message to the Feishu/Lark bot. Codex
 will continue the same conversation and reply in Feishu/Lark.

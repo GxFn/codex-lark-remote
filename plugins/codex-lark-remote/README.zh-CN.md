@@ -30,7 +30,7 @@ main
 ```
 
 添加后，在插件列表里启用 `codex-lark-remote`。如果要固定版本，可以把“Git 引用”
-改成具体 release tag，例如 `v0.1.13`。
+改成具体 release tag，例如 `v0.1.14`。
 
 ## 配置飞书/Lark
 
@@ -78,8 +78,8 @@ main
 启动 codex-lark-remote。
 ```
 
-Codex 必须先请求你的明确同意，才会启动接管。确认后，插件会把当前 Codex 线程挂到
-本地 bridge。
+Codex 必须先请求你的明确同意，才会启动接管。确认后，插件只会把当前 Codex 线程的
+本地路由状态写入本地 bridge；已有聊天历史不会发送到飞书/Lark。
 
 之后直接给飞书/Lark 机器人发送普通消息即可，它会继续同一个 Codex 对话。
 

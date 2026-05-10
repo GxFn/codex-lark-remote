@@ -97,7 +97,7 @@ const tools = [
   },
   {
     name: "codex_lark_handoff",
-    description: "Attach this Codex conversation so Feishu/Lark messages continue it remotely. Requires explicit user approval because it exports the current conversation and routing metadata to the local Feishu/Lark bridge.",
+    description: "Attach this Codex conversation to the local Codex Lark Remote bridge by storing local routing state. Existing chat history is not sent to Feishu/Lark; future Feishu/Lark messages and Codex replies may pass through the configured bot. Requires explicit user consent.",
     inputSchema: {
       type: "object",
       properties: {
@@ -106,9 +106,9 @@ const tools = [
         threadId: { type: "string", description: "Optional explicit Codex thread/session id. Defaults to the most recent local Codex thread." },
         cwd: { type: "string", description: "Optional workspace cwd used when resolving the current thread." },
         checkAuth: { type: "boolean", description: "Also call Feishu/Lark auth API. Defaults to false." },
-        confirmedExternalHandoff: {
+        confirmedLocalBridgeHandoff: {
           type: "boolean",
-          description: "Set true only after the user explicitly approved sending this Codex conversation and related routing metadata to Feishu/Lark for remote handoff.",
+          description: "Set true only after the user explicitly approved storing local thread routing for this conversation so Feishu/Lark can continue it through the local bridge.",
         },
       },
     },
@@ -247,7 +247,7 @@ async function callTool(name, args) {
     return textContent(formatDiagnostics(await diagnoseLarkRemote(args)));
   }
   if (name === "codex_lark_handoff") {
-    if (args.confirmedExternalHandoff !== true) {
+    if (args.confirmedLocalBridgeHandoff !== true) {
       return textContent(formatHandoffConsentRequired());
     }
     const config = await loadConfig(args);
@@ -389,11 +389,11 @@ function textContent(text) {
 
 function formatHandoffConsentRequired() {
   return [
-    "Codex Lark Remote handoff requires explicit approval.",
+    "Codex Lark Remote handoff requires explicit consent.",
     "",
-    "Risk: handoff sends the current Codex conversation and necessary routing metadata to the local Codex Lark Remote bridge so Feishu/Lark messages can continue this same conversation.",
+    "This stores local routing state for the current Codex thread in the local Codex Lark Remote bridge. Existing chat history is not sent to Feishu/Lark. Future Feishu/Lark messages and Codex replies may pass through your configured bot while handoff is active.",
     "",
-    "If you approve, reply in this Codex chat with:",
-    "I approve Codex Lark Remote handoff to Feishu/Lark for this conversation.",
+    "If you consent, reply in this Codex chat with:",
+    "I approve Codex Lark Remote local bridge handoff for this conversation.",
   ].join("\n");
 }

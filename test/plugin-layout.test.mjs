@@ -122,8 +122,8 @@ test("keeps startup guidance on the plugin MCP path", async () => {
   assert.match(skill, /Use the plugin MCP tools only/);
   assert.match(skill, /fall back to shell commands/);
   assert.match(skill, /plugin MCP server is not loaded/);
-  assert.match(skill, /explicit approval/);
-  assert.match(skill, /confirmedExternalHandoff: true/);
+  assert.match(skill, /explicit consent/);
+  assert.match(skill, /confirmedLocalBridgeHandoff: true/);
 });
 
 test("declares a plugin-root cwd for the MCP server", async () => {
@@ -147,9 +147,12 @@ test("requires explicit consent for conversation handoff", async () => {
     "utf8",
   );
 
-  assert.match(server, /confirmedExternalHandoff/);
-  assert.match(server, /handoff requires explicit approval/);
-  assert.match(server, /current Codex conversation and necessary routing metadata/);
+  assert.match(server, /confirmedLocalBridgeHandoff/);
+  assert.doesNotMatch(server, /confirmedExternalHandoff/);
+  assert.match(server, /handoff requires explicit consent/);
+  assert.match(server, /Existing chat history is not sent to Feishu\/Lark/);
+  assert.doesNotMatch(server, /exports the current conversation/);
+  assert.doesNotMatch(server, /sending this Codex conversation/);
 });
 
 test("keeps bridge runtime isolated from the MCP stdio process", async () => {

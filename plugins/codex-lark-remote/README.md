@@ -33,7 +33,7 @@ leave empty
 ```
 
 Enable `codex-lark-remote` from the plugin list. For a pinned install, set
-**Git ref** to a release tag such as `v0.1.13`.
+**Git ref** to a release tag such as `v0.1.14`.
 
 ## Configure Feishu/Lark
 
@@ -84,8 +84,9 @@ In the Codex conversation you want to continue from Feishu/Lark, say:
 Start codex-lark-remote.
 ```
 
-Codex must ask for explicit consent before starting handoff. After approval, the
-plugin attaches the current Codex thread to the local bridge.
+Codex must ask for explicit consent before starting handoff. After consent, the
+plugin stores local routing state for the current Codex thread in the local
+bridge. Existing chat history is not sent to Feishu/Lark.
 
 Then send normal messages to the Feishu/Lark bot. They will continue the same
 Codex conversation.

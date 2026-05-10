@@ -44,7 +44,7 @@ main
 ```
 
 添加市场后，在插件列表里启用 `codex-lark-remote`。如果要安装固定版本，可以把
-“Git 引用”改成具体 release tag，例如 `v0.1.13`。
+“Git 引用”改成具体 release tag，例如 `v0.1.14`。
 
 ## 配置飞书/Lark
 
@@ -95,8 +95,9 @@ main
 启动 codex-lark-remote。
 ```
 
-Codex 会先要求你明确同意，把当前对话和必要路由元数据交给本地 bridge。确认后，
-插件会启动 bridge、挂载当前 Codex 线程，并等待飞书/Lark 消息。
+Codex 会先要求你明确同意，然后只把当前线程的本地路由状态写入本地 bridge；
+已有聊天历史不会发送到飞书/Lark。确认后，插件会启动 bridge、挂载当前 Codex 线程，
+并等待飞书/Lark 消息。
 
 启动成功后，直接给飞书/Lark 机器人发送普通消息即可。Codex 会继续同一个对话，
 并把回答发回飞书/Lark。

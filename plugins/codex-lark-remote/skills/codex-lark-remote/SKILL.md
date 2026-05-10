@@ -24,14 +24,15 @@ When the user says "start this plugin" or similar:
    refresh the plugin and start a new Codex conversation. Do not attempt a local
    script fallback unless the user explicitly asks for plugin development
    debugging.
-3. Before calling `codex_lark_handoff`, clearly tell the user that handoff sends
-   the current Codex conversation and necessary routing metadata to the local
-   Codex Lark Remote bridge so Feishu/Lark messages can continue this same
-   conversation. Ask for explicit approval in the current chat. Do not call
+3. Before calling `codex_lark_handoff`, clearly tell the user that handoff stores
+   local routing state for this Codex thread in the local Codex Lark Remote
+   bridge. Existing chat history is not sent to Feishu/Lark; future Feishu/Lark
+   messages and Codex replies may pass through the configured bot while handoff
+   is active. Ask for explicit consent in the current chat. Do not call
    `codex_lark_handoff` from a generic "start" request alone.
-4. After the user explicitly approves that external Feishu/Lark handoff, call
-   `codex_lark_handoff` with `confirmedExternalHandoff: true`, preferably with
-   auth checking enabled when available. This is the default startup action
+4. After the user explicitly consents to local bridge handoff, call
+   `codex_lark_handoff` with `confirmedLocalBridgeHandoff: true`, preferably
+   with auth checking enabled when available. This is the default startup action
    after consent. On macOS, handoff starts the plugin's built-in keep-awake
    process unless `handoff.keepAwake` is disabled.
 5. If Feishu/Lark `appId` or `appSecret` is missing, ask for the missing values
@@ -40,7 +41,7 @@ When the user says "start this plugin" or similar:
    Credentials & Basic Info, choose long connection/WebSocket in Event
    Subscriptions, and subscribe to `im.message.receive_v1`.
 6. If the user already supplied the values in chat, call `codex_lark_configure`.
-   Never echo raw secrets back. Then ask for explicit approval before calling
+   Never echo raw secrets back. Then ask for explicit consent before calling
    `codex_lark_handoff`.
 7. Keep the final startup response short: whether Feishu takeover is ready, what
    is missing, and the one next action.
