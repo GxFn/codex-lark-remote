@@ -1,0 +1,30 @@
+{
+  "name": "codex-lark-remote",
+  "version": "0.1.0",
+  "description": "Remote Codex programming from Feishu/Lark chat.",
+  "type": "module",
+  "bin": {
+    "codex-lark-remote": "./bin/codex-lark-bridge.mjs",
+    "codex-lark-remote-mcp": "./bin/codex-lark-remote-mcp.mjs"
+  },
+  "scripts": {
+    "test": "node --test",
+    "bridge": "node ./bin/codex-lark-bridge.mjs",
+    "mcp": "node ./bin/codex-lark-remote-mcp.mjs"
+  },
+  "keywords": [
+    "codex",
+    "lark",
+    "feishu",
+    "mcp",
+    "remote"
+  ],
+  "author": {
+    "name": "Codex Lark Remote Contributors"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  }
+}
+

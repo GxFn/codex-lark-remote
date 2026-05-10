@@ -1,0 +1,24 @@
+{
+  "defaultRepo": "example",
+  "repos": {
+    "example": {
+      "path": "/absolute/path/to/your/repo",
+      "remote": "origin",
+      "baseBranch": "main",
+      "testCommand": "npm test"
+    }
+  },
+  "runner": {
+    "sandbox": "workspace-write",
+    "askForApproval": "never",
+    "model": ""
+  },
+  "policy": {
+    "requireReviewForCommit": true,
+    "requireReviewForPush": true,
+    "maxPromptChars": 4000,
+    "maxResultChars": 3000,
+    "allowNetwork": false
+  }
+}
+
