@@ -26,7 +26,7 @@ leave empty
 ```
 
 After adding the marketplace, enable `codex-lark-remote` from the plugin list.
-For a tagged release, set **Git ref** to the release tag, for example `v0.1.4`.
+For a tagged release, set **Git ref** to the release tag, for example `v0.1.5`.
 
 ## Configure
 

@@ -101,6 +101,8 @@ test("keeps startup guidance on the plugin MCP path", async () => {
   assert.match(skill, /Use the plugin MCP tools only/);
   assert.match(skill, /fall back to shell commands/);
   assert.match(skill, /plugin MCP server is not loaded/);
+  assert.match(skill, /explicit approval/);
+  assert.match(skill, /confirmedExternalHandoff: true/);
 });
 
 test("declares a plugin-root cwd for the MCP server", async () => {
@@ -116,4 +118,15 @@ test("declares a plugin-root cwd for the MCP server", async () => {
     "./bin/codex-lark-remote-mcp.mjs",
   ]);
   assert.equal(server?.cwd, ".");
+});
+
+test("requires explicit consent for conversation handoff", async () => {
+  const server = await fs.readFile(
+    new URL("../plugins/codex-lark-remote/bin/codex-lark-remote-mcp.mjs", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(server, /confirmedExternalHandoff/);
+  assert.match(server, /handoff requires explicit approval/);
+  assert.match(server, /current Codex conversation and necessary routing metadata/);
 });

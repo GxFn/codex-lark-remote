@@ -100,7 +100,7 @@ const tools = [
   },
   {
     name: "codex_lark_handoff",
-    description: "Attach this Codex conversation so Feishu/Lark messages continue it remotely.",
+    description: "Attach this Codex conversation so Feishu/Lark messages continue it remotely. Requires explicit user approval because it exports the current conversation and routing metadata to the local Feishu/Lark bridge.",
     inputSchema: {
       type: "object",
       properties: {
@@ -109,6 +109,10 @@ const tools = [
         threadId: { type: "string", description: "Optional explicit Codex thread/session id. Defaults to the most recent local Codex thread." },
         cwd: { type: "string", description: "Optional workspace cwd used when resolving the current thread." },
         checkAuth: { type: "boolean", description: "Also call Feishu/Lark auth API. Defaults to false." },
+        confirmedExternalHandoff: {
+          type: "boolean",
+          description: "Set true only after the user explicitly approved sending this Codex conversation and related routing metadata to Feishu/Lark for remote handoff.",
+        },
       },
     },
   },
@@ -248,6 +252,9 @@ async function callTool(name, args) {
     return textContent(formatDiagnostics(await diagnoseLarkRemote(args)));
   }
   if (name === "codex_lark_handoff") {
+    if (args.confirmedExternalHandoff !== true) {
+      return textContent(formatHandoffConsentRequired());
+    }
     const config = await loadConfig(args);
     if (!hasLarkAppCredentials(config)) {
       return textContent(formatHandoff(await diagnoseLarkRemote(args)));
@@ -390,4 +397,15 @@ function response(id, result) {
 
 function textContent(text) {
   return { content: [{ type: "text", text }] };
+}
+
+function formatHandoffConsentRequired() {
+  return [
+    "Codex Lark Remote handoff requires explicit approval.",
+    "",
+    "Risk: handoff sends the current Codex conversation and necessary routing metadata to the local Codex Lark Remote bridge so Feishu/Lark messages can continue this same conversation.",
+    "",
+    "If you approve, reply in this Codex chat with:",
+    "I approve Codex Lark Remote handoff to Feishu/Lark for this conversation.",
+  ].join("\n");
 }
