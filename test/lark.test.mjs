@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyChatText, parseLarkEvent } from "../src/lark.mjs";
+import { classifyChatText, configuredAllowedUsers, isUserAllowed, parseLarkEvent } from "../src/lark.mjs";
 
 test("parseLarkEvent extracts text message fields and hashes sensitive ids", () => {
   const parsed = parseLarkEvent({
@@ -45,3 +45,10 @@ test("classifyChatText rejects shell mode in MVP", () => {
   assert.equal(result.kind, "rejected");
 });
 
+test("isUserAllowed accepts config based allowlists", () => {
+  const config = { lark: { allowedUsers: ["ou_allowed"] } };
+
+  assert.deepEqual(configuredAllowedUsers(config), ["ou_allowed"]);
+  assert.equal(isUserAllowed("ou_allowed", config), true);
+  assert.equal(isUserAllowed("ou_blocked", config), false);
+});

@@ -37,10 +37,18 @@ export function parseLarkEvent(body) {
   };
 }
 
-export function isUserAllowed(senderId) {
-  const allowed = parseCsv(process.env.CODEX_LARK_ALLOWED_USERS);
+export function isUserAllowed(senderId, config = {}) {
+  const allowed = configuredAllowedUsers(config);
   if (allowed.length === 0) return true;
   return allowed.includes(senderId);
+}
+
+export function configuredAllowedUsers(config = {}) {
+  const configured = config.lark?.allowedUsers ?? process.env.CODEX_LARK_ALLOWED_USERS;
+  if (Array.isArray(configured)) {
+    return configured.map((item) => String(item).trim()).filter(Boolean);
+  }
+  return parseCsv(configured);
 }
 
 export function classifyChatText(text, config) {
@@ -96,4 +104,3 @@ function parseRepoPrefix(text, config) {
   }
   return { repoKey: config.defaultRepo || Object.keys(config.repos || {})[0] || "", taskText: text };
 }
-

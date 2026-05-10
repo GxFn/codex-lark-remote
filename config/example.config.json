@@ -3,7 +3,8 @@
     "appId": "cli_xxx",
     "appSecret": "xxx",
     "verificationToken": "",
-    "encryptKey": ""
+    "encryptKey": "",
+    "allowedUsers": []
   },
   "defaultRepo": "example",
   "repos": {

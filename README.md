@@ -30,13 +30,15 @@ export CODEX_LARK_ALLOWED_USERS=user_id_1,user_id_2
 
 You can also put `lark.appId`, `lark.appSecret`, `lark.verificationToken`, and
 `lark.encryptKey` in `~/.codex-lark-remote/config.json` or another config path
-passed to the MCP tools. Keep that config out of git.
+passed to the MCP tools. `lark.allowedUsers` may be an array of Feishu/Lark user
+IDs. Keep that config out of git.
 
 3. Start the bridge through Codex MCP:
 
 ```text
 codex_lark_check_auth
 codex_lark_start
+codex_lark_diagnose
 ```
 
 4. For local testing without Feishu/Lark, create a task manually:
@@ -53,14 +55,18 @@ To simulate a Feishu/Lark message locally:
 
 ```bash
 npm run fixture -- --text "[codex-lark-remote] local fixture task"
-npm run fixture -- --encrypt --text "[codex-lark-remote] encrypted fixture task"
+npm run fixture -- --sign --encrypt --text "[codex-lark-remote] encrypted fixture task"
 ```
 
 To simulate URL verification:
 
 ```bash
-npm run fixture -- --challenge
+npm run fixture -- --sign --encrypt --challenge
 ```
+
+For a real Feishu/Lark callback, set `CODEX_LARK_PUBLIC_URL` or `publicUrl` to
+the trusted tunnel/reverse proxy base URL, then use the webhook URL reported by
+`codex_lark_diagnose` in Feishu Event Subscriptions.
 
 ## Chat Commands
 

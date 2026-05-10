@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import readline from "node:readline";
 import { loadConfig, readPackageVersion } from "../src/config.mjs";
+import { diagnoseLarkRemote, formatDiagnostics } from "../src/diagnostics.mjs";
 import { LarkNotifier } from "../src/notifier.mjs";
 import { bridgeFetch, bridgeStatus, readBridgeState, startBridgeProcess, stopBridgeProcess } from "../src/supervisor.mjs";
 
@@ -24,6 +25,19 @@ const tools = [
       properties: {
         dataDir: { type: "string" },
         configPath: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "codex_lark_diagnose",
+    description: "Return a sanitized Feishu/Lark webhook readiness checklist, including bridge status, callback URL, allowlist, and repo configuration.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dataDir: { type: "string" },
+        configPath: { type: "string" },
+        checkAuth: { type: "boolean", description: "Also call Feishu/Lark auth API. Defaults to false." },
+        json: { type: "boolean", description: "Return raw JSON instead of a compact text checklist." },
       },
     },
   },
@@ -175,6 +189,10 @@ async function callTool(name, args) {
     const config = await loadConfig(args);
     const notifier = new LarkNotifier(config.lark || {});
     return textContent(formatJson(await notifier.checkAuth()));
+  }
+  if (name === "codex_lark_diagnose") {
+    const diagnostics = await diagnoseLarkRemote(args);
+    return textContent(args.json ? formatJson(diagnostics) : formatDiagnostics(diagnostics));
   }
 
   const state = await readBridgeState(args);

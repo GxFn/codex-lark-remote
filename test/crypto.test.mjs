@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { decryptLarkPayload, encryptLarkPayload, verifyLarkSignature } from "../src/crypto.mjs";
+import { createLarkSignature, decryptLarkPayload, encryptLarkPayload, verifyLarkSignature } from "../src/crypto.mjs";
 
 test("encryptLarkPayload and decryptLarkPayload round-trip Lark event bodies", () => {
   const encryptKey = "0123456789abcdef0123456789abcdef";
@@ -28,7 +28,8 @@ test("verifyLarkSignature validates signed raw webhook bodies", () => {
   const encryptKey = "0123456789abcdef0123456789abcdef";
   const timestamp = "1710000000";
   const nonce = "nonce_1";
-  const signature = crypto.createHash("sha256").update(`${timestamp}${nonce}${encryptKey}${rawBody}`).digest("hex");
+  const signature = createLarkSignature({ timestamp, nonce, encryptKey, rawBody });
+  assert.equal(signature, crypto.createHash("sha256").update(`${timestamp}${nonce}${encryptKey}${rawBody}`).digest("hex"));
 
   assert.deepEqual(
     verifyLarkSignature({

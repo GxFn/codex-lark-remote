@@ -1,8 +1,7 @@
 #!/usr/bin/env node
-import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import { loadConfig, resolveDataDir, stateFilePath } from "../src/config.mjs";
-import { encryptLarkPayload } from "../src/crypto.mjs";
+import { createLarkSignature, encryptLarkPayload } from "../src/crypto.mjs";
 
 const args = parseArgs(process.argv.slice(2));
 const dataDir = resolveDataDir(args.dataDir);
@@ -12,10 +11,15 @@ const bridgeUrl = args.url || state?.url;
 if (!bridgeUrl) throw new Error("Bridge URL not found. Start bridge first or pass --url.");
 
 const body = buildBody({ args, config });
+const rawBody = JSON.stringify(body);
+const headers = {
+  "Content-Type": "application/json",
+  ...signatureHeaders({ args, config, rawBody }),
+};
 const response = await fetch(`${bridgeUrl}/bridge/lark/event`, {
   method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(body),
+  headers,
+  body: rawBody,
 });
 
 const text = await response.text();
@@ -25,6 +29,7 @@ console.log(
       ok: response.ok,
       status: response.status,
       encrypted: Boolean(args.encrypt),
+      signed: Boolean(args.sign),
       response: parseMaybeJson(text),
     },
     null,
@@ -66,6 +71,19 @@ function buildBody({ args, config }) {
   return { encrypt: encryptLarkPayload(payload, config.lark?.encryptKey || args.encryptKey || "") };
 }
 
+function signatureHeaders({ args, config, rawBody }) {
+  if (!args.sign) return {};
+  const encryptKey = config.lark?.encryptKey || args.encryptKey || "";
+  if (!encryptKey) throw new Error("--sign requires lark.encryptKey or --encrypt-key");
+  const timestamp = args.timestamp || String(Math.floor(Date.now() / 1000));
+  const nonce = args.nonce || `fixture_${Date.now()}`;
+  return {
+    "X-Lark-Request-Timestamp": timestamp,
+    "X-Lark-Request-Nonce": nonce,
+    "X-Lark-Signature": createLarkSignature({ timestamp, nonce, encryptKey, rawBody }),
+  };
+}
+
 async function readState(dataDir) {
   try {
     return JSON.parse(await fs.readFile(stateFilePath(dataDir), "utf8"));
@@ -88,6 +106,9 @@ function parseArgs(argv) {
     else if (item === "--challenge") result.kind = "challenge";
     else if (item === "--encrypt") result.encrypt = true;
     else if (item === "--encrypt-key") result.encryptKey = argv[++index];
+    else if (item === "--sign") result.sign = true;
+    else if (item === "--timestamp") result.timestamp = argv[++index];
+    else if (item === "--nonce") result.nonce = argv[++index];
     else if (item === "--help") {
       console.log(helpText());
       process.exit(0);
@@ -118,6 +139,9 @@ function helpText() {
     "  --message-id <id>      Message id",
     "  --challenge           Send url_verification payload",
     "  --encrypt             Wrap payload in Feishu/Lark encrypt field",
+    "  --encrypt-key <key>    Encrypt key override for --encrypt or --sign",
+    "  --sign                Send X-Lark signature headers",
+    "  --timestamp <value>    Signature timestamp override",
+    "  --nonce <value>        Signature nonce override",
   ].join("\n");
 }
-

@@ -139,7 +139,7 @@ async function handleLarkEvent(ctx, incomingBody, rawBody, headers) {
   if (event.kind === "url_verification") return sendJson(ctx.res, 200, { challenge: event.challenge });
   if (event.kind !== "message") return sendJson(ctx.res, 200, { success: true });
 
-  if (!isUserAllowed(event.senderId)) {
+  if (!isUserAllowed(event.senderId, ctx.config)) {
     await ctx.notifier.reply(event.messageId, "Permission denied.");
     return sendJson(ctx.res, 200, { success: true });
   }

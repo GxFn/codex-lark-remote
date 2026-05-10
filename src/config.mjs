@@ -75,6 +75,7 @@ export function defaultConfig(dataDir = resolveDataDir()) {
       appSecret: "",
       verificationToken: "",
       encryptKey: "",
+      allowedUsers: [],
     },
     defaultRepo: "",
     repos: {},

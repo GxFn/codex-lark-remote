@@ -28,15 +28,19 @@ export function verifyLarkSignature({ rawBody, headers, encryptKey }) {
   if (!signature && !timestamp && !nonce) return { checked: false, ok: true };
   if (!signature || !timestamp || !nonce) return { checked: true, ok: false, reason: "Missing Lark signature headers" };
 
-  const computed = crypto
-    .createHash("sha256")
-    .update(`${timestamp}${nonce}${encryptKey}${rawBody}`)
-    .digest("hex");
+  const computed = createLarkSignature({ timestamp, nonce, encryptKey, rawBody });
   return {
     checked: true,
     ok: timingSafeEqualHex(computed, signature),
     reason: "Invalid Lark signature",
   };
+}
+
+export function createLarkSignature({ timestamp, nonce, encryptKey, rawBody }) {
+  return crypto
+    .createHash("sha256")
+    .update(`${timestamp}${nonce}${encryptKey}${rawBody}`)
+    .digest("hex");
 }
 
 function headerValue(headers, name) {
@@ -48,4 +52,3 @@ function timingSafeEqualHex(left, right) {
   const b = Buffer.from(String(right), "hex");
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
-
