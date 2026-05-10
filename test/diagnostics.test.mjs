@@ -47,8 +47,9 @@ test("diagnoseLarkRemote reports sanitized websocket-first readiness", async () 
   assert.equal(diagnostics.lark.appIdPrefix, "cli_1234...");
   assert.equal(diagnostics.lark.allowedUsersCount, 1);
   assert.equal(diagnostics.repos[0].pathExists, true);
-  assert.match(formatDiagnostics(diagnostics), /Lark transport: websocket/);
-  assert.match(formatHandoff(diagnostics), /long connection/);
+  assert.match(formatDiagnostics(diagnostics), /Feishu\/Lark: websocket/);
+  assert.doesNotMatch(formatHandoff(diagnostics), /\[repo\]|approve|worktree|isolated/i);
+  assert.match(formatHandoff(diagnostics), /Send any message to continue this Codex conversation/);
   assert.doesNotMatch(formatDiagnostics(diagnostics), /secret_value|token_value|0123456789abcdef/);
 });
 
@@ -65,5 +66,5 @@ test("formatHandoff gives first-run setup guidance when app credentials are miss
   assert.doesNotMatch(text, /Current thread: [0-9a-f-]{36}/);
   assert.match(text, /codex_lark_configure/);
   assert.doesNotMatch(formatDiagnostics(diagnostics), /Run codex_lark_start/);
-  assert.match(formatDiagnostics(diagnostics), /No repos are configured\. This is OK/);
+  assert.doesNotMatch(formatDiagnostics(diagnostics), /repos|worktree|isolated/i);
 });

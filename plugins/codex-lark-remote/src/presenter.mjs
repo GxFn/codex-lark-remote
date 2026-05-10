@@ -5,18 +5,10 @@ export function formatHelp() {
     "Codex Lark Remote",
     "",
     "Examples:",
-    "[repo] fix the failing test",
-    "> force a coding task",
+    "Ask Codex anything from Feishu/Lark.",
     "/codex whoami",
     "/codex status",
-    "/codex handoff",
     "/codex handoff off",
-    "/codex status rcmd_xxx",
-    "/codex diff rcmd_xxx",
-    "/codex cancel rcmd_xxx",
-    "/codex approve rcmd_xxx test",
-    "/codex approve rcmd_xxx commit",
-    "/codex approve rcmd_xxx push",
   ].join("\n");
 }
 
@@ -36,16 +28,14 @@ export function formatWhoami(event) {
 }
 
 export function formatBridgeStatus({ config, counts, workerBusy, url, larkWs, handoff }) {
-  const repos = Object.keys(config.repos || {});
   const transport = config.lark?.transport || "websocket";
   return [
     "Codex Lark Remote status",
     `Bridge: ${url || "running"}`,
-    `Lark: ${formatLarkTransport({ transport, larkWs })}`,
-    `Handoff: ${formatHandoffState(handoff)}`,
-    `Repos: ${repos.length ? repos.join(", ") : "none configured"}`,
-    `Queue: ${formatCounts(counts)}`,
-    `Worker: ${workerBusy ? "busy" : "idle"}`,
+    `Feishu/Lark: ${formatLarkTransport({ transport, larkWs })}`,
+    `Conversation: ${formatHandoffState(handoff)}`,
+    `Pending replies: ${formatCounts(counts)}`,
+    `Codex worker: ${workerBusy ? "busy" : "idle"}`,
   ].join("\n");
 }
 
@@ -54,10 +44,10 @@ export function formatTask(command) {
   return [
     `Task: ${command.id}`,
     `Status: ${command.status}`,
-    command.mode === "thread_handoff" ? `Mode: current Codex conversation` : "",
+    command.mode === "thread_handoff" ? "Conversation: current Codex chat" : "",
     command.presentation ? `Presentation: ${command.presentation}` : "",
     command.codexSessionId ? `Thread: ${command.codexSessionId}` : "",
-    `Repo: ${command.repoKey || "-"}`,
+    command.mode === "thread_handoff" ? "" : `Repo: ${command.repoKey || "-"}`,
     command.branchName ? `Branch: ${command.branchName}` : "",
     command.worktreePath ? `Worktree: ${command.worktreePath}` : "",
     command.diffSummary ? `Diff:\n${command.diffSummary}` : "",
@@ -73,8 +63,7 @@ export function formatTask(command) {
 export function formatQueued(command) {
   if (command.mode === "thread_handoff") {
     return [
-      `Codex message queued: ${command.id}`,
-      `Thread: ${command.codexSessionId}`,
+      "Codex received your message.",
       "Status: queued",
       "",
       `Request: ${truncateForLark(command.normalizedTask || command.prompt, 500)}`,
@@ -145,8 +134,8 @@ function formatLarkTransport({ transport, larkWs }) {
 }
 
 function formatHandoffState(handoff) {
-  if (!handoff?.active) return "off";
+  if (!handoff?.active) return "not attached";
   const thread = handoff.threadId ? handoff.threadId.slice(0, 8) : "unknown";
   const name = handoff.name ? ` ${handoff.name}` : "";
-  return `current-thread ${thread}${name}`;
+  return `attached ${thread}${name}`;
 }

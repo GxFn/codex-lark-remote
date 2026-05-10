@@ -24,18 +24,17 @@ export async function diagnoseLarkRemote(options = {}) {
   if (!appCredentialsConfigured) {
     issues.push("Feishu/Lark appId/appSecret are not configured. Bridge start is blocked until they are saved.");
   } else if (!status.running) {
-    issues.push("Bridge is not running. Start it with codex_lark_start.");
+    issues.push("Remote takeover is not running. Start it with codex_lark_handoff from the Codex conversation you want to continue.");
   }
-  if (!webSocketEnabled && !publicUrl) warnings.push("No publicUrl/CODEX_LARK_PUBLIC_URL is configured; Feishu cannot reach a loopback URL directly.");
+  if (!webSocketEnabled && !publicUrl) warnings.push("Public callback URL is not configured.");
   if (webSocketEnabled && status.data?.larkWs?.lastError) warnings.push(status.data.larkWs.lastError);
-  if (!config.lark?.verificationToken && !process.env.CODEX_LARK_VERIFICATION_TOKEN) {
-    warnings.push(webSocketEnabled ? "Verification token is only needed for webhook fallback." : "Verification token is not configured.");
+  if (!webSocketEnabled && !config.lark?.verificationToken && !process.env.CODEX_LARK_VERIFICATION_TOKEN) {
+    warnings.push("Verification token is not configured.");
   }
-  if (!config.lark?.encryptKey && !process.env.CODEX_LARK_ENCRYPT_KEY) {
-    warnings.push(webSocketEnabled ? "Encrypt key is only needed for signed/encrypted webhook fallback." : "Encrypt key is not configured; signed/encrypted webhook verification is recommended.");
+  if (!webSocketEnabled && !config.lark?.encryptKey && !process.env.CODEX_LARK_ENCRYPT_KEY) {
+    warnings.push("Encrypt key is not configured; signed/encrypted event verification is recommended.");
   }
   if (allowedUsers.length === 0) warnings.push("No allowedUsers allowlist is configured.");
-  if (!Object.keys(config.repos || {}).length) warnings.push("No repos are configured. This is OK for current-thread handoff; repos are only needed for isolated worktree tasks.");
   if (config.defaultRepo && !config.repos?.[config.defaultRepo]) issues.push(`defaultRepo is not defined in repos: ${config.defaultRepo}`);
   for (const repo of repos) {
     if (!repo.pathExists) issues.push(`Repo path does not exist: ${repo.key}`);
@@ -89,12 +88,10 @@ export function formatDiagnostics(diagnostics) {
     `Ready: ${diagnostics.ok ? "yes" : "no"}`,
     `Bridge: ${diagnostics.checks.bridgeRunning ? "running" : "stopped"}`,
     `Config: ${diagnostics.paths?.configPath || "-"}`,
-    `Lark transport: ${formatTransport(diagnostics)}`,
-    `Local URL: ${diagnostics.bridge.localUrl || "-"}`,
-    diagnostics.checks.webSocketEnabled ? "" : `Webhook URL: ${diagnostics.bridge.webhookUrl || "-"}`,
+    `Feishu/Lark: ${formatTransport(diagnostics)}`,
+    diagnostics.handoff?.active ? `Conversation: attached ${diagnostics.handoff.threadId}` : "Conversation: not attached",
     `Lark app: ${diagnostics.lark.appIdPrefix || "-"}`,
     `Allowed users: ${diagnostics.lark.allowedUsersCount || 0}`,
-    `Repos: ${diagnostics.repos.map((repo) => `${repo.key}${repo.pathExists ? "" : " (missing)"}`).join(", ") || "none"}`,
     diagnostics.issues.length ? `Issues:\n${diagnostics.issues.map((item) => `- ${item}`).join("\n")}` : "Issues: none",
     diagnostics.warnings.length ? `Warnings:\n${diagnostics.warnings.map((item) => `- ${item}`).join("\n")}` : "Warnings: none",
     diagnostics.nextActions.length ? `Next actions:\n${diagnostics.nextActions.map((item) => `- ${item}`).join("\n")}` : "",
@@ -107,10 +104,10 @@ export function formatHandoff(diagnostics) {
   const handoff = diagnostics.handoff;
   if (!diagnostics.checks.appCredentialsConfigured) {
     return [
-      "Codex Lark Remote handoff",
+      "Codex Lark Remote",
       "Status: configuration required",
       "Bridge: not started",
-      "Current thread: not activated",
+      "Conversation: not attached",
       "",
       formatMissingLarkCredentials({
         configPath: diagnostics.paths?.configPath,
@@ -120,20 +117,19 @@ export function formatHandoff(diagnostics) {
       .join("\n");
   }
   return [
-    "Codex Lark Remote handoff",
-    diagnostics.ok ? "Status: ready" : "Status: needs attention",
-    `Transport: ${formatTransport(diagnostics)}`,
-    handoff?.active ? `Current thread: ${handoff.threadId}` : "Current thread: not activated",
-    handoff?.cwd ? `Cwd: ${handoff.cwd}` : "",
+    "Codex Lark Remote",
+    diagnostics.ok ? "Status: ready for Feishu/Lark" : "Status: needs attention",
+    `Feishu/Lark: ${formatTransport(diagnostics)}`,
+    handoff?.active ? `Conversation: attached ${handoff.threadId}` : "Conversation: not attached",
     diagnostics.checks.webSocketEnabled
       ? "Feishu setup: Event Subscriptions -> long connection -> im.message.receive_v1"
       : `Feishu setup: webhook URL ${diagnostics.bridge.webhookUrl || "-"}`,
     diagnostics.paths?.configPath ? `Config: ${diagnostics.paths.configPath}` : "",
     "",
     "From Feishu:",
-    "[repo] describe the coding task",
+    "Send any message to continue this Codex conversation.",
     "/codex status",
-    "/codex approve <task_id> commit",
+    "/codex handoff off",
     diagnostics.issues.length ? `\nIssues:\n${diagnostics.issues.map((item) => `- ${item}`).join("\n")}` : "",
     diagnostics.warnings.length ? `\nWarnings:\n${diagnostics.warnings.map((item) => `- ${item}`).join("\n")}` : "",
   ]
@@ -175,15 +171,15 @@ function buildNextActions({ config, status, webhookUrl, publicUrl, webSocketEnab
   if (!allowedUsers.length) {
     actions.push("After the bot can receive messages, send /codex whoami from Feishu/Lark and add the returned senderId to lark.allowedUsers.");
   }
-  if (!status.running) actions.push("Run codex_lark_start.");
+  if (!status.running) actions.push("Run codex_lark_handoff from the Codex conversation you want to continue in Feishu/Lark.");
   if (webSocketEnabled) {
     actions.push("In Feishu Event Subscriptions, choose long connection and add im.message.receive_v1.");
-    actions.push("Send [repo] ping from Feishu after WebSocket is connected.");
+    actions.push("Send any message from Feishu/Lark after WebSocket is connected.");
   } else {
     if (!publicUrl) actions.push("Expose the local bridge with a trusted tunnel/reverse proxy and set CODEX_LARK_PUBLIC_URL.");
     if (webhookUrl) actions.push(`Set Feishu Event Subscription request URL to ${webhookUrl}.`);
     actions.push("Use npm run fixture -- --sign --encrypt --challenge before configuring Feishu.");
-    actions.push("Send [repo] ping from Feishu after URL verification succeeds.");
+    actions.push("Send any message from Feishu/Lark after URL verification succeeds.");
   }
   return actions;
 }

@@ -29,12 +29,10 @@ export function formatConfigUpdate(result) {
     `Verification token: ${summary.lark.verificationTokenConfigured ? "configured" : "missing"}`,
     `Encrypt key: ${summary.lark.encryptKeyConfigured ? "configured" : "missing"}`,
     `Allowed users: ${summary.lark.allowedUsersCount}`,
-    `Default repo: ${summary.defaultRepo || "-"}`,
-    `Repos: ${summary.repoKeys.length ? summary.repoKeys.join(", ") : "none"}`,
     "",
     "Next steps:",
     "- Run codex_lark_check_auth.",
-    "- Run codex_lark_handoff from the Codex conversation you want to continue from Feishu/Lark.",
+    "- Run codex_lark_handoff from the Codex conversation you want to continue in Feishu/Lark.",
   ].join("\n");
 }
 

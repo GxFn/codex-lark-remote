@@ -19,8 +19,8 @@ const tools = [
       properties: {
         dataDir: { type: "string", description: "Optional data directory override." },
         configPath: { type: "string", description: "Optional config file path override." },
-        publicUrl: { type: "string", description: "Optional public URL for webhook fallback." },
-        defaultRepo: { type: "string", description: "Default repo key for worktree tasks." },
+        publicUrl: { type: "string", description: "Advanced: public callback URL." },
+        defaultRepo: { type: "string", description: "Advanced: default repo key for isolated tasks." },
         lark: {
           type: "object",
           properties: {
@@ -35,7 +35,7 @@ const tools = [
         },
         repos: {
           type: "object",
-          description: "Repo map for isolated worktree tasks.",
+          description: "Advanced: repo map for isolated tasks.",
           additionalProperties: {
             type: "object",
             properties: {
@@ -76,7 +76,7 @@ const tools = [
   },
   {
     name: "codex_lark_diagnose",
-    description: "Return a sanitized Feishu/Lark readiness checklist, including WebSocket status, webhook fallback URL, allowlist, and repo configuration.",
+    description: "Return a sanitized readiness checklist for continuing the current Codex conversation from Feishu/Lark.",
     inputSchema: {
       type: "object",
       properties: {
@@ -89,7 +89,7 @@ const tools = [
   },
   {
     name: "codex_lark_start",
-    description: "Start the local Codex Lark Remote bridge process.",
+    description: "Start the local Codex Lark Remote bridge after Feishu/Lark app credentials are configured.",
     inputSchema: {
       type: "object",
       properties: {
@@ -100,7 +100,7 @@ const tools = [
   },
   {
     name: "codex_lark_handoff",
-    description: "Start the bridge and return concise instructions for taking over the current Codex work from Feishu/Lark.",
+    description: "Attach this Codex conversation so Feishu/Lark messages continue it remotely.",
     inputSchema: {
       type: "object",
       properties: {
@@ -125,7 +125,7 @@ const tools = [
   },
   {
     name: "codex_lark_task",
-    description: "Return one Codex Lark Remote task by id.",
+    description: "Advanced: return one queued Codex Lark Remote item by id.",
     inputSchema: {
       type: "object",
       required: ["id"],
@@ -138,7 +138,7 @@ const tools = [
   },
   {
     name: "codex_lark_history",
-    description: "Return recent Codex Lark Remote tasks.",
+    description: "Advanced: return recent queued Codex Lark Remote items.",
     inputSchema: {
       type: "object",
       properties: {
@@ -150,7 +150,7 @@ const tools = [
   },
   {
     name: "codex_lark_send",
-    description: "Create a Codex Lark Remote task manually through the running bridge. Useful for local testing without Feishu/Lark.",
+    description: "Advanced: create a queued Codex Lark Remote item manually through the running bridge.",
     inputSchema: {
       type: "object",
       required: ["prompt"],
@@ -164,7 +164,7 @@ const tools = [
   },
   {
     name: "codex_lark_cancel",
-    description: "Cancel a pending, running, or waiting_review Codex Lark Remote task.",
+    description: "Advanced: cancel a pending, running, or waiting_review queued item.",
     inputSchema: {
       type: "object",
       required: ["id"],
@@ -177,7 +177,7 @@ const tools = [
   },
   {
     name: "codex_lark_approve",
-    description: "Approve a gated Codex Lark Remote action such as test, commit, or push.",
+    description: "Advanced: approve a gated action such as test, commit, or push.",
     inputSchema: {
       type: "object",
       required: ["id", "action"],

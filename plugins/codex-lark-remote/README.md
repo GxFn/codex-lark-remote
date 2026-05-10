@@ -1,23 +1,18 @@
 # Codex Lark Remote
 
-Remote Codex programming from Feishu/Lark chat.
+Continue the current Codex conversation from Feishu/Lark.
 
 Chinese version: [README.zh-CN.md](README.zh-CN.md)
 
-This plugin keeps the first version intentionally small:
+The default experience is intentionally simple: start this plugin inside an
+active Codex chat, leave your Mac, and keep talking to the same Codex thread
+from Feishu/Lark. Feishu/Lark messages are passed to Codex as normal user
+messages, and the bot replies with the final Codex answer.
 
-- a local bridge process receives Feishu/Lark events over WebSocket first,
-- a local queue records remote worktree tasks and current-thread chat turns,
-- a handoff mode can resume the current Codex conversation with `codex exec resume`,
-- Codex CLI runs each task in an isolated git worktree,
-- chat handoff replies with the Codex answer, while worktree tasks keep status,
-  validation, and review actions.
+## Install
 
-## Codex Plugin Install
-
-First-time users do not need to clone this repository. In Codex, open the plugin
-marketplace settings, choose **Add plugin marketplace**, and fill the dialog like
-this:
+First-time users do not need to clone this repository. In Codex, open plugin
+marketplace settings, choose **Add plugin marketplace**, and fill the dialog:
 
 ```text
 Source:
@@ -30,22 +25,74 @@ Sparse path:
 leave empty
 ```
 
-The marketplace file lives at the repository root:
-`.agents/plugins/marketplace.json`. It points Codex at the bundled plugin under
-`plugins/codex-lark-remote`.
+After adding the marketplace, enable `codex-lark-remote` from the plugin list.
+For a tagged release, set **Git ref** to the release tag, for example `v0.1.2`.
 
-After adding the marketplace, enable the `codex-lark-remote` plugin from the
-plugin list. Start a new Codex conversation and mention the plugin, for example:
+## Configure
+
+Start from a local Codex chat and say:
 
 ```text
-Start codex-lark-remote and help me configure Feishu/Lark remote handoff.
+Start codex-lark-remote and help me configure Feishu/Lark remote takeover.
 ```
 
-For a tagged release, set **Git ref** to the release tag instead of `main`, for
-example `v0.1.2`.
+If you do not have Feishu/Lark credentials yet:
 
-For local plugin development only, add this repository as a local marketplace in
-`~/.codex/config.toml`:
+1. Open [Feishu Open Platform](https://open.feishu.cn/) or
+   [Lark Open Platform](https://open.larksuite.com/).
+2. Create an internal/custom app.
+3. Enable the bot capability.
+4. In **Credentials & Basic Info**, copy **App ID** and **App Secret**.
+5. In **Event Subscriptions**, choose long connection/WebSocket and subscribe to
+   `im.message.receive_v1`.
+6. Add the message receive/reply permissions requested by the platform, then
+   publish or enable the app for your tenant.
+
+Paste the credentials into your trusted local Codex chat:
+
+```text
+Please configure codex-lark-remote.
+
+Feishu/Lark app:
+- appId: cli_xxx
+- appSecret: xxx
+
+Allowed users:
+- allowedUsers: ["ou_xxx"]
+
+Please call codex_lark_configure with these values, then run
+codex_lark_check_auth and codex_lark_handoff for this Codex conversation.
+```
+
+The plugin stores private runtime config in `~/.codex-lark-remote/config.json`.
+Do not commit that file. If you do not know your Feishu/Lark sender id yet,
+leave `allowedUsers` empty for first setup, send `/codex whoami` to the bot from
+Feishu/Lark, then add the returned `senderId`.
+
+When `appId` or `appSecret` is missing, the plugin does not start the local
+bridge and does not attach the Codex conversation. It returns the setup steps
+above instead.
+
+## Use
+
+From the Codex conversation you want to continue remotely, ask Codex:
+
+```text
+Start codex-lark-remote.
+```
+
+When startup succeeds, send any normal message to the Feishu/Lark bot. It will
+continue the same Codex conversation and reply in Feishu/Lark.
+
+Useful Feishu/Lark commands:
+
+```text
+/codex whoami
+/codex status
+/codex handoff off
+```
+
+Local development can register this repository as a local marketplace:
 
 ```toml
 [marketplaces.codex-lark-remote]
@@ -55,191 +102,3 @@ source = "/absolute/path/to/codex-lark-remote"
 [plugins."codex-lark-remote@codex-lark-remote"]
 enabled = true
 ```
-
-The installed plugin reads runtime data and private credentials from
-`~/.codex-lark-remote/config.json` unless a tool call passes `dataDir` or
-`configPath`. Keep that file out of git.
-
-## Configure From Codex Chat
-
-Prefer configuring this plugin through a Codex chat instead of editing JSON by
-hand. Paste the required Feishu/Lark information into the local Codex
-conversation and ask Codex to write `~/.codex-lark-remote/config.json`, verify
-auth, then start handoff.
-
-If you do not have Feishu/Lark credentials yet:
-
-1. Open [Feishu Open Platform](https://open.feishu.cn/) or
-   [Lark Open Platform](https://open.larksuite.com/).
-2. Create an internal/custom app for your tenant.
-3. Enable the bot capability.
-4. In **Credentials & Basic Info**, copy **App ID** and **App Secret**.
-5. In **Event Subscriptions**, choose long connection/WebSocket and subscribe to
-   `im.message.receive_v1`.
-6. Add the message receive/reply permissions requested by the platform, then
-   publish or enable the app for your tenant.
-
-Use a prompt like this:
-
-```text
-Please configure codex-lark-remote.
-
-Feishu/Lark app:
-- appId: cli_xxx
-- appSecret: xxx
-- verificationToken: xxx
-- encryptKey: xxx
-
-Allowed users:
-- allowedUsers: ["ou_xxx"]
-
-Optional remote coding repository:
-- defaultRepo: my-project
-- repos.my-project.path: /absolute/path/to/my-project
-- repos.my-project.baseBranch: main
-- repos.my-project.testCommand: npm test
-
-Please call codex_lark_configure with these values, then run
-codex_lark_check_auth and codex_lark_diagnose. Finally, start
-codex_lark_handoff in this current Codex conversation.
-```
-
-Notes:
-
-- `appId` and `appSecret` are required for WebSocket long connection and message
-  replies.
-- `verificationToken` and `encryptKey` are mainly needed for webhook fallback or
-  encrypted event verification, but keeping them configured is useful.
-- `allowedUsers` should contain Feishu/Lark sender ids. If you do not know your
-  sender id yet, leave `allowedUsers` empty during first setup, send
-  `/codex whoami` to the bot from Feishu, then add the returned `senderId`.
-- `repos` is only required when you want Feishu/Lark to create isolated
-  worktree coding tasks for a target project. Current-thread handoff can work
-  with just the Feishu/Lark app credentials and allowlist.
-- Paste secrets only into your trusted local Codex conversation. Do not send
-  them through Feishu chat and do not commit `~/.codex-lark-remote/config.json`.
-
-The equivalent JSON shape is:
-
-```json
-{
-  "lark": {
-    "appId": "cli_xxx",
-    "appSecret": "xxx",
-    "verificationToken": "xxx",
-    "encryptKey": "xxx",
-    "allowedUsers": ["ou_xxx"],
-    "transport": "websocket",
-    "websocket": true
-  },
-  "defaultRepo": "my-project",
-  "repos": {
-    "my-project": {
-      "path": "/absolute/path/to/my-project",
-      "remote": "origin",
-      "baseBranch": "main",
-      "testCommand": "npm test"
-    }
-  }
-}
-```
-
-When the plugin is installed but `appId` or `appSecret` is missing, "Start Codex
-Lark Remote" does not start the local bridge and does not activate handoff. It
-returns a configuration request with the Feishu/Lark app setup steps above. The
-bridge starts only after those credentials are saved.
-
-## Start Current-Thread Handoff
-
-In Codex chat, ask the agent to start the plugin for the current conversation:
-
-```text
-Start codex-lark-remote handoff so I can continue this Codex conversation
-from Feishu/Lark.
-```
-
-Codex should first confirm credentials are configured, then call:
-
-- `codex_lark_check_auth`
-- `codex_lark_diagnose`
-- `codex_lark_handoff`
-
-In Feishu Event Subscriptions, choose long connection and add
-`im.message.receive_v1`. This default path does not need a public callback URL.
-
-When `codex_lark_handoff` is called from an already-open Codex conversation, it
-stores the current local Codex thread in `~/.codex-lark-remote/handoff.json`.
-Normal Feishu/Lark messages then run through `codex exec resume <thread_id>` so
-the model-visible context continues from that conversation. In handoff mode,
-ordinary Feishu/Lark text is sent as the direct Codex user message and the bot
-replies with the final Codex answer. This is a backend resume route, not GUI
-typing into the Codex Desktop composer.
-
-For local testing without Feishu/Lark, create a task manually:
-
-```text
-codex_lark_send prompt="fix the failing test" repoKey="example"
-```
-
-The bridge exposes a loopback HTTP API for MCP tools and still keeps
-`/bridge/lark/event` as a webhook fallback/testing route. If you set
-`lark.transport` to `webhook`, put a trusted tunnel or reverse proxy in front of
-that route.
-
-To simulate a Feishu/Lark message locally:
-
-```bash
-npm run fixture -- --text "[codex-lark-remote] local fixture task"
-npm run fixture -- --sign --encrypt --text "[codex-lark-remote] encrypted fixture task"
-```
-
-To simulate URL verification:
-
-```bash
-npm run fixture -- --sign --encrypt --challenge
-```
-
-For the normal WebSocket path, send a Feishu message after `codex_lark_handoff`
-reports the bridge is running. For webhook fallback, set `CODEX_LARK_PUBLIC_URL`
-or `publicUrl`, then use the webhook URL reported by `codex_lark_diagnose`.
-
-### Worker Runtime Notes
-
-Worktree tasks run with `codex exec --ignore-user-config` by default. This keeps
-the child Codex process focused on the task worktree and prevents it from
-loading this same Feishu/Lark plugin as a nested MCP server. Set
-`runner.ignoreUserConfig` to `false` only when the worker must load tools from
-your personal Codex config.
-
-Current-thread handoff tasks run with
-`codex exec resume --ignore-user-config <thread_id>`. By default, the Feishu/Lark
-text is passed through directly as the next Codex user message. The route
-preserves the Codex session history on disk and replies with the final assistant
-message captured by `--output-last-message`. Set `handoff.promptStyle` to
-`annotated` only if you prefer each resumed turn to include an explicit
-Feishu/Lark source marker.
-
-Each task records notification delivery metadata in the queue. If Feishu/Lark
-accepts the HTTP request but returns a non-zero API `code`, the task now records
-`lastNotifyError` and `/codex status rcmd_xxx` can be used to inspect the
-completed result.
-
-## Chat Commands
-
-```text
-[repo-key] fix the failing test
-> force this message into a coding task
-/codex whoami
-/codex status
-/codex handoff
-/codex handoff off
-/codex status rcmd_xxx
-/codex diff rcmd_xxx
-/codex cancel rcmd_xxx
-/codex approve rcmd_xxx test
-/codex approve rcmd_xxx commit
-/codex approve rcmd_xxx push
-```
-
-Commit and push are never automatic. They only run after an explicit approve
-command and use the task worktree/branch.
