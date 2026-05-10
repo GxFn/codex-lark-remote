@@ -55,17 +55,43 @@ export async function stopBridgeProcess(options = {}) {
   const state = await readBridgeState(options);
   if (!state?.url || !state?.token) return { success: true, message: "Bridge is not running" };
   try {
-    return bridgeFetch(state, "/bridge/stop", { method: "POST" });
+    const result = await bridgeFetch(state, "/bridge/stop", { method: "POST" });
+    const stopped = await waitForProcessExit(state.pid);
+    if (stopped) return { ...result, stopped: true };
+    if (state.pid) {
+      process.kill(state.pid, "SIGTERM");
+      return { ...result, stopped: await waitForProcessExit(state.pid), signalled: true };
+    }
+    return { ...result, stopped: false };
   } catch (error) {
     if (state.pid) {
       try {
         process.kill(state.pid, "SIGTERM");
-        return { success: true, message: "Bridge process signalled" };
+        return { success: true, message: "Bridge process signalled", stopped: await waitForProcessExit(state.pid) };
       } catch {
         return { success: false, error: error.message };
       }
     }
     return { success: false, error: error.message };
+  }
+}
+
+async function waitForProcessExit(pid, timeoutMs = 5000) {
+  if (!pid) return true;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!isProcessAlive(pid)) return true;
+    await delay(100);
+  }
+  return !isProcessAlive(pid);
+}
+
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -84,4 +110,3 @@ export async function bridgeFetch(state, route, options = {}) {
   if (!response.ok) throw new Error(data.error || response.statusText);
   return data;
 }
-
