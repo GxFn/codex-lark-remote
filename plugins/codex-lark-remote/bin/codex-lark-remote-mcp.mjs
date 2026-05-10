@@ -1,9 +1,7 @@
 #!/usr/bin/env node
-import fs from "node:fs/promises";
 import readline from "node:readline";
-import { startBridge } from "../src/bridge-server.mjs";
 import { formatConfigUpdate, updateRuntimeConfig } from "../src/config-writer.mjs";
-import { loadConfig, readPackageVersion, stateFilePath } from "../src/config.mjs";
+import { loadConfig, readPackageVersion } from "../src/config.mjs";
 import { diagnoseLarkRemote, formatDiagnostics, formatHandoff } from "../src/diagnostics.mjs";
 import { activateHandoff } from "../src/handoff.mjs";
 import { LarkNotifier } from "../src/notifier.mjs";
@@ -197,8 +195,6 @@ const tools = [
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: false });
 let chain = Promise.resolve();
-let embeddedBridge = null;
-const silentLogger = { debug() {}, info() {}, warn() {}, error() {} };
 
 rl.on("line", (line) => {
   if (!line.trim()) return;
@@ -350,35 +346,17 @@ async function ensureBridge(args) {
   const current = await bridgeStatus(args);
   if (current.running) return current;
 
-  if (!embeddedBridge) {
-    try {
-      embeddedBridge = await startBridge({ ...args, logger: silentLogger });
-      return bridgeStatus(args);
-    } catch (error) {
-      embeddedBridge = null;
-      const spawned = await startBridgeProcess(args);
-      if (!spawned.running) {
-        return {
-          ...spawned,
-          message: `${spawned.message || "Bridge is not running"}; embedded start failed: ${error.message}`,
-        };
-      }
-      return spawned;
-    }
+  const spawned = await startBridgeProcess(args);
+  if (!spawned.running) {
+    return {
+      ...spawned,
+      message: spawned.message || "Bridge is not running",
+    };
   }
-
-  return bridgeStatus(args);
+  return spawned;
 }
 
 async function stopBridge(args) {
-  if (embeddedBridge) {
-    embeddedBridge.larkWs?.stop();
-    await new Promise((resolve) => embeddedBridge.server?.close(resolve));
-    embeddedBridge = null;
-    const config = await loadConfig(args);
-    await fs.rm(stateFilePath(config.dataDir), { force: true }).catch(() => {});
-    return { success: true, message: "Embedded bridge stopped" };
-  }
   return stopBridgeProcess(args);
 }
 

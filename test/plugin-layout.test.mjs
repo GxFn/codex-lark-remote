@@ -130,3 +130,14 @@ test("requires explicit consent for conversation handoff", async () => {
   assert.match(server, /handoff requires explicit approval/);
   assert.match(server, /current Codex conversation and necessary routing metadata/);
 });
+
+test("keeps bridge runtime isolated from the MCP stdio process", async () => {
+  const server = await fs.readFile(
+    new URL("../plugins/codex-lark-remote/bin/codex-lark-remote-mcp.mjs", import.meta.url),
+    "utf8",
+  );
+
+  assert.doesNotMatch(server, /startBridge\s*\(/);
+  assert.doesNotMatch(server, /embeddedBridge/);
+  assert.match(server, /startBridgeProcess\(args\)/);
+});
