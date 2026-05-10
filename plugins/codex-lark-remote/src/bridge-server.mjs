@@ -11,9 +11,11 @@ import { LarkNotifier } from "./notifier.mjs";
 import { formatBridgeStatus, formatHelp, formatQueued, formatTask, formatWhoami } from "./presenter.mjs";
 import { RemoteCommandQueue } from "./queue.mjs";
 import { CodexCliRunner } from "./runner.mjs";
+import { assertLarkAppCredentials } from "./setup-guide.mjs";
 
 export async function startBridge(options = {}) {
   const config = await loadConfig({ dataDir: options.dataDir, configPath: options.configPath });
+  assertLarkAppCredentials(config);
   const queue = new RemoteCommandQueue({ dataDir: config.dataDir });
   const notifier = new LarkNotifier(config.lark || {});
   const runner = new CodexCliRunner({ queue, config, notifier });

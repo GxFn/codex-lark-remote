@@ -54,6 +54,16 @@ enabled = true
 
 推荐通过 Codex 聊天配置这个插件，而不是手工编辑 JSON。把必要的飞书/Lark 信息粘贴到本地 Codex 对话里，让 Codex 写入 `~/.codex-lark-remote/config.json`、验证鉴权，然后启动 handoff。
 
+如果还没有飞书/Lark 应用凭据：
+
+1. 打开 [飞书开放平台](https://open.feishu.cn/) 或
+   [Lark Open Platform](https://open.larksuite.com/)。
+2. 创建企业自建应用/内部应用。
+3. 启用机器人能力。
+4. 在“凭证与基础信息”里复制 **App ID** 和 **App Secret**。
+5. 在“事件订阅”里选择长连接/WebSocket，并订阅 `im.message.receive_v1`。
+6. 按平台提示开通消息接收/回复相关权限，然后发布或启用应用。
+
 可以使用类似这样的提示：
 
 ```text
@@ -111,10 +121,9 @@ codex_lark_diagnose，最后在当前对话里启动 codex_lark_handoff。
 }
 ```
 
-当插件已经安装但还没有配置文件时，“启动 Codex Lark Remote” 会启动本地
-bridge、为当前 Codex thread 激活 handoff，并返回首次配置清单，而不是直接失败。
-bridge 可以在飞书/Lark 凭据缺失时先运行，但只有配置好 `appId` 和
-`appSecret` 后，WebSocket 才能真正接收飞书/Lark 消息。
+当插件已经安装但缺少 `appId` 或 `appSecret` 时，“启动 Codex Lark Remote” 不会
+启动本地 bridge，也不会激活 handoff。它会返回配置请求和上面的飞书/Lark 应用
+申请步骤。只有保存这些凭据之后，bridge 才会真正启动。
 
 ## 启动当前线程 handoff
 
@@ -124,7 +133,7 @@ bridge 可以在飞书/Lark 凭据缺失时先运行，但只有配置好 `appId
 启动 codex-lark-remote handoff，让我接下来可以从飞书继续这个 Codex 对话。
 ```
 
-Codex 应该调用：
+Codex 应该先确认凭据已经配置，再调用：
 
 - `codex_lark_check_auth`
 - `codex_lark_diagnose`

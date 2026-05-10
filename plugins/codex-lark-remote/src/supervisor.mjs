@@ -3,6 +3,7 @@ import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { bridgeLogFilePath, loadConfig, stateFilePath } from "./config.mjs";
+import { formatMissingLarkCredentials, hasLarkAppCredentials } from "./setup-guide.mjs";
 
 export async function readBridgeState(options = {}) {
   const config = await loadConfig(options);
@@ -32,10 +33,19 @@ export async function bridgeStatus(options = {}) {
 }
 
 export async function startBridgeProcess(options = {}) {
+  const config = await loadConfig(options);
+  if (!hasLarkAppCredentials(config)) {
+    return {
+      running: false,
+      blocked: true,
+      config,
+      message: formatMissingLarkCredentials(config),
+    };
+  }
+
   const current = await bridgeStatus(options);
   if (current.running) return current;
 
-  const config = await loadConfig(options);
   const bridgeUrl = new URL("../bin/codex-lark-bridge.mjs", import.meta.url);
   const logPath = bridgeLogFilePath(config.dataDir);
   const logFd = fsSync.openSync(logPath, "a");

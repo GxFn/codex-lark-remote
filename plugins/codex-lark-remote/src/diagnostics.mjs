@@ -4,6 +4,7 @@ import { readHandoff } from "./handoff.mjs";
 import { larkWebSocketEnabled } from "./lark-ws.mjs";
 import { configuredAllowedUsers } from "./lark.mjs";
 import { LarkNotifier } from "./notifier.mjs";
+import { formatMissingLarkCredentials, hasLarkAppCredentials } from "./setup-guide.mjs";
 import { bridgeStatus } from "./supervisor.mjs";
 
 export async function diagnoseLarkRemote(options = {}) {
@@ -13,15 +14,19 @@ export async function diagnoseLarkRemote(options = {}) {
   const webhookUrl = publicUrl ? joinUrl(publicUrl, "/bridge/lark/event") : "";
   const webSocketEnabled = larkWebSocketEnabled(config);
   const allowedUsers = configuredAllowedUsers(config);
+  const appCredentialsConfigured = hasLarkAppCredentials(config);
   const repos = await repoDiagnostics(config);
   const auth = options.checkAuth ? await new LarkNotifier(config.lark || {}).checkAuth() : null;
   const handoff = await readHandoff({ dataDir: config.dataDir });
 
   const issues = [];
   const warnings = [];
-  if (!status.running) issues.push("Bridge is not running. Start it with codex_lark_start.");
+  if (!appCredentialsConfigured) {
+    issues.push("Feishu/Lark appId/appSecret are not configured. Bridge start is blocked until they are saved.");
+  } else if (!status.running) {
+    issues.push("Bridge is not running. Start it with codex_lark_start.");
+  }
   if (!webSocketEnabled && !publicUrl) warnings.push("No publicUrl/CODEX_LARK_PUBLIC_URL is configured; Feishu cannot reach a loopback URL directly.");
-  if (!config.lark?.appId || !config.lark?.appSecret) issues.push("Lark appId/appSecret are not configured.");
   if (webSocketEnabled && status.data?.larkWs?.lastError) warnings.push(status.data.larkWs.lastError);
   if (!config.lark?.verificationToken && !process.env.CODEX_LARK_VERIFICATION_TOKEN) {
     warnings.push(webSocketEnabled ? "Verification token is only needed for webhook fallback." : "Verification token is not configured.");
@@ -44,7 +49,7 @@ export async function diagnoseLarkRemote(options = {}) {
       webSocketEnabled,
       webSocketConnected: Boolean(status.data?.larkWs?.connected),
       publicUrlConfigured: Boolean(publicUrl),
-      appCredentialsConfigured: Boolean(config.lark?.appId && config.lark?.appSecret),
+      appCredentialsConfigured,
       verificationTokenConfigured: Boolean(config.lark?.verificationToken || process.env.CODEX_LARK_VERIFICATION_TOKEN),
       encryptKeyConfigured: Boolean(config.lark?.encryptKey || process.env.CODEX_LARK_ENCRYPT_KEY),
       allowedUsersConfigured: allowedUsers.length > 0,
@@ -103,19 +108,13 @@ export function formatHandoff(diagnostics) {
   if (!diagnostics.checks.appCredentialsConfigured) {
     return [
       "Codex Lark Remote handoff",
-      "Status: first-time setup needed",
-      diagnostics.checks.bridgeRunning ? "Bridge: running" : "Bridge: stopped",
-      handoff?.active ? `Current thread: ${handoff.threadId}` : "Current thread: not activated",
-      diagnostics.paths?.configPath ? `Config: ${diagnostics.paths.configPath}` : "",
+      "Status: configuration required",
+      "Bridge: not started",
+      "Current thread: not activated",
       "",
-      "Missing Feishu/Lark app credentials.",
-      "Ask Codex to call codex_lark_configure with:",
-      "- lark.appId",
-      "- lark.appSecret",
-      "- lark.allowedUsers, or leave it empty and use /codex whoami after the bot can receive messages",
-      "- optional lark.verificationToken and lark.encryptKey for webhook fallback",
-      "",
-      "After configuration, run codex_lark_check_auth and codex_lark_handoff again.",
+      formatMissingLarkCredentials({
+        configPath: diagnostics.paths?.configPath,
+      }),
     ]
       .filter(Boolean)
       .join("\n");
@@ -167,8 +166,11 @@ async function pathExists(path) {
 
 function buildNextActions({ config, status, webhookUrl, publicUrl, webSocketEnabled, allowedUsers }) {
   const actions = [];
-  if (!config.lark?.appId || !config.lark?.appSecret) {
-    actions.push("Ask Codex to call codex_lark_configure with your Feishu/Lark appId and appSecret.");
+  if (!hasLarkAppCredentials(config)) {
+    actions.push("Create a Feishu/Lark internal/custom app in the Feishu/Lark Open Platform.");
+    actions.push("Copy App ID and App Secret, then ask Codex to call codex_lark_configure with lark.appId and lark.appSecret.");
+    actions.push("Do not run codex_lark_start or codex_lark_handoff until app credentials are configured.");
+    return actions;
   }
   if (!allowedUsers.length) {
     actions.push("After the bot can receive messages, send /codex whoami from Feishu/Lark and add the returned senderId to lark.allowedUsers.");

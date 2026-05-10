@@ -7,6 +7,7 @@ import { loadConfig, readPackageVersion, stateFilePath } from "../src/config.mjs
 import { diagnoseLarkRemote, formatDiagnostics, formatHandoff } from "../src/diagnostics.mjs";
 import { activateHandoff } from "../src/handoff.mjs";
 import { LarkNotifier } from "../src/notifier.mjs";
+import { formatMissingLarkCredentials, hasLarkAppCredentials } from "../src/setup-guide.mjs";
 import { bridgeFetch, bridgeStatus, readBridgeState, startBridgeProcess, stopBridgeProcess } from "../src/supervisor.mjs";
 
 const tools = [
@@ -241,10 +242,16 @@ async function callTool(name, args) {
     return textContent(formatConfigUpdate(await updateRuntimeConfig(args)));
   }
   if (name === "codex_lark_start") {
+    const config = await loadConfig(args);
+    if (!hasLarkAppCredentials(config)) return textContent(formatMissingLarkCredentials(config));
     await ensureBridge(args);
     return textContent(formatDiagnostics(await diagnoseLarkRemote(args)));
   }
   if (name === "codex_lark_handoff") {
+    const config = await loadConfig(args);
+    if (!hasLarkAppCredentials(config)) {
+      return textContent(formatHandoff(await diagnoseLarkRemote(args)));
+    }
     await ensureBridge(args);
     await activateHandoff({ ...args, activatedBy: "mcp" });
     return textContent(formatHandoff(await diagnoseLarkRemote(args)));
@@ -267,6 +274,13 @@ async function callTool(name, args) {
 
   const state = await readBridgeState(args);
   if (!state?.url || !state?.token) {
+    const config = await loadConfig(args);
+    if (!hasLarkAppCredentials(config)) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: formatMissingLarkCredentials(config) }],
+      };
+    }
     return {
       isError: true,
       content: [{ type: "text", text: "Codex Lark Remote bridge is not running. Use codex_lark_start first." }],
@@ -316,6 +330,16 @@ async function callTool(name, args) {
 }
 
 async function ensureBridge(args) {
+  const config = await loadConfig(args);
+  if (!hasLarkAppCredentials(config)) {
+    return {
+      running: false,
+      blocked: true,
+      config,
+      message: formatMissingLarkCredentials(config),
+    };
+  }
+
   const current = await bridgeStatus(args);
   if (current.running) return current;
 

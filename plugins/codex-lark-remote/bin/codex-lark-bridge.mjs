@@ -2,8 +2,13 @@
 import { startBridge } from "../src/bridge-server.mjs";
 
 const args = parseArgs(process.argv.slice(2));
-const { url } = await startBridge(args);
-process.stdout.write(`codex-lark-remote bridge running at ${url}\n`);
+try {
+  const { url } = await startBridge(args);
+  process.stdout.write(`codex-lark-remote bridge running at ${url}\n`);
+} catch (error) {
+  process.stderr.write(`${error.message}\n`);
+  process.exitCode = 1;
+}
 
 function parseArgs(argv) {
   const result = {};
@@ -17,4 +22,3 @@ function parseArgs(argv) {
   }
   return result;
 }
-

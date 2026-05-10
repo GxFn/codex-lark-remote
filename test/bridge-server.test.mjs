@@ -3,8 +3,19 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { processLarkEvent } from "../plugins/codex-lark-remote/src/bridge-server.mjs";
+import { processLarkEvent, startBridge } from "../plugins/codex-lark-remote/src/bridge-server.mjs";
+import { stateFilePath } from "../plugins/codex-lark-remote/src/config.mjs";
 import { activateHandoff } from "../plugins/codex-lark-remote/src/handoff.mjs";
+
+test("startBridge refuses to run before Feishu app credentials are configured", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-no-creds-"));
+
+  await assert.rejects(
+    startBridge({ dataDir }),
+    /missing Feishu\/Lark appId and appSecret/,
+  );
+  await assert.rejects(fs.stat(stateFilePath(dataDir)), { code: "ENOENT" });
+});
 
 test("processLarkEvent lets whoami bypass allowlist for identity discovery", async () => {
   const replies = [];

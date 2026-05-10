@@ -58,7 +58,12 @@ test("formatHandoff gives first-run setup guidance when app credentials are miss
   const text = formatHandoff(diagnostics);
 
   assert.equal(diagnostics.checks.appCredentialsConfigured, false);
-  assert.match(text, /first-time setup needed/);
+  assert.match(text, /configuration required/);
+  assert.match(text, /Bridge: not started/);
+  assert.match(text, /open\.feishu\.cn/);
+  assert.match(text, /open\.larksuite\.com/);
+  assert.doesNotMatch(text, /Current thread: [0-9a-f-]{36}/);
   assert.match(text, /codex_lark_configure/);
+  assert.doesNotMatch(formatDiagnostics(diagnostics), /Run codex_lark_start/);
   assert.match(formatDiagnostics(diagnostics), /No repos are configured\. This is OK/);
 });

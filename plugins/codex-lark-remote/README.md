@@ -67,6 +67,18 @@ hand. Paste the required Feishu/Lark information into the local Codex
 conversation and ask Codex to write `~/.codex-lark-remote/config.json`, verify
 auth, then start handoff.
 
+If you do not have Feishu/Lark credentials yet:
+
+1. Open [Feishu Open Platform](https://open.feishu.cn/) or
+   [Lark Open Platform](https://open.larksuite.com/).
+2. Create an internal/custom app for your tenant.
+3. Enable the bot capability.
+4. In **Credentials & Basic Info**, copy **App ID** and **App Secret**.
+5. In **Event Subscriptions**, choose long connection/WebSocket and subscribe to
+   `im.message.receive_v1`.
+6. Add the message receive/reply permissions requested by the platform, then
+   publish or enable the app for your tenant.
+
 Use a prompt like this:
 
 ```text
@@ -132,11 +144,10 @@ The equivalent JSON shape is:
 }
 ```
 
-When the plugin is installed but no config exists yet, "Start Codex Lark Remote"
-will start the local bridge, activate handoff for the current Codex thread, and
-return a first-run checklist instead of failing. The bridge can run before
-Feishu/Lark credentials are present, but WebSocket receiving starts only after
-`appId` and `appSecret` are configured.
+When the plugin is installed but `appId` or `appSecret` is missing, "Start Codex
+Lark Remote" does not start the local bridge and does not activate handoff. It
+returns a configuration request with the Feishu/Lark app setup steps above. The
+bridge starts only after those credentials are saved.
 
 ## Start Current-Thread Handoff
 
@@ -147,7 +158,7 @@ Start codex-lark-remote handoff so I can continue this Codex conversation
 from Feishu/Lark.
 ```
 
-Codex should call:
+Codex should first confirm credentials are configured, then call:
 
 - `codex_lark_check_auth`
 - `codex_lark_diagnose`

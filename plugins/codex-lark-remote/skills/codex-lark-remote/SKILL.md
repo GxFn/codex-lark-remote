@@ -17,14 +17,19 @@ When the user says "start this plugin" or similar:
 1. Prefer MCP tools over shell commands. Do not run `bin/codex-lark-bridge.mjs`
    directly and do not inspect `~/.codex-lark-remote/config.json` with shell
    unless a tool result is insufficient.
-2. Call `codex_lark_handoff` for the current Codex conversation. It starts the
-   bridge, activates current-thread handoff, and returns setup status.
-3. If the result says Feishu/Lark app credentials are missing, ask the user for
-   the needed fields or call `codex_lark_configure` when they already supplied
-   them in chat. Never echo raw secrets back.
-4. After `codex_lark_configure`, call `codex_lark_check_auth`, then
-   `codex_lark_handoff` again.
-5. Keep the final startup response short: bridge status, handoff status, what is
+2. Call `codex_lark_diagnose` first. If Feishu/Lark `appId` or `appSecret` is
+   missing, do not call `codex_lark_start` or `codex_lark_handoff`.
+3. Ask the user for the needed fields and include the platform path: create an
+   internal/custom app in Feishu/Lark Open Platform, enable bot capability, copy
+   App ID/App Secret from Credentials & Basic Info, choose long
+   connection/WebSocket in Event Subscriptions, and subscribe to
+   `im.message.receive_v1`.
+4. If the user already supplied the values in chat, call `codex_lark_configure`.
+   Never echo raw secrets back.
+5. After `codex_lark_configure`, call `codex_lark_check_auth`, then
+   `codex_lark_handoff` again. Only a configured app should start the bridge and
+   activate current-thread handoff.
+6. Keep the final startup response short: bridge status, handoff status, what is
    missing, and the exact next thing the user should provide or send from
    Feishu/Lark.
 
