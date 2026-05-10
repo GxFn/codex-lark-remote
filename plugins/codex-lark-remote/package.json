@@ -1,6 +1,6 @@
 {
   "name": "codex-lark-remote",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Remote Codex programming from Feishu/Lark chat.",
   "type": "module",
   "bin": {
@@ -8,11 +8,8 @@
     "codex-lark-remote-mcp": "./bin/codex-lark-remote-mcp.mjs"
   },
   "scripts": {
-    "test": "node --test",
     "bridge": "node ./bin/codex-lark-bridge.mjs",
-    "mcp": "node ./bin/codex-lark-remote-mcp.mjs",
-    "fixture": "node ./scripts/lark-event-fixture.mjs",
-    "sync:plugin": "node ./scripts/sync-plugin-bundle.mjs"
+    "mcp": "node ./bin/codex-lark-remote-mcp.mjs"
   },
   "keywords": [
     "codex",

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs/promises";
-import { loadConfig, resolveDataDir, stateFilePath } from "../src/config.mjs";
-import { createLarkSignature, encryptLarkPayload } from "../src/crypto.mjs";
+import { loadConfig, resolveDataDir, stateFilePath } from "../plugins/codex-lark-remote/src/config.mjs";
+import { createLarkSignature, encryptLarkPayload } from "../plugins/codex-lark-remote/src/crypto.mjs";
 
 const args = parseArgs(process.argv.slice(2));
 const dataDir = resolveDataDir(args.dataDir);

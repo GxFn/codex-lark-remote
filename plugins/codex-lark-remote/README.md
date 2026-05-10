@@ -42,7 +42,7 @@ Start codex-lark-remote and help me configure Feishu/Lark remote handoff.
 ```
 
 For a tagged release, set **Git ref** to the release tag instead of `main`, for
-example `v0.1.1`.
+example `v0.1.2`.
 
 For local plugin development only, add this repository as a local marketplace in
 `~/.codex/config.toml`:
@@ -87,7 +87,7 @@ Optional remote coding repository:
 - repos.my-project.baseBranch: main
 - repos.my-project.testCommand: npm test
 
-Please write ~/.codex-lark-remote/config.json, then run
+Please call codex_lark_configure with these values, then run
 codex_lark_check_auth and codex_lark_diagnose. Finally, start
 codex_lark_handoff in this current Codex conversation.
 ```
@@ -131,6 +131,12 @@ The equivalent JSON shape is:
   }
 }
 ```
+
+When the plugin is installed but no config exists yet, "Start Codex Lark Remote"
+will start the local bridge, activate handoff for the current Codex thread, and
+return a first-run checklist instead of failing. The bridge can run before
+Feishu/Lark credentials are present, but WebSocket receiving starts only after
+`appId` and `appSecret` are configured.
 
 ## Start Current-Thread Handoff
 

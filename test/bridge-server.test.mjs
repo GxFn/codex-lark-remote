@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { processLarkEvent } from "../src/bridge-server.mjs";
-import { activateHandoff } from "../src/handoff.mjs";
+import { processLarkEvent } from "../plugins/codex-lark-remote/src/bridge-server.mjs";
+import { activateHandoff } from "../plugins/codex-lark-remote/src/handoff.mjs";
 
 test("processLarkEvent lets whoami bypass allowlist for identity discovery", async () => {
   const replies = [];

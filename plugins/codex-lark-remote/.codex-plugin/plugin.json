@@ -1,6 +1,6 @@
 {
   "name": "codex-lark-remote",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Remote Codex programming from Feishu/Lark chat.",
   "author": {
     "name": "Codex Lark Remote Contributors"
@@ -27,9 +27,9 @@
       "Interactive"
     ],
     "defaultPrompt": [
-      "Start Codex Lark Remote",
-      "Show Lark remote status",
-      "List recent Lark remote tasks"
+      "Start Codex Lark Remote handoff for this conversation",
+      "Configure Codex Lark Remote with my Feishu/Lark app credentials",
+      "Show Codex Lark Remote setup status"
     ],
     "brandColor": "#00B96B",
     "composerIcon": "./assets/icon.png",

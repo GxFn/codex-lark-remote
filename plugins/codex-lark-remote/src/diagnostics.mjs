@@ -30,7 +30,7 @@ export async function diagnoseLarkRemote(options = {}) {
     warnings.push(webSocketEnabled ? "Encrypt key is only needed for signed/encrypted webhook fallback." : "Encrypt key is not configured; signed/encrypted webhook verification is recommended.");
   }
   if (allowedUsers.length === 0) warnings.push("No allowedUsers allowlist is configured.");
-  if (!Object.keys(config.repos || {}).length) issues.push("No repos are configured.");
+  if (!Object.keys(config.repos || {}).length) warnings.push("No repos are configured. This is OK for current-thread handoff; repos are only needed for isolated worktree tasks.");
   if (config.defaultRepo && !config.repos?.[config.defaultRepo]) issues.push(`defaultRepo is not defined in repos: ${config.defaultRepo}`);
   for (const repo of repos) {
     if (!repo.pathExists) issues.push(`Repo path does not exist: ${repo.key}`);
@@ -57,6 +57,10 @@ export async function diagnoseLarkRemote(options = {}) {
       route: "/bridge/lark/event",
       larkWs: status.data?.larkWs || null,
     },
+    paths: {
+      dataDir: config.dataDir,
+      configPath: config.configPath,
+    },
     handoff,
     lark: {
       transport: config.lark?.transport || "websocket",
@@ -70,7 +74,7 @@ export async function diagnoseLarkRemote(options = {}) {
     repos,
     issues,
     warnings,
-    nextActions: buildNextActions({ status, webhookUrl, publicUrl, webSocketEnabled }),
+    nextActions: buildNextActions({ config, status, webhookUrl, publicUrl, webSocketEnabled, allowedUsers }),
   };
 }
 
@@ -79,6 +83,7 @@ export function formatDiagnostics(diagnostics) {
     "Codex Lark Remote diagnostics",
     `Ready: ${diagnostics.ok ? "yes" : "no"}`,
     `Bridge: ${diagnostics.checks.bridgeRunning ? "running" : "stopped"}`,
+    `Config: ${diagnostics.paths?.configPath || "-"}`,
     `Lark transport: ${formatTransport(diagnostics)}`,
     `Local URL: ${diagnostics.bridge.localUrl || "-"}`,
     diagnostics.checks.webSocketEnabled ? "" : `Webhook URL: ${diagnostics.bridge.webhookUrl || "-"}`,
@@ -95,6 +100,26 @@ export function formatDiagnostics(diagnostics) {
 
 export function formatHandoff(diagnostics) {
   const handoff = diagnostics.handoff;
+  if (!diagnostics.checks.appCredentialsConfigured) {
+    return [
+      "Codex Lark Remote handoff",
+      "Status: first-time setup needed",
+      diagnostics.checks.bridgeRunning ? "Bridge: running" : "Bridge: stopped",
+      handoff?.active ? `Current thread: ${handoff.threadId}` : "Current thread: not activated",
+      diagnostics.paths?.configPath ? `Config: ${diagnostics.paths.configPath}` : "",
+      "",
+      "Missing Feishu/Lark app credentials.",
+      "Ask Codex to call codex_lark_configure with:",
+      "- lark.appId",
+      "- lark.appSecret",
+      "- lark.allowedUsers, or leave it empty and use /codex whoami after the bot can receive messages",
+      "- optional lark.verificationToken and lark.encryptKey for webhook fallback",
+      "",
+      "After configuration, run codex_lark_check_auth and codex_lark_handoff again.",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
   return [
     "Codex Lark Remote handoff",
     diagnostics.ok ? "Status: ready" : "Status: needs attention",
@@ -104,6 +129,7 @@ export function formatHandoff(diagnostics) {
     diagnostics.checks.webSocketEnabled
       ? "Feishu setup: Event Subscriptions -> long connection -> im.message.receive_v1"
       : `Feishu setup: webhook URL ${diagnostics.bridge.webhookUrl || "-"}`,
+    diagnostics.paths?.configPath ? `Config: ${diagnostics.paths.configPath}` : "",
     "",
     "From Feishu:",
     "[repo] describe the coding task",
@@ -139,8 +165,14 @@ async function pathExists(path) {
   }
 }
 
-function buildNextActions({ status, webhookUrl, publicUrl, webSocketEnabled }) {
+function buildNextActions({ config, status, webhookUrl, publicUrl, webSocketEnabled, allowedUsers }) {
   const actions = [];
+  if (!config.lark?.appId || !config.lark?.appSecret) {
+    actions.push("Ask Codex to call codex_lark_configure with your Feishu/Lark appId and appSecret.");
+  }
+  if (!allowedUsers.length) {
+    actions.push("After the bot can receive messages, send /codex whoami from Feishu/Lark and add the returned senderId to lark.allowedUsers.");
+  }
   if (!status.running) actions.push("Run codex_lark_start.");
   if (webSocketEnabled) {
     actions.push("In Feishu Event Subscriptions, choose long connection and add im.message.receive_v1.");

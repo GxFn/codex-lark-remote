@@ -1,12 +1,56 @@
 #!/usr/bin/env node
+import fs from "node:fs/promises";
 import readline from "node:readline";
-import { loadConfig, readPackageVersion } from "../src/config.mjs";
+import { startBridge } from "../src/bridge-server.mjs";
+import { formatConfigUpdate, updateRuntimeConfig } from "../src/config-writer.mjs";
+import { loadConfig, readPackageVersion, stateFilePath } from "../src/config.mjs";
 import { diagnoseLarkRemote, formatDiagnostics, formatHandoff } from "../src/diagnostics.mjs";
 import { activateHandoff } from "../src/handoff.mjs";
 import { LarkNotifier } from "../src/notifier.mjs";
 import { bridgeFetch, bridgeStatus, readBridgeState, startBridgeProcess, stopBridgeProcess } from "../src/supervisor.mjs";
 
 const tools = [
+  {
+    name: "codex_lark_configure",
+    description: "Write or update ~/.codex-lark-remote/config.json from Feishu/Lark setup details supplied in the Codex chat. Returns a sanitized summary and never prints secrets.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dataDir: { type: "string", description: "Optional data directory override." },
+        configPath: { type: "string", description: "Optional config file path override." },
+        publicUrl: { type: "string", description: "Optional public URL for webhook fallback." },
+        defaultRepo: { type: "string", description: "Default repo key for worktree tasks." },
+        lark: {
+          type: "object",
+          properties: {
+            appId: { type: "string" },
+            appSecret: { type: "string" },
+            verificationToken: { type: "string" },
+            encryptKey: { type: "string" },
+            allowedUsers: { type: "array", items: { type: "string" } },
+            transport: { type: "string", enum: ["websocket", "webhook"] },
+            websocket: { type: "boolean" },
+          },
+        },
+        repos: {
+          type: "object",
+          description: "Repo map for isolated worktree tasks.",
+          additionalProperties: {
+            type: "object",
+            properties: {
+              path: { type: "string" },
+              remote: { type: "string" },
+              baseBranch: { type: "string" },
+              testCommand: { type: "string" },
+            },
+          },
+        },
+        runner: { type: "object" },
+        handoff: { type: "object" },
+        policy: { type: "object" },
+      },
+    },
+  },
   {
     name: "codex_lark_status",
     description: "Return Codex Lark Remote bridge, queue, and runner status.",
@@ -148,6 +192,8 @@ const tools = [
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: false });
 let chain = Promise.resolve();
+let embeddedBridge = null;
+const silentLogger = { debug() {}, info() {}, warn() {}, error() {} };
 
 rl.on("line", (line) => {
   if (!line.trim()) return;
@@ -191,16 +237,20 @@ async function handleRequest(request) {
 }
 
 async function callTool(name, args) {
+  if (name === "codex_lark_configure") {
+    return textContent(formatConfigUpdate(await updateRuntimeConfig(args)));
+  }
   if (name === "codex_lark_start") {
-    return textContent(formatStatus(await startBridgeProcess(args)));
+    await ensureBridge(args);
+    return textContent(formatDiagnostics(await diagnoseLarkRemote(args)));
   }
   if (name === "codex_lark_handoff") {
-    await startBridgeProcess(args);
+    await ensureBridge(args);
     await activateHandoff({ ...args, activatedBy: "mcp" });
     return textContent(formatHandoff(await diagnoseLarkRemote(args)));
   }
   if (name === "codex_lark_stop") {
-    return textContent(formatJson(await stopBridgeProcess(args)));
+    return textContent(formatJson(await stopBridge(args)));
   }
   if (name === "codex_lark_status") {
     return textContent(formatStatus(await bridgeStatus(args)));
@@ -263,6 +313,42 @@ async function callTool(name, args) {
     isError: true,
     content: [{ type: "text", text: `Unknown tool: ${name}` }],
   };
+}
+
+async function ensureBridge(args) {
+  const current = await bridgeStatus(args);
+  if (current.running) return current;
+
+  if (!embeddedBridge) {
+    try {
+      embeddedBridge = await startBridge({ ...args, logger: silentLogger });
+      return bridgeStatus(args);
+    } catch (error) {
+      embeddedBridge = null;
+      const spawned = await startBridgeProcess(args);
+      if (!spawned.running) {
+        return {
+          ...spawned,
+          message: `${spawned.message || "Bridge is not running"}; embedded start failed: ${error.message}`,
+        };
+      }
+      return spawned;
+    }
+  }
+
+  return bridgeStatus(args);
+}
+
+async function stopBridge(args) {
+  if (embeddedBridge) {
+    embeddedBridge.larkWs?.stop();
+    await new Promise((resolve) => embeddedBridge.server?.close(resolve));
+    embeddedBridge = null;
+    const config = await loadConfig(args);
+    await fs.rm(stateFilePath(config.dataDir), { force: true }).catch(() => {});
+    return { success: true, message: "Embedded bridge stopped" };
+  }
+  return stopBridgeProcess(args);
 }
 
 function formatStatus(status) {

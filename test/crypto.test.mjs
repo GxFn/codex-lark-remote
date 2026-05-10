@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { createLarkSignature, decryptLarkPayload, encryptLarkPayload, verifyLarkSignature } from "../src/crypto.mjs";
+import { createLarkSignature, decryptLarkPayload, encryptLarkPayload, verifyLarkSignature } from "../plugins/codex-lark-remote/src/crypto.mjs";
 
 test("encryptLarkPayload and decryptLarkPayload round-trip Lark event bodies", () => {
   const encryptKey = "0123456789abcdef0123456789abcdef";

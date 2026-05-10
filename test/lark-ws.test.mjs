@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { LarkWebSocketReceiver, larkWebSocketEnabled } from "../src/lark-ws.mjs";
+import { LarkWebSocketReceiver, larkWebSocketEnabled } from "../plugins/codex-lark-remote/src/lark-ws.mjs";
 
 test("larkWebSocketEnabled defaults to websocket-first", () => {
   assert.equal(larkWebSocketEnabled({ lark: {} }), true);

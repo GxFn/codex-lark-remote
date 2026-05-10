@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyChatText, configuredAllowedUsers, isUserAllowed, parseLarkEvent } from "../src/lark.mjs";
+import { classifyChatText, configuredAllowedUsers, isUserAllowed, parseLarkEvent } from "../plugins/codex-lark-remote/src/lark.mjs";
 
 test("parseLarkEvent extracts text message fields and hashes sensitive ids", () => {
   const parsed = parseLarkEvent({

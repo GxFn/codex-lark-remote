@@ -7,7 +7,7 @@ const repoRootUrl = new URL("../", import.meta.url);
 const bundleRootUrl = new URL("../plugins/codex-lark-remote/", import.meta.url);
 const marketplaceUrl = new URL("../.agents/plugins/marketplace.json", import.meta.url);
 
-const mirroredEntries = [
+const bundledPluginEntries = [
   ".codex-plugin",
   ".mcp.json",
   "README.md",
@@ -15,10 +15,32 @@ const mirroredEntries = [
   "assets",
   "bin",
   "config",
-  "package-lock.json",
   "package.json",
   "skills",
   "src",
+];
+
+const forbiddenRootPluginEntries = [
+  ".codex-plugin",
+  ".mcp.json",
+  "assets",
+  "bin",
+  "config",
+  "skills",
+  "src",
+];
+
+const readmeEntrypoints = [
+  {
+    rootUrl: new URL("../README.md", import.meta.url),
+    bundledUrl: new URL("../plugins/codex-lark-remote/README.md", import.meta.url),
+    language: "English",
+  },
+  {
+    rootUrl: new URL("../README.zh-CN.md", import.meta.url),
+    bundledUrl: new URL("../plugins/codex-lark-remote/README.zh-CN.md", import.meta.url),
+    language: "Chinese",
+  },
 ];
 
 test("keeps Codex marketplace metadata pointed at the plugin bundle", async () => {
@@ -29,45 +51,43 @@ test("keeps Codex marketplace metadata pointed at the plugin bundle", async () =
   assert.equal(marketplace.plugins[0]?.source?.path, "./plugins/codex-lark-remote");
 });
 
-test("keeps the local Codex plugin bundle in sync with the root implementation", async () => {
-  for (const entry of mirroredEntries) {
-    const rootPath = path.join(repoRootUrl.pathname, entry);
-    const bundledPath = path.join(bundleRootUrl.pathname, entry);
+test("keeps the plugin bundle as the single source of plugin code", async () => {
+  const bundleRootStat = await fs.lstat(bundleRootUrl);
+  assert.equal(bundleRootStat.isDirectory(), true, "plugin bundle must live under plugins/codex-lark-remote");
+  assert.equal(bundleRootStat.isSymbolicLink(), false, "plugin bundle must be a real directory");
 
-    const rootStat = await fs.lstat(rootPath);
+  for (const entry of bundledPluginEntries) {
+    const bundledPath = path.join(bundleRootUrl.pathname, entry);
     const bundledStat = await fs.lstat(bundledPath);
     assert.equal(bundledStat.isSymbolicLink(), false, `${entry} must be a real bundled file or directory`);
+  }
 
-    if (rootStat.isFile()) {
-      const rootBytes = await fs.readFile(rootPath);
-      const bundledBytes = await fs.readFile(bundledPath);
-      assert.deepEqual(bundledBytes, rootBytes, `${entry} drifted from the root implementation`);
-      continue;
-    }
-
-    const rootFiles = await listFiles(rootPath);
-    const bundledFiles = await listFiles(bundledPath);
-    assert.deepEqual(bundledFiles, rootFiles, `${entry} file list drifted from the root implementation`);
-
-    for (const relativePath of rootFiles) {
-      const rootBytes = await fs.readFile(path.join(rootPath, relativePath));
-      const bundledBytes = await fs.readFile(path.join(bundledPath, relativePath));
-      assert.deepEqual(bundledBytes, rootBytes, `${entry}/${relativePath} drifted from the root implementation`);
-    }
+  for (const entry of forbiddenRootPluginEntries) {
+    const rootPath = path.join(repoRootUrl.pathname, entry);
+    await assert.rejects(fs.lstat(rootPath), { code: "ENOENT" }, `${entry} should not exist at repo root`);
   }
 });
 
-async function listFiles(targetPath, basePath = targetPath) {
-  const stat = await fs.lstat(targetPath);
-  if (stat.isSymbolicLink()) return [`${path.relative(basePath, targetPath)} -> symlink`];
-  if (stat.isFile()) return [path.relative(basePath, targetPath)];
+test("keeps root READMEs as short entrypoints to bundled plugin docs", async () => {
+  for (const { rootUrl, bundledUrl, language } of readmeEntrypoints) {
+    const rootReadme = await fs.readFile(rootUrl, "utf8");
+    const bundledReadme = await fs.readFile(bundledUrl, "utf8");
 
-  const entries = await fs.readdir(targetPath, { withFileTypes: true });
-  const files = [];
-  for (const entry of entries) {
-    const childPath = path.join(targetPath, entry.name);
-    if (entry.isDirectory()) files.push(...(await listFiles(childPath, basePath)));
-    else files.push(path.relative(basePath, childPath));
+    assert.notEqual(rootReadme, bundledReadme, `${language} root README must not duplicate bundled plugin docs`);
+    assert.match(rootReadme, /plugins\/codex-lark-remote\//, `${language} root README must point at the bundle`);
+    assert.match(
+      rootReadme,
+      /plugins\/codex-lark-remote\/README\.md/,
+      `${language} root README must link to English plugin docs`,
+    );
+    assert.match(
+      rootReadme,
+      /plugins\/codex-lark-remote\/README\.zh-CN\.md/,
+      `${language} root README must link to Chinese plugin docs`,
+    );
+
+    const rootLineCount = rootReadme.trim().split(/\n/).length;
+    assert.ok(rootLineCount <= 20, `${language} root README should stay short`);
+    assert.ok(rootReadme.length < bundledReadme.length / 2, `${language} root README should not copy the full docs`);
   }
-  return files.sort();
-}
+});

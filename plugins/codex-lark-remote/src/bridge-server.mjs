@@ -34,6 +34,7 @@ export async function startBridge(options = {}) {
   bridge.larkWs = new LarkWebSocketReceiver({
     config,
     onEvent: (eventBody) => processLarkEvent(bridge, eventBody),
+    logger: options.logger || console,
   });
 
   await new Promise((resolve) => server.listen(port, host, resolve));

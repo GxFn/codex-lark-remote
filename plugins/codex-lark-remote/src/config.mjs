@@ -21,6 +21,10 @@ export function stateFilePath(dataDir) {
   return path.join(dataDir, "bridge-state.json");
 }
 
+export function bridgeLogFilePath(dataDir) {
+  return path.join(dataDir, "bridge.log");
+}
+
 export function handoffFilePath(dataDir) {
   return path.join(dataDir, "handoff.json");
 }

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { RemoteCommandQueue } from "../src/queue.mjs";
+import { RemoteCommandQueue } from "../plugins/codex-lark-remote/src/queue.mjs";
 
 test("RemoteCommandQueue enqueues, claims, updates, and cancels tasks", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-queue-"));

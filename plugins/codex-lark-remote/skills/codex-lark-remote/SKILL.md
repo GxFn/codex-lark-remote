@@ -1,11 +1,32 @@
 ---
 name: codex-lark-remote
-description: Use when Codex is executing a programming task received from Lark/Feishu through codex-lark-remote, especially when the prompt contains a codex_lark_remote_context block or an annotated handoff marker. Follow the remote-chat reporting contract, respect approval gates, keep progress and final output concise, and avoid exposing secrets or long logs.
+description: Use when the user asks to start, configure, diagnose, or use Codex Lark Remote, or when Codex is executing a programming task received from Lark/Feishu through codex-lark-remote. Covers first-run setup, current-thread handoff, remote-chat reporting, and approval gates.
 ---
 
 # Codex Lark Remote
 
-Use this skill when the prompt contains `<codex_lark_remote_context>`, starts with `[Codex Lark Remote handoff]`, or says a task came from Feishu/Lark chat.
+Use this skill when the user asks to start this plugin, configure Feishu/Lark,
+continue Codex from Feishu/Lark, or when the prompt contains
+`<codex_lark_remote_context>`, starts with `[Codex Lark Remote handoff]`, or says
+a task came from Feishu/Lark chat.
+
+## First-Run Startup
+
+When the user says "start this plugin" or similar:
+
+1. Prefer MCP tools over shell commands. Do not run `bin/codex-lark-bridge.mjs`
+   directly and do not inspect `~/.codex-lark-remote/config.json` with shell
+   unless a tool result is insufficient.
+2. Call `codex_lark_handoff` for the current Codex conversation. It starts the
+   bridge, activates current-thread handoff, and returns setup status.
+3. If the result says Feishu/Lark app credentials are missing, ask the user for
+   the needed fields or call `codex_lark_configure` when they already supplied
+   them in chat. Never echo raw secrets back.
+4. After `codex_lark_configure`, call `codex_lark_check_auth`, then
+   `codex_lark_handoff` again.
+5. Keep the final startup response short: bridge status, handoff status, what is
+   missing, and the exact next thing the user should provide or send from
+   Feishu/Lark.
 
 Current-thread handoff usually sends the Feishu/Lark text directly as the next
 Codex user message. In that mode, continue the existing conversation naturally;

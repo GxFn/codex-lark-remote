@@ -35,7 +35,7 @@ main
 启动 codex-lark-remote，并帮我配置飞书远程接管。
 ```
 
-发布 tag 之后，可以把 “Git 引用” 从 `main` 改成具体版本号，例如 `v0.1.1`。
+发布 tag 之后，可以把 “Git 引用” 从 `main` 改成具体版本号，例如 `v0.1.2`。
 
 仅本地插件开发时，才需要把这个仓库作为 local marketplace 加到 `~/.codex/config.toml`：
 
@@ -74,7 +74,7 @@ enabled = true
 - repos.my-project.baseBranch: main
 - repos.my-project.testCommand: npm test
 
-请写入 ~/.codex-lark-remote/config.json，然后运行 codex_lark_check_auth、
+请用这些值调用 codex_lark_configure，然后运行 codex_lark_check_auth、
 codex_lark_diagnose，最后在当前对话里启动 codex_lark_handoff。
 ```
 
@@ -110,6 +110,11 @@ codex_lark_diagnose，最后在当前对话里启动 codex_lark_handoff。
   }
 }
 ```
+
+当插件已经安装但还没有配置文件时，“启动 Codex Lark Remote” 会启动本地
+bridge、为当前 Codex thread 激活 handoff，并返回首次配置清单，而不是直接失败。
+bridge 可以在飞书/Lark 凭据缺失时先运行，但只有配置好 `appId` 和
+`appSecret` 后，WebSocket 才能真正接收飞书/Lark 消息。
 
 ## 启动当前线程 handoff
 

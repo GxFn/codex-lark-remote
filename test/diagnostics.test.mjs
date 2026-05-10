@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { diagnoseLarkRemote, formatDiagnostics, formatHandoff } from "../src/diagnostics.mjs";
+import { diagnoseLarkRemote, formatDiagnostics, formatHandoff } from "../plugins/codex-lark-remote/src/diagnostics.mjs";
 
 test("diagnoseLarkRemote reports sanitized websocket-first readiness", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-diagnostics-"));
@@ -43,10 +43,22 @@ test("diagnoseLarkRemote reports sanitized websocket-first readiness", async () 
   assert.equal(diagnostics.checks.webSocketEnabled, true);
   assert.equal(diagnostics.checks.allowedUsersConfigured, true);
   assert.equal(diagnostics.bridge.webhookUrl, "https://codex.example.test/bridge/lark/event");
+  assert.equal(diagnostics.paths.configPath, configPath);
   assert.equal(diagnostics.lark.appIdPrefix, "cli_1234...");
   assert.equal(diagnostics.lark.allowedUsersCount, 1);
   assert.equal(diagnostics.repos[0].pathExists, true);
   assert.match(formatDiagnostics(diagnostics), /Lark transport: websocket/);
   assert.match(formatHandoff(diagnostics), /long connection/);
   assert.doesNotMatch(formatDiagnostics(diagnostics), /secret_value|token_value|0123456789abcdef/);
+});
+
+test("formatHandoff gives first-run setup guidance when app credentials are missing", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-first-run-"));
+  const diagnostics = await diagnoseLarkRemote({ dataDir: dir });
+  const text = formatHandoff(diagnostics);
+
+  assert.equal(diagnostics.checks.appCredentialsConfigured, false);
+  assert.match(text, /first-time setup needed/);
+  assert.match(text, /codex_lark_configure/);
+  assert.match(formatDiagnostics(diagnostics), /No repos are configured\. This is OK/);
 });

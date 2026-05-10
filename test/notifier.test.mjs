@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { LarkNotifier } from "../src/notifier.mjs";
+import { LarkNotifier } from "../plugins/codex-lark-remote/src/notifier.mjs";
 
 test("LarkNotifier.checkAuth reports missing credentials without throwing", async () => {
   const notifier = new LarkNotifier({ appId: "", appSecret: "" });

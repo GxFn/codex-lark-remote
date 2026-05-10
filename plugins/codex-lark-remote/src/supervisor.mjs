@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
-import { loadConfig, stateFilePath } from "./config.mjs";
+import { bridgeLogFilePath, loadConfig, stateFilePath } from "./config.mjs";
 
 export async function readBridgeState(options = {}) {
   const config = await loadConfig(options);
@@ -22,6 +23,10 @@ export async function bridgeStatus(options = {}) {
     const data = await bridgeFetch(state, "/bridge/status");
     return { running: true, state, config, ...data };
   } catch (error) {
+    if (state.pid && !isProcessAlive(state.pid)) {
+      await fs.rm(stateFilePath(config.dataDir), { force: true }).catch(() => {});
+      return { running: false, config, message: `Removed stale bridge state for exited process ${state.pid}` };
+    }
     return { running: false, state, config, message: error.message };
   }
 }
@@ -32,9 +37,12 @@ export async function startBridgeProcess(options = {}) {
 
   const config = await loadConfig(options);
   const bridgeUrl = new URL("../bin/codex-lark-bridge.mjs", import.meta.url);
+  const logPath = bridgeLogFilePath(config.dataDir);
+  const logFd = fsSync.openSync(logPath, "a");
+  fsSync.writeSync(logFd, `\n[${new Date().toISOString()}] starting Codex Lark Remote bridge\n`);
   const child = spawn(process.execPath, [bridgeUrl.pathname, "--port", "0"], {
     detached: true,
-    stdio: "ignore",
+    stdio: ["ignore", logFd, logFd],
     env: {
       ...process.env,
       CODEX_LARK_DATA_DIR: config.dataDir,
@@ -42,6 +50,7 @@ export async function startBridgeProcess(options = {}) {
     },
   });
   child.unref();
+  fsSync.closeSync(logFd);
 
   for (let attempt = 0; attempt < 25; attempt += 1) {
     await delay(200);

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatFinal, formatHelp, formatTask, formatWhoami } from "../src/presenter.mjs";
+import { formatFinal, formatHelp, formatTask, formatWhoami } from "../plugins/codex-lark-remote/src/presenter.mjs";
 
 test("formatHelp includes whoami command", () => {
   assert.match(formatHelp(), /\/codex whoami/);

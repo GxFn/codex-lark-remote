@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCodexExecArgs, buildCodexResumeArgs, buildHandoffPrompt, extractFinalMessage } from "../src/runner.mjs";
+import { buildCodexExecArgs, buildCodexResumeArgs, buildHandoffPrompt, extractFinalMessage } from "../plugins/codex-lark-remote/src/runner.mjs";
 
 test("buildCodexExecArgs uses supported codex exec flags", () => {
   const args = buildCodexExecArgs({

@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { runApprovedAction, splitCommand } from "../src/actions.mjs";
-import { RemoteCommandQueue } from "../src/queue.mjs";
+import { runApprovedAction, splitCommand } from "../plugins/codex-lark-remote/src/actions.mjs";
+import { RemoteCommandQueue } from "../plugins/codex-lark-remote/src/queue.mjs";
 
 test("splitCommand handles quoted arguments", () => {
   assert.deepEqual(splitCommand('node -e "console.log(1)"'), ["node", "-e", "console.log(1)"]);
