@@ -94,6 +94,7 @@ export function defaultConfig(dataDir = resolveDataDir()) {
       sandbox: "workspace-write",
       askForApproval: "never",
       ignoreUserConfig: true,
+      skipGitRepoCheck: true,
       model: "",
       codexPath: "codex",
       timeoutMs: 30 * 60 * 1000,

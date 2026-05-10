@@ -26,7 +26,7 @@ leave empty
 ```
 
 After adding the marketplace, enable `codex-lark-remote` from the plugin list.
-For a tagged release, set **Git ref** to the release tag, for example `v0.1.2`.
+For a tagged release, set **Git ref** to the release tag, for example `v0.1.3`.
 
 ## Configure
 
@@ -92,13 +92,18 @@ Useful Feishu/Lark commands:
 /codex handoff off
 ```
 
+If Codex says the `codex_lark_*` tools are not available, the plugin MCP server
+was not loaded in that conversation. Refresh or re-enable the plugin, then start
+a new Codex conversation. Normal startup should not use local scripts as a
+fallback.
+
 Local development can register this repository as a local marketplace:
 
 ```toml
-[marketplaces.codex-lark-remote]
+[marketplaces.gxfn]
 source_type = "local"
 source = "/absolute/path/to/codex-lark-remote"
 
-[plugins."codex-lark-remote@codex-lark-remote"]
+[plugins."codex-lark-remote@gxfn"]
 enabled = true
 ```

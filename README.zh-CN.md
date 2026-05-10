@@ -1,6 +1,6 @@
 # Codex Lark Remote
 
-这个仓库是 `codex-lark-remote` 的 Codex 插件 marketplace。
+这个仓库是 `gxfn` Codex 插件 marketplace。目前发布 `codex-lark-remote` 插件。
 
 真实插件包只放在
 [`plugins/codex-lark-remote/`](plugins/codex-lark-remote/) 下。安装、配置和使用说明请阅读插件包内的 README：

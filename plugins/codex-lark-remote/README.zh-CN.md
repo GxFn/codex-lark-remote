@@ -22,7 +22,7 @@ main
 留空
 ```
 
-添加市场后，在插件列表里启用 `codex-lark-remote`。发布 tag 之后，可以把“Git 引用”改成具体版本号，例如 `v0.1.2`。
+添加市场后，在插件列表里启用 `codex-lark-remote`。发布 tag 之后，可以把“Git 引用”改成具体版本号，例如 `v0.1.3`。
 
 ## 配置
 
@@ -81,13 +81,16 @@ main
 /codex handoff off
 ```
 
+如果 Codex 提示当前没有 `codex_lark_*` 工具，说明这个对话没有加载插件 MCP
+server。刷新或重新启用插件后，新开一个 Codex 对话再启动。正常启动不应该退回到本地脚本。
+
 本地开发时，可以把这个仓库注册为 local marketplace：
 
 ```toml
-[marketplaces.codex-lark-remote]
+[marketplaces.gxfn]
 source_type = "local"
 source = "/absolute/path/to/codex-lark-remote"
 
-[plugins."codex-lark-remote@codex-lark-remote"]
+[plugins."codex-lark-remote@gxfn"]
 enabled = true
 ```

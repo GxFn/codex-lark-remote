@@ -1,6 +1,6 @@
 {
   "name": "codex-lark-remote",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Remote Codex programming from Feishu/Lark chat.",
   "author": {
     "name": "Codex Lark Remote Contributors"
@@ -18,7 +18,7 @@
   "interface": {
     "displayName": "Codex Lark Remote",
     "shortDescription": "Continue Codex from Feishu/Lark chat.",
-    "longDescription": "Codex Lark Remote starts a local bridge process, receives Feishu/Lark messages, resumes the current Codex conversation for chat handoff, and can still run reviewed remote coding tasks in isolated worktrees.",
+    "longDescription": "Codex Lark Remote lets you continue the current Codex conversation from Feishu/Lark. Start it in an open Codex chat, then send normal messages to the Feishu/Lark bot to keep working in the same conversation.",
     "developerName": "Codex Lark Remote Contributors",
     "category": "Productivity",
     "capabilities": [
@@ -27,7 +27,7 @@
       "Interactive"
     ],
     "defaultPrompt": [
-      "Start Codex Lark Remote handoff for this conversation",
+      "Start Codex Lark Remote for this conversation",
       "Configure Codex Lark Remote with my Feishu/Lark app credentials",
       "Show Codex Lark Remote setup status"
     ],

@@ -16,18 +16,23 @@ flows unless the user explicitly asks for advanced behavior.
 
 When the user says "start this plugin" or similar:
 
-1. Prefer MCP tools over shell commands.
-2. Call `codex_lark_diagnose` first.
-3. If Feishu/Lark `appId` or `appSecret` is missing, do not call
-   `codex_lark_start` or `codex_lark_handoff`. Ask for the missing values and
-   give the short platform path: create an internal/custom app in Feishu/Lark
-   Open Platform, enable bot capability, copy App ID/App Secret from
+1. Use the plugin MCP tools only. Do not inspect plugin files, explain cache
+   paths, run local bridge scripts, or fall back to shell commands during normal
+   startup.
+2. If `codex_lark_*` tools are not available in the current tool list, stop and
+   tell the user the plugin MCP server is not loaded. Ask them to enable or
+   refresh the plugin and start a new Codex conversation. Do not attempt a local
+   script fallback unless the user explicitly asks for plugin development
+   debugging.
+3. Call `codex_lark_handoff` for the current Codex conversation, preferably with
+   auth checking enabled when available. This is the default startup action.
+4. If Feishu/Lark `appId` or `appSecret` is missing, ask for the missing values
+   and give the short platform path: create an internal/custom app in
+   Feishu/Lark Open Platform, enable bot capability, copy App ID/App Secret from
    Credentials & Basic Info, choose long connection/WebSocket in Event
    Subscriptions, and subscribe to `im.message.receive_v1`.
-4. If the user already supplied the values in chat, call `codex_lark_configure`.
-   Never echo raw secrets back.
-5. After configuration, call `codex_lark_check_auth`, then
-   `codex_lark_handoff` for the current Codex conversation.
+5. If the user already supplied the values in chat, call `codex_lark_configure`.
+   Never echo raw secrets back. Then call `codex_lark_handoff` again.
 6. Keep the final startup response short: whether Feishu takeover is ready, what
    is missing, and the one next action.
 
@@ -35,8 +40,9 @@ When the user says "start this plugin" or similar:
 
 Feishu/Lark text should be treated as the next normal Codex user message in the
 same conversation. Continue naturally and avoid queue/task boilerplate. Mention
-internal ids, queues, repo keys, worktrees, approval commands, or alternate
-routes only when the user asks for diagnostics or advanced operation.
+skill paths, cache layouts, MCP loading internals, local scripts, internal ids,
+queues, repo keys, worktrees, approval commands, or alternate routes only when
+the user asks for diagnostics or plugin development debugging.
 
 When a Feishu/Lark turn is completed, answer in the same concise style you would
 use in Codex chat. Include changed files and validation only when they matter to

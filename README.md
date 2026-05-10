@@ -1,6 +1,7 @@
 # Codex Lark Remote
 
-This repository is a Codex plugin marketplace for `codex-lark-remote`.
+This repository is the `gxfn` Codex plugin marketplace. It currently publishes
+the `codex-lark-remote` plugin.
 
 The real plugin bundle lives only under
 [`plugins/codex-lark-remote/`](plugins/codex-lark-remote/). For installation,

@@ -45,7 +45,8 @@ const readmeEntrypoints = [
 
 test("keeps Codex marketplace metadata pointed at the plugin bundle", async () => {
   const marketplace = JSON.parse(await fs.readFile(marketplaceUrl, "utf8"));
-  assert.equal(marketplace.name, "codex-lark-remote");
+  assert.equal(marketplace.name, "gxfn");
+  assert.equal(marketplace.interface?.displayName, "GxFn");
   assert.equal(marketplace.plugins[0]?.name, "codex-lark-remote");
   assert.equal(marketplace.plugins[0]?.source?.source, "local");
   assert.equal(marketplace.plugins[0]?.source?.path, "./plugins/codex-lark-remote");
@@ -90,4 +91,14 @@ test("keeps root READMEs as short entrypoints to bundled plugin docs", async () 
     assert.ok(rootLineCount <= 20, `${language} root README should stay short`);
     assert.ok(rootReadme.length < bundledReadme.length / 2, `${language} root README should not copy the full docs`);
   }
+});
+
+test("keeps startup guidance on the plugin MCP path", async () => {
+  const skill = await fs.readFile(
+    new URL("../plugins/codex-lark-remote/skills/codex-lark-remote/SKILL.md", import.meta.url),
+    "utf8",
+  );
+  assert.match(skill, /Use the plugin MCP tools only/);
+  assert.match(skill, /fall back to shell commands/);
+  assert.match(skill, /plugin MCP server is not loaded/);
 });

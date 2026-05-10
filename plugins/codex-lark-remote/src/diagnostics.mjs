@@ -89,7 +89,7 @@ export function formatDiagnostics(diagnostics) {
     `Bridge: ${diagnostics.checks.bridgeRunning ? "running" : "stopped"}`,
     `Config: ${diagnostics.paths?.configPath || "-"}`,
     `Feishu/Lark: ${formatTransport(diagnostics)}`,
-    diagnostics.handoff?.active ? `Conversation: attached ${diagnostics.handoff.threadId}` : "Conversation: not attached",
+    diagnostics.handoff?.active ? `Conversation: attached ${formatThread(diagnostics.handoff.threadId)}` : "Conversation: not attached",
     `Lark app: ${diagnostics.lark.appIdPrefix || "-"}`,
     `Allowed users: ${diagnostics.lark.allowedUsersCount || 0}`,
     diagnostics.issues.length ? `Issues:\n${diagnostics.issues.map((item) => `- ${item}`).join("\n")}` : "Issues: none",
@@ -120,7 +120,7 @@ export function formatHandoff(diagnostics) {
     "Codex Lark Remote",
     diagnostics.ok ? "Status: ready for Feishu/Lark" : "Status: needs attention",
     `Feishu/Lark: ${formatTransport(diagnostics)}`,
-    handoff?.active ? `Conversation: attached ${handoff.threadId}` : "Conversation: not attached",
+    handoff?.active ? `Conversation: attached ${formatThread(handoff.threadId)}` : "Conversation: not attached",
     diagnostics.checks.webSocketEnabled
       ? "Feishu setup: Event Subscriptions -> long connection -> im.message.receive_v1"
       : `Feishu setup: webhook URL ${diagnostics.bridge.webhookUrl || "-"}`,
@@ -190,6 +190,10 @@ function formatTransport(diagnostics) {
   if (larkWs?.connected) return "websocket connected";
   if (larkWs?.starting) return "websocket connecting";
   return `websocket ${larkWs?.message || "not connected"}`;
+}
+
+function formatThread(threadId) {
+  return threadId ? String(threadId).slice(0, 8) : "unknown";
 }
 
 function cleanPublicUrl(url) {

@@ -47,6 +47,7 @@ test("buildCodexResumeArgs resumes a Codex thread without worktree flags", () =>
     "resume",
     "--json",
     "--ignore-user-config",
+    "--skip-git-repo-check",
     "-m",
     "gpt-test",
     "-o",
@@ -56,6 +57,16 @@ test("buildCodexResumeArgs resumes a Codex thread without worktree flags", () =>
   ]);
   assert.equal(args.includes("-C"), false);
   assert.equal(args.includes("--sandbox"), false);
+});
+
+test("buildCodexResumeArgs can keep the git repo check when explicitly requested", () => {
+  const args = buildCodexResumeArgs({
+    runner: { skipGitRepoCheck: false },
+    threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
+    prompt: "continue from lark",
+  });
+
+  assert.equal(args.includes("--skip-git-repo-check"), false);
 });
 
 test("buildHandoffPrompt sends Feishu input as direct Codex conversation text by default", () => {

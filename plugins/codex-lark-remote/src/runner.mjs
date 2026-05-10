@@ -202,6 +202,7 @@ export function buildCodexResumeArgs({ runner = {}, threadId, prompt, outputFile
   if (!threadId) throw new Error("Codex handoff thread id is required");
   const args = ["exec", "resume", "--json"];
   if (runner.ignoreUserConfig !== false) args.push("--ignore-user-config");
+  if (runner.skipGitRepoCheck !== false) args.push("--skip-git-repo-check");
   if (runner.model) args.push("-m", runner.model);
   if (outputFile) args.push("-o", outputFile);
   args.push(threadId, prompt);
