@@ -1,5 +1,7 @@
 import { parseCsv, shortHash } from "./config.mjs";
 
+const COMMAND_ID_RE = /\b(rcmd_[a-z0-9]+_[a-z0-9]+)\b/i;
+
 export function parseLarkEvent(body) {
   if (body?.type === "url_verification" || body?.challenge) {
     return { kind: "url_verification", challenge: body.challenge };
@@ -62,6 +64,8 @@ export function classifyChatText(text, config) {
 
   const command = parseManagementCommand(trimmed);
   if (command) return command;
+  const naturalCommand = parseNaturalManagementCommand(trimmed);
+  if (naturalCommand) return naturalCommand;
 
   if (trimmed.startsWith("$")) {
     return {
@@ -105,6 +109,52 @@ function parseManagementCommand(text) {
   if (action === "cancel" && id) return { kind: "cancel", id };
   if (action === "approve" && id && subAction) return { kind: "approve", id, action: subAction };
   return { kind: "help" };
+}
+
+function parseNaturalManagementCommand(text) {
+  const normalized = normalizeText(text).toLowerCase();
+  const id = extractCommandId(normalized);
+
+  if (/^(帮助|使用帮助|怎么用|如何使用|有哪些命令|命令列表|help)[。.!！]?$/.test(normalized)) return { kind: "help" };
+  if (/^(我是谁|我的id|我的 id|查看我的id|查看我的 id|获取我的id|获取我的 id|whoami)[。.!！]?$/.test(normalized)) {
+    return { kind: "whoami" };
+  }
+
+  if (/^(状态|查看状态|看下状态|看看状态|现在状态|当前状态|连接状态|插件状态|飞书状态|lark状态|lark status|status)[。.!！]?$/.test(normalized)) {
+    return { kind: "status" };
+  }
+  if (/^(接管状态|查看接管|看下接管|当前接管|是否接管|还在接管吗|handoff status)[。.?？!！]?$/.test(normalized)) {
+    return { kind: "handoff_status" };
+  }
+
+  if (/^断开(连接|接管)?吧?[。.!！]?$/.test(normalized)) return { kind: "handoff_disable" };
+  if (/^(关闭|停止|结束|退出)(连接|接管|远程接管|飞书接管|lark remote|codex lark remote)吧?[。.!！]?$/.test(normalized)) {
+    return { kind: "handoff_disable" };
+  }
+  if (/^(不要|别)(继续)?(接管|远程接管|飞书接管)了?[。.!！]?$/.test(normalized)) return { kind: "handoff_disable" };
+  if (/^(停止|关闭|退出|结束|断开)吧?[。.!！]?$/.test(normalized)) return { kind: "handoff_disable" };
+
+  if (id) {
+    const approvalAction = parseNaturalApprovalAction(normalized);
+    if (approvalAction) return { kind: "approve", id, action: approvalAction };
+    if (/(取消|停止|终止|删掉|删除).*(任务|task|rcmd)|^(取消|停止|终止)/.test(normalized)) return { kind: "cancel", id };
+    if (/(diff|改动|变更|修改|变化)/.test(normalized)) return { kind: "task_diff", id };
+    if (/(状态|进度|详情|结果|查看|看看|看一下|查一下|task)/.test(normalized)) return { kind: "task_status", id };
+  }
+  return null;
+}
+
+function extractCommandId(text) {
+  return text.match(COMMAND_ID_RE)?.[1] || "";
+}
+
+function parseNaturalApprovalAction(text) {
+  if (!/(批准|通过|同意|允许|approve)/.test(text)) return "";
+  if (/\bpush\b|推送|发布/.test(text)) return "push";
+  if (/\bcommit\b|提交/.test(text)) return "commit";
+  if (/\btest\b|测试|跑测试/.test(text)) return "test";
+  if (/\breview\b|审查|审核|确认/.test(text)) return "review";
+  return "";
 }
 
 function parseRepoPrefix(text, config) {

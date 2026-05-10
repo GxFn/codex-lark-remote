@@ -6,6 +6,8 @@ export function formatHelp() {
     "",
     "Examples:",
     "Ask Codex anything from Feishu/Lark.",
+    "Plain language controls: 状态, 我是谁, 接管状态, 断开连接吧.",
+    "Task controls: 查看任务 rcmd_..., 看改动 rcmd_..., 取消任务 rcmd_..., 批准提交 rcmd_...",
     "/codex whoami",
     "/codex status",
     "/codex handoff off",

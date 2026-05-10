@@ -54,6 +54,72 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
   assert.deepEqual(classifyChatText("/codex handoff off", config), {
     kind: "handoff_disable",
   });
+
+  assert.deepEqual(classifyChatText("断开连接吧", config), {
+    kind: "handoff_disable",
+  });
+
+  assert.deepEqual(classifyChatText("停止飞书接管", config), {
+    kind: "handoff_disable",
+  });
+
+  assert.deepEqual(classifyChatText("状态", config), {
+    kind: "status",
+  });
+
+  assert.deepEqual(classifyChatText("看下状态", config), {
+    kind: "status",
+  });
+
+  assert.deepEqual(classifyChatText("我是谁", config), {
+    kind: "whoami",
+  });
+
+  assert.deepEqual(classifyChatText("帮助", config), {
+    kind: "help",
+  });
+
+  assert.deepEqual(classifyChatText("接管状态", config), {
+    kind: "handoff_status",
+  });
+
+  assert.deepEqual(classifyChatText("不要接管了", config), {
+    kind: "handoff_disable",
+  });
+
+  assert.deepEqual(classifyChatText("查看任务 rcmd_mozpql6u_e6ca8b55", config), {
+    kind: "task_status",
+    id: "rcmd_mozpql6u_e6ca8b55",
+  });
+
+  assert.deepEqual(classifyChatText("看一下 rcmd_mozpql6u_e6ca8b55 的改动", config), {
+    kind: "task_diff",
+    id: "rcmd_mozpql6u_e6ca8b55",
+  });
+
+  assert.deepEqual(classifyChatText("取消任务 rcmd_mozpql6u_e6ca8b55", config), {
+    kind: "cancel",
+    id: "rcmd_mozpql6u_e6ca8b55",
+  });
+
+  assert.deepEqual(classifyChatText("批准提交 rcmd_mozpql6u_e6ca8b55", config), {
+    kind: "approve",
+    id: "rcmd_mozpql6u_e6ca8b55",
+    action: "commit",
+  });
+
+  assert.deepEqual(classifyChatText("批准 rcmd_mozpql6u_e6ca8b55 test", config), {
+    kind: "approve",
+    id: "rcmd_mozpql6u_e6ca8b55",
+    action: "test",
+  });
+
+  assert.deepEqual(classifyChatText("写一个帮助文档", config), {
+    kind: "task",
+    forced: false,
+    repoKey: "main",
+    taskText: "写一个帮助文档",
+  });
 });
 
 test("classifyChatText rejects shell mode in MVP", () => {
