@@ -113,9 +113,13 @@ export class CodexCliRunner {
 
   async #notify(command, text) {
     try {
-      await this.notifier?.reply(command.messageId, text);
-    } catch {
-      // Notification failure should not fail the task.
+      const ok = await this.notifier?.reply(command.messageId, text);
+      if (ok === false) throw new Error("Lark reply returned false");
+      await this.queue.update(command.id, { lastNotifyError: "", lastNotifyAt: nowIso() }, "notify_sent");
+    } catch (error) {
+      await this.queue
+        .update(command.id, { lastNotifyError: error.message, lastNotifyAt: nowIso() }, "notify_failed")
+        .catch(() => {});
     }
   }
 }
