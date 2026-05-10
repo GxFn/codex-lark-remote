@@ -30,16 +30,32 @@ const forbiddenRootPluginEntries = [
   "src",
 ];
 
-const readmeEntrypoints = [
+const readmePairs = [
   {
     rootUrl: new URL("../README.md", import.meta.url),
     bundledUrl: new URL("../plugins/codex-lark-remote/README.md", import.meta.url),
     language: "English",
+    requiredRootPatterns: [
+      /## Install/,
+      /## Configure Feishu\/Lark/,
+      /## Start handoff/,
+      /https:\/\/github\.com\/GxFn\/codex-lark-remote\.git/,
+      /codex_lark_configure/,
+      /\/codex status/,
+    ],
   },
   {
     rootUrl: new URL("../README.zh-CN.md", import.meta.url),
     bundledUrl: new URL("../plugins/codex-lark-remote/README.zh-CN.md", import.meta.url),
     language: "Chinese",
+    requiredRootPatterns: [
+      /## 安装/,
+      /## 配置飞书\/Lark/,
+      /## 启动接管/,
+      /https:\/\/github\.com\/GxFn\/codex-lark-remote\.git/,
+      /codex_lark_configure/,
+      /\/codex status/,
+    ],
   },
 ];
 
@@ -69,12 +85,11 @@ test("keeps the plugin bundle as the single source of plugin code", async () => 
   }
 });
 
-test("keeps root READMEs as short entrypoints to bundled plugin docs", async () => {
-  for (const { rootUrl, bundledUrl, language } of readmeEntrypoints) {
+test("keeps full root READMEs alongside bundled plugin docs", async () => {
+  for (const { rootUrl, bundledUrl, language, requiredRootPatterns } of readmePairs) {
     const rootReadme = await fs.readFile(rootUrl, "utf8");
     const bundledReadme = await fs.readFile(bundledUrl, "utf8");
 
-    assert.notEqual(rootReadme, bundledReadme, `${language} root README must not duplicate bundled plugin docs`);
     assert.match(rootReadme, /plugins\/codex-lark-remote\//, `${language} root README must point at the bundle`);
     assert.match(
       rootReadme,
@@ -88,8 +103,14 @@ test("keeps root READMEs as short entrypoints to bundled plugin docs", async () 
     );
 
     const rootLineCount = rootReadme.trim().split(/\n/).length;
-    assert.ok(rootLineCount <= 20, `${language} root README should stay short`);
-    assert.ok(rootReadme.length < bundledReadme.length / 2, `${language} root README should not copy the full docs`);
+    const bundledLineCount = bundledReadme.trim().split(/\n/).length;
+
+    assert.ok(rootLineCount >= 80, `${language} root README should be a full first-time user guide`);
+    assert.ok(bundledLineCount >= 60, `${language} bundled README should stay useful inside the plugin package`);
+
+    for (const pattern of requiredRootPatterns) {
+      assert.match(rootReadme, pattern, `${language} root README is missing ${pattern}`);
+    }
   }
 });
 
