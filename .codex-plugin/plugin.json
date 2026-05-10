@@ -1,6 +1,6 @@
 {
   "name": "codex-lark-remote",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Remote Codex programming from Feishu/Lark chat.",
   "author": {
     "name": "Codex Lark Remote Contributors"
@@ -17,8 +17,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Codex Lark Remote",
-    "shortDescription": "Run Codex tasks from Feishu/Lark chat.",
-    "longDescription": "Codex Lark Remote starts a local bridge process, receives Feishu/Lark messages, queues remote coding tasks, runs Codex CLI in isolated worktrees, and reports concise summaries back to chat with review gates.",
+    "shortDescription": "Continue Codex from Feishu/Lark chat.",
+    "longDescription": "Codex Lark Remote starts a local bridge process, receives Feishu/Lark messages, resumes the current Codex conversation for chat handoff, and can still run reviewed remote coding tasks in isolated worktrees.",
     "developerName": "Codex Lark Remote Contributors",
     "category": "Productivity",
     "capabilities": [

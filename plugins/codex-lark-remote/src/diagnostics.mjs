@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import { loadConfig } from "./config.mjs";
+import { readHandoff } from "./handoff.mjs";
 import { larkWebSocketEnabled } from "./lark-ws.mjs";
 import { configuredAllowedUsers } from "./lark.mjs";
 import { LarkNotifier } from "./notifier.mjs";
@@ -14,6 +15,7 @@ export async function diagnoseLarkRemote(options = {}) {
   const allowedUsers = configuredAllowedUsers(config);
   const repos = await repoDiagnostics(config);
   const auth = options.checkAuth ? await new LarkNotifier(config.lark || {}).checkAuth() : null;
+  const handoff = await readHandoff({ dataDir: config.dataDir });
 
   const issues = [];
   const warnings = [];
@@ -55,6 +57,7 @@ export async function diagnoseLarkRemote(options = {}) {
       route: "/bridge/lark/event",
       larkWs: status.data?.larkWs || null,
     },
+    handoff,
     lark: {
       transport: config.lark?.transport || "websocket",
       appIdPrefix: config.lark?.appId ? `${config.lark.appId.slice(0, 8)}...` : "",
@@ -91,10 +94,13 @@ export function formatDiagnostics(diagnostics) {
 }
 
 export function formatHandoff(diagnostics) {
+  const handoff = diagnostics.handoff;
   return [
     "Codex Lark Remote handoff",
     diagnostics.ok ? "Status: ready" : "Status: needs attention",
     `Transport: ${formatTransport(diagnostics)}`,
+    handoff?.active ? `Current thread: ${handoff.threadId}` : "Current thread: not activated",
+    handoff?.cwd ? `Cwd: ${handoff.cwd}` : "",
     diagnostics.checks.webSocketEnabled
       ? "Feishu setup: Event Subscriptions -> long connection -> im.message.receive_v1"
       : `Feishu setup: webhook URL ${diagnostics.bridge.webhookUrl || "-"}`,

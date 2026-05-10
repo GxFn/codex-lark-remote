@@ -46,6 +46,14 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
   assert.deepEqual(classifyChatText("/codex whoami", config), {
     kind: "whoami",
   });
+
+  assert.deepEqual(classifyChatText("/codex handoff", config), {
+    kind: "handoff_status",
+  });
+
+  assert.deepEqual(classifyChatText("/codex handoff off", config), {
+    kind: "handoff_disable",
+  });
 });
 
 test("classifyChatText rejects shell mode in MVP", () => {

@@ -9,6 +9,8 @@ export function formatHelp() {
     "> force a coding task",
     "/codex whoami",
     "/codex status",
+    "/codex handoff",
+    "/codex handoff off",
     "/codex status rcmd_xxx",
     "/codex diff rcmd_xxx",
     "/codex cancel rcmd_xxx",
@@ -33,13 +35,14 @@ export function formatWhoami(event) {
     .join("\n");
 }
 
-export function formatBridgeStatus({ config, counts, workerBusy, url, larkWs }) {
+export function formatBridgeStatus({ config, counts, workerBusy, url, larkWs, handoff }) {
   const repos = Object.keys(config.repos || {});
   const transport = config.lark?.transport || "websocket";
   return [
     "Codex Lark Remote status",
     `Bridge: ${url || "running"}`,
     `Lark: ${formatLarkTransport({ transport, larkWs })}`,
+    `Handoff: ${formatHandoffState(handoff)}`,
     `Repos: ${repos.length ? repos.join(", ") : "none configured"}`,
     `Queue: ${formatCounts(counts)}`,
     `Worker: ${workerBusy ? "busy" : "idle"}`,
@@ -51,6 +54,9 @@ export function formatTask(command) {
   return [
     `Task: ${command.id}`,
     `Status: ${command.status}`,
+    command.mode === "thread_handoff" ? `Mode: current Codex conversation` : "",
+    command.presentation ? `Presentation: ${command.presentation}` : "",
+    command.codexSessionId ? `Thread: ${command.codexSessionId}` : "",
     `Repo: ${command.repoKey || "-"}`,
     command.branchName ? `Branch: ${command.branchName}` : "",
     command.worktreePath ? `Worktree: ${command.worktreePath}` : "",
@@ -65,6 +71,15 @@ export function formatTask(command) {
 }
 
 export function formatQueued(command) {
+  if (command.mode === "thread_handoff") {
+    return [
+      `Codex message queued: ${command.id}`,
+      `Thread: ${command.codexSessionId}`,
+      "Status: queued",
+      "",
+      `Request: ${truncateForLark(command.normalizedTask || command.prompt, 500)}`,
+    ].join("\n");
+  }
   return [
     `Task created: ${command.id}`,
     `Repo: ${command.repoKey}`,
@@ -79,6 +94,22 @@ export function formatFinal(command) {
     return [
       `Task failed: ${command.id}`,
       command.error || "Unknown error.",
+      "",
+      `Use /codex status ${command.id} for details.`,
+    ].join("\n");
+  }
+  if (command.mode === "thread_handoff") {
+    if (command.presentation === "chat" && command.status === "completed") {
+      return truncateForLark(command.result || "Codex finished.", 2800);
+    }
+    return [
+      `Codex message ${command.status}: ${command.id}`,
+      `Thread: ${command.codexSessionId || "-"}`,
+      "",
+      "Summary:",
+      truncateForLark(command.result || "Codex finished.", 1600),
+      "",
+      command.diffSummary ? `Files changed:\n${command.diffSummary}` : "Files changed: none",
       "",
       `Use /codex status ${command.id} for details.`,
     ].join("\n");
@@ -111,4 +142,11 @@ function formatLarkTransport({ transport, larkWs }) {
   if (larkWs.connected) return "websocket connected";
   if (larkWs.starting) return "websocket connecting";
   return `websocket ${larkWs.message || "not connected"}`;
+}
+
+function formatHandoffState(handoff) {
+  if (!handoff?.active) return "off";
+  const thread = handoff.threadId ? handoff.threadId.slice(0, 8) : "unknown";
+  const name = handoff.name ? ` ${handoff.name}` : "";
+  return `current-thread ${thread}${name}`;
 }

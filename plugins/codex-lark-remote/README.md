@@ -5,9 +5,11 @@ Remote Codex programming from Feishu/Lark chat.
 This plugin keeps the first version intentionally small:
 
 - a local bridge process receives Feishu/Lark events over WebSocket first,
-- a local queue records remote tasks,
+- a local queue records remote worktree tasks and current-thread chat turns,
+- a handoff mode can resume the current Codex conversation with `codex exec resume`,
 - Codex CLI runs each task in an isolated git worktree,
-- concise status, validation, and review actions are sent back to chat.
+- chat handoff replies with the Codex answer, while worktree tasks keep status,
+  validation, and review actions.
 
 ## Quick Start
 
@@ -54,7 +56,7 @@ You can also put `lark.appId`, `lark.appSecret`, `lark.verificationToken`, and
 passed to the MCP tools. `lark.allowedUsers` may be an array of Feishu/Lark user
 IDs. Keep that config out of git.
 
-3. Start the bridge through Codex MCP:
+3. Start the bridge and activate current-thread handoff through Codex MCP:
 
 ```text
 codex_lark_check_auth
@@ -64,6 +66,14 @@ codex_lark_diagnose
 
 In Feishu Event Subscriptions, choose long connection and add
 `im.message.receive_v1`. This default path does not need a public callback URL.
+
+When `codex_lark_handoff` is called from an already-open Codex conversation, it
+stores the current local Codex thread in `~/.codex-lark-remote/handoff.json`.
+Normal Feishu/Lark messages then run through `codex exec resume <thread_id>` so
+the model-visible context continues from that conversation. In handoff mode,
+ordinary Feishu/Lark text is sent as the direct Codex user message and the bot
+replies with the final Codex answer. This is a backend resume route, not GUI
+typing into the Codex Desktop composer.
 
 4. For local testing without Feishu/Lark, create a task manually:
 
@@ -95,11 +105,19 @@ or `publicUrl`, then use the webhook URL reported by `codex_lark_diagnose`.
 
 ### Worker Runtime Notes
 
-Remote tasks run with `codex exec --ignore-user-config` by default. This keeps
+Worktree tasks run with `codex exec --ignore-user-config` by default. This keeps
 the child Codex process focused on the task worktree and prevents it from
 loading this same Feishu/Lark plugin as a nested MCP server. Set
 `runner.ignoreUserConfig` to `false` only when the worker must load tools from
 your personal Codex config.
+
+Current-thread handoff tasks run with
+`codex exec resume --ignore-user-config <thread_id>`. By default, the Feishu/Lark
+text is passed through directly as the next Codex user message. The route
+preserves the Codex session history on disk and replies with the final assistant
+message captured by `--output-last-message`. Set `handoff.promptStyle` to
+`annotated` only if you prefer each resumed turn to include an explicit
+Feishu/Lark source marker.
 
 Each task records notification delivery metadata in the queue. If Feishu/Lark
 accepts the HTTP request but returns a non-zero API `code`, the task now records
@@ -113,6 +131,8 @@ completed result.
 > force this message into a coding task
 /codex whoami
 /codex status
+/codex handoff
+/codex handoff off
 /codex status rcmd_xxx
 /codex diff rcmd_xxx
 /codex cancel rcmd_xxx

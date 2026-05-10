@@ -97,6 +97,10 @@ function parseManagementCommand(text) {
   if (!action || action === "help") return { kind: "help" };
   if (action === "whoami") return { kind: "whoami" };
   if (action === "status") return id ? { kind: "task_status", id } : { kind: "status" };
+  if (action === "handoff") {
+    if (id === "off" || id === "stop" || id === "disable") return { kind: "handoff_disable" };
+    return { kind: "handoff_status" };
+  }
   if (action === "diff" && id) return { kind: "task_diff", id };
   if (action === "cancel" && id) return { kind: "cancel", id };
   if (action === "approve" && id && subAction) return { kind: "approve", id, action: subAction };

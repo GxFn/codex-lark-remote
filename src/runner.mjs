@@ -31,6 +31,8 @@ export class CodexCliRunner {
   }
 
   async #runOne(command) {
+    if (command.mode === "thread_handoff") return this.#runHandoffOne(command);
+
     try {
       await this.#notify(command, `Task started: ${command.id}`);
       const prepared = await this.#prepareWorktree(command);
@@ -111,6 +113,60 @@ export class CodexCliRunner {
     });
   }
 
+  async #runHandoffOne(command) {
+    try {
+      if (command.notifyStarted || this.config.handoff?.notifyStarted === true) {
+        await this.#notify(command, `Codex started: ${command.id}`);
+      }
+      const prompt = buildHandoffPrompt(command, { promptStyle: this.config.handoff?.promptStyle || "direct" });
+      const result = await this.#runCodexResume(command, prompt);
+      const diffSummary = command.projectRoot ? await gitMaybe(["-C", command.projectRoot, "diff", "--stat"]) : "";
+
+      const updated = await this.queue.update(
+        command.id,
+        {
+          status: result.exitCode === 0 ? "completed" : "failed",
+          result: result.finalMessage || result.stdoutTail || "",
+          diffSummary: diffSummary.trim(),
+          testSummary: "",
+          error: result.exitCode === 0 ? "" : result.stderrTail || `Codex exited with ${result.exitCode}`,
+          completedAt: nowIso(),
+        },
+        result.exitCode === 0 ? "codex_resume_completed" : "codex_resume_failed",
+      );
+      await this.#notify(updated, formatFinal(updated));
+    } catch (error) {
+      const failed = await this.queue.update(
+        command.id,
+        {
+          status: "failed",
+          error: error.message,
+          completedAt: nowIso(),
+        },
+        "runner_error",
+      );
+      await this.#notify(failed || command, formatFinal(failed || { ...command, status: "failed", error: error.message }));
+    }
+  }
+
+  async #runCodexResume(command, prompt) {
+    const runner = this.config.runner || {};
+    const resultsDir = path.join(this.config.dataDir, "results");
+    await fs.mkdir(resultsDir, { recursive: true });
+    const outputFile = path.join(resultsDir, `${safeFileName(command.id)}.txt`);
+    const args = buildCodexResumeArgs({ runner, threadId: command.codexSessionId, prompt, outputFile });
+    const result = await runProcess(runner.codexPath || "codex", args, {
+      timeoutMs: Number(runner.timeoutMs || 30 * 60 * 1000),
+    });
+    try {
+      const finalFromFile = (await fs.readFile(outputFile, "utf8")).trim();
+      if (finalFromFile) result.finalMessage = finalFromFile;
+    } catch {
+      // The JSONL stream remains the source of truth when -o cannot write.
+    }
+    return result;
+  }
+
   async #notify(command, text) {
     if (!this.notifier) return;
     try {
@@ -140,6 +196,29 @@ export function buildCodexExecArgs({ runner = {}, worktreePath, prompt }) {
   if (runner.model) args.push("-m", runner.model);
   args.push(prompt);
   return args;
+}
+
+export function buildCodexResumeArgs({ runner = {}, threadId, prompt, outputFile }) {
+  if (!threadId) throw new Error("Codex handoff thread id is required");
+  const args = ["exec", "resume", "--json"];
+  if (runner.ignoreUserConfig !== false) args.push("--ignore-user-config");
+  if (runner.model) args.push("-m", runner.model);
+  if (outputFile) args.push("-o", outputFile);
+  args.push(threadId, prompt);
+  return args;
+}
+
+export function buildHandoffPrompt(command, { promptStyle = "direct" } = {}) {
+  if (promptStyle === "direct") return command.prompt || "";
+
+  return [
+    "[Codex Lark Remote handoff]",
+    "The user is sending this message from Feishu/Lark to continue the current Codex conversation.",
+    `Sender: ${command.userName || "lark_user"}${command.userIdHash ? ` (${command.userIdHash})` : ""}`,
+    "",
+    "User message:",
+    command.prompt,
+  ].join("\n");
 }
 
 function normalizeDelivery(delivery) {

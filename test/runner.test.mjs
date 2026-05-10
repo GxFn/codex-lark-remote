@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCodexExecArgs, extractFinalMessage } from "../src/runner.mjs";
+import { buildCodexExecArgs, buildCodexResumeArgs, buildHandoffPrompt, extractFinalMessage } from "../src/runner.mjs";
 
 test("buildCodexExecArgs uses supported codex exec flags", () => {
   const args = buildCodexExecArgs({
@@ -32,6 +32,52 @@ test("buildCodexExecArgs can load user config when explicitly requested", () => 
   });
 
   assert.equal(args.includes("--ignore-user-config"), false);
+});
+
+test("buildCodexResumeArgs resumes a Codex thread without worktree flags", () => {
+  const args = buildCodexResumeArgs({
+    runner: { ignoreUserConfig: true, model: "gpt-test" },
+    threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
+    prompt: "continue from lark",
+    outputFile: "/tmp/final.txt",
+  });
+
+  assert.deepEqual(args, [
+    "exec",
+    "resume",
+    "--json",
+    "--ignore-user-config",
+    "-m",
+    "gpt-test",
+    "-o",
+    "/tmp/final.txt",
+    "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
+    "continue from lark",
+  ]);
+  assert.equal(args.includes("-C"), false);
+  assert.equal(args.includes("--sandbox"), false);
+});
+
+test("buildHandoffPrompt sends Feishu input as direct Codex conversation text by default", () => {
+  const prompt = buildHandoffPrompt({
+    userName: "ou_user",
+    userIdHash: "u_hash",
+    prompt: "fix README",
+  });
+
+  assert.equal(prompt, "fix README");
+});
+
+test("buildHandoffPrompt can still annotate Feishu input when configured", () => {
+  const prompt = buildHandoffPrompt({
+    userName: "ou_user",
+    userIdHash: "u_hash",
+    prompt: "fix README",
+  }, { promptStyle: "annotated" });
+
+  assert.match(prompt, /Codex Lark Remote handoff/);
+  assert.match(prompt, /Feishu\/Lark/);
+  assert.match(prompt, /fix README/);
 });
 
 test("extractFinalMessage reads Codex JSONL agent messages", () => {

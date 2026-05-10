@@ -15,6 +15,10 @@ export class RemoteCommandQueue {
       const command = {
         id: input.id || newId(),
         source: input.source || "lark",
+        mode: input.mode || "worktree",
+        presentation: input.presentation || (input.mode === "thread_handoff" ? "chat" : "task"),
+        notifyQueued: input.notifyQueued === true,
+        notifyStarted: input.notifyStarted === true,
         repoKey: input.repoKey,
         projectRoot: input.projectRoot,
         prompt: input.prompt,
@@ -26,7 +30,8 @@ export class RemoteCommandQueue {
         userName: input.userName || "lark_user",
         worktreePath: "",
         branchName: "",
-        codexSessionId: "",
+        codexSessionId: input.codexSessionId || "",
+        codexSessionPath: input.codexSessionPath || "",
         result: "",
         diffSummary: "",
         testSummary: "",
@@ -156,4 +161,3 @@ function eventFor(commandId, kind, payload) {
     createdAt: nowIso(),
   };
 }
-

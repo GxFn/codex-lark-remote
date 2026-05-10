@@ -21,6 +21,10 @@ export function stateFilePath(dataDir) {
   return path.join(dataDir, "bridge-state.json");
 }
 
+export function handoffFilePath(dataDir) {
+  return path.join(dataDir, "handoff.json");
+}
+
 export function configFilePath(dataDir) {
   return path.resolve(process.env.CODEX_LARK_CONFIG || path.join(dataDir, "config.json"));
 }
@@ -91,6 +95,13 @@ export function defaultConfig(dataDir = resolveDataDir()) {
       timeoutMs: 30 * 60 * 1000,
       workerEnabled: true,
     },
+    handoff: {
+      enabled: true,
+      mode: "resume",
+      promptStyle: "direct",
+      notifyQueued: false,
+      notifyStarted: false,
+    },
     policy: {
       requireReviewForCommit: true,
       requireReviewForPush: true,
@@ -108,6 +119,7 @@ function mergeConfig(base, override) {
     lark: { ...(base.lark || {}), ...(override.lark || {}) },
     repos: { ...(base.repos || {}), ...(override.repos || {}) },
     runner: { ...(base.runner || {}), ...(override.runner || {}) },
+    handoff: { ...(base.handoff || {}), ...(override.handoff || {}) },
     policy: { ...(base.policy || {}), ...(override.policy || {}) },
   };
 }

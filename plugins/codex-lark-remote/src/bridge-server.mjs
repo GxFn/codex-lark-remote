@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import { DEFAULT_BRIDGE_HOST, ensureDir, loadConfig, nowIso, stateFilePath } from "./config.mjs";
 import { runApprovedAction } from "./actions.mjs";
 import { decryptLarkPayload, verifyLarkSignature } from "./crypto.mjs";
+import { activateHandoff, clearHandoff, readHandoff } from "./handoff.mjs";
 import { LarkWebSocketReceiver } from "./lark-ws.mjs";
 import { parseLarkEvent, isUserAllowed, classifyChatText } from "./lark.mjs";
 import { LarkNotifier } from "./notifier.mjs";
@@ -68,12 +69,14 @@ async function route(ctx) {
         url: publicUrl(ctx.config),
         counts,
         workerBusy: ctx.runner.busy,
+        handoff: await readHandoff({ dataDir: ctx.config.dataDir }),
         larkWs: ctx.larkWs?.status(),
         repos: Object.keys(ctx.config.repos || {}),
         text: formatBridgeStatus({
           config: ctx.config,
           counts,
           workerBusy: ctx.runner.busy,
+          handoff: await readHandoff({ dataDir: ctx.config.dataDir }),
           larkWs: ctx.larkWs?.status(),
           url: publicUrl(ctx.config),
         }),
@@ -95,6 +98,27 @@ async function route(ctx) {
   if (req.method === "GET" && url.pathname === "/bridge/tasks") {
     const limit = Number(url.searchParams.get("limit") || 20);
     return sendJson(res, 200, { success: true, data: await ctx.queue.list({ limit }) });
+  }
+
+  if (req.method === "GET" && url.pathname === "/bridge/handoff") {
+    return sendJson(res, 200, { success: true, data: await readHandoff({ dataDir: ctx.config.dataDir }) });
+  }
+
+  if (req.method === "POST" && url.pathname === "/bridge/handoff") {
+    const { body } = await readJson(req);
+    const data = await activateHandoff({
+      dataDir: ctx.config.dataDir,
+      threadId: body.threadId,
+      threadPath: body.threadPath,
+      cwd: body.cwd,
+      name: body.name,
+      activatedBy: body.activatedBy || "bridge",
+    });
+    return sendJson(res, 200, { success: true, data });
+  }
+
+  if (req.method === "DELETE" && url.pathname === "/bridge/handoff") {
+    return sendJson(res, 200, { success: true, data: await clearHandoff({ dataDir: ctx.config.dataDir }) });
   }
 
   if (req.method === "POST" && url.pathname === "/bridge/tasks") {
@@ -181,13 +205,29 @@ export async function processLarkEvent(ctx, body) {
 }
 
 async function handleChatAction(ctx, event, action) {
+  const handoff = await readHandoff({ dataDir: ctx.config.dataDir });
   if (action.kind === "help") return ctx.notifier.reply(event.messageId, formatHelp());
   if (action.kind === "whoami") return ctx.notifier.reply(event.messageId, formatWhoami(event));
   if (action.kind === "status") {
     const counts = await ctx.queue.counts();
     return ctx.notifier.reply(
       event.messageId,
-      formatBridgeStatus({ config: ctx.config, counts, workerBusy: ctx.runner.busy, url: publicUrl(ctx.config) }),
+      formatBridgeStatus({
+        config: ctx.config,
+        counts,
+        workerBusy: ctx.runner.busy,
+        handoff,
+        url: publicUrl(ctx.config),
+      }),
+    );
+  }
+  if (action.kind === "handoff_status") {
+    return ctx.notifier.reply(event.messageId, formatHandoffStatus(handoff));
+  }
+  if (action.kind === "handoff_disable") {
+    return ctx.notifier.reply(
+      event.messageId,
+      formatHandoffStatus(await clearHandoff({ dataDir: ctx.config.dataDir })),
     );
   }
   if (action.kind === "task_status" || action.kind === "task_diff") {
@@ -213,19 +253,31 @@ async function handleChatAction(ctx, event, action) {
       return ctx.notifier.reply(event.messageId, `Approval failed: ${error.message}`);
     }
   }
-  if (action.kind === "rejected") return ctx.notifier.reply(event.messageId, action.reason);
+  if (action.kind === "rejected" && !handoff) return ctx.notifier.reply(event.messageId, action.reason);
+  if (action.kind === "rejected" && handoff) action = { kind: "task", repoKey: "current", taskText: event.text };
   if (action.kind !== "task") return;
 
-  const created = await enqueueTask(ctx, {
-    repoKey: action.repoKey,
-    text: action.taskText,
-    messageId: event.messageId,
-    chatIdHash: event.chatIdHash,
-    userIdHash: event.userIdHash,
-    userName: event.senderName,
+  const created = handoff
+    ? await enqueueHandoffTask(ctx, {
+        handoff,
+        text: event.text,
+        messageId: event.messageId,
+        chatIdHash: event.chatIdHash,
+        userIdHash: event.userIdHash,
+        userName: event.senderName,
+      })
+    : await enqueueTask(ctx, {
+        repoKey: action.repoKey,
+        text: action.taskText,
+        messageId: event.messageId,
+        chatIdHash: event.chatIdHash,
+        userIdHash: event.userIdHash,
+        userName: event.senderName,
   });
-  await ctx.notifier.reply(event.messageId, formatQueued(created));
-  ctx.runner.processAll().catch(() => {});
+  if (created.mode !== "thread_handoff" || created.notifyQueued) {
+    await ctx.notifier.reply(event.messageId, formatQueued(created));
+  }
+  Promise.resolve(ctx.runner.processAll()).catch(() => {});
 }
 
 async function enqueueTask(ctx, input) {
@@ -242,6 +294,41 @@ async function enqueueTask(ctx, input) {
     userIdHash: input.userIdHash,
     userName: input.userName,
   });
+}
+
+async function enqueueHandoffTask(ctx, input) {
+  return ctx.queue.enqueue({
+    source: "lark",
+    mode: "thread_handoff",
+    presentation: "chat",
+    notifyQueued: ctx.config.handoff?.notifyQueued === true,
+    notifyStarted: ctx.config.handoff?.notifyStarted === true,
+    repoKey: "current",
+    projectRoot: input.handoff.cwd || "",
+    prompt: input.text,
+    normalizedTask: input.text,
+    messageId: input.messageId,
+    chatIdHash: input.chatIdHash,
+    userIdHash: input.userIdHash,
+    userName: input.userName,
+    codexSessionId: input.handoff.threadId,
+    codexSessionPath: input.handoff.threadPath || "",
+  });
+}
+
+function formatHandoffStatus(handoff) {
+  if (!handoff?.active) return "Codex Lark Remote handoff: off";
+  return [
+    "Codex Lark Remote handoff: active",
+    `Mode: ${handoff.mode || "resume"}`,
+    `Thread: ${handoff.threadId}`,
+    handoff.name ? `Name: ${handoff.name}` : "",
+    handoff.cwd ? `Cwd: ${handoff.cwd}` : "",
+    "Send a normal Feishu message to continue this Codex thread.",
+    "Use /codex handoff off to stop.",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function isAuthorized(req, token) {

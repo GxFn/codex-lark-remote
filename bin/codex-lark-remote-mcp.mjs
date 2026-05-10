@@ -2,6 +2,7 @@
 import readline from "node:readline";
 import { loadConfig, readPackageVersion } from "../src/config.mjs";
 import { diagnoseLarkRemote, formatDiagnostics, formatHandoff } from "../src/diagnostics.mjs";
+import { activateHandoff } from "../src/handoff.mjs";
 import { LarkNotifier } from "../src/notifier.mjs";
 import { bridgeFetch, bridgeStatus, readBridgeState, startBridgeProcess, stopBridgeProcess } from "../src/supervisor.mjs";
 
@@ -60,6 +61,8 @@ const tools = [
       properties: {
         dataDir: { type: "string" },
         configPath: { type: "string" },
+        threadId: { type: "string", description: "Optional explicit Codex thread/session id. Defaults to the most recent local Codex thread." },
+        cwd: { type: "string", description: "Optional workspace cwd used when resolving the current thread." },
         checkAuth: { type: "boolean", description: "Also call Feishu/Lark auth API. Defaults to false." },
       },
     },
@@ -193,6 +196,7 @@ async function callTool(name, args) {
   }
   if (name === "codex_lark_handoff") {
     await startBridgeProcess(args);
+    await activateHandoff({ ...args, activatedBy: "mcp" });
     return textContent(formatHandoff(await diagnoseLarkRemote(args)));
   }
   if (name === "codex_lark_stop") {
