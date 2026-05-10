@@ -1,7 +1,8 @@
 import http from "node:http";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
-import { DEFAULT_BRIDGE_HOST, ensureDir, loadConfig, nowIso, parseCsv, stateFilePath } from "./config.mjs";
+import { DEFAULT_BRIDGE_HOST, ensureDir, loadConfig, nowIso, stateFilePath } from "./config.mjs";
+import { runApprovedAction } from "./actions.mjs";
 import { parseLarkEvent, isUserAllowed, classifyChatText } from "./lark.mjs";
 import { LarkNotifier } from "./notifier.mjs";
 import { formatBridgeStatus, formatHelp, formatQueued, formatTask } from "./presenter.mjs";
@@ -100,7 +101,15 @@ async function route(ctx) {
     }
     if (req.method === "POST" && action === "approve") {
       const body = await readJson(req);
-      return sendJson(res, 200, { success: true, data: await ctx.queue.approve(id, body.action || "review") });
+      return sendJson(res, 200, {
+        success: true,
+        data: await runApprovedAction({
+          queue: ctx.queue,
+          config: ctx.config,
+          commandId: id,
+          action: body.action || "review",
+        }),
+      });
     }
   }
 
@@ -152,7 +161,21 @@ async function handleChatAction(ctx, event, action) {
     return ctx.notifier.reply(event.messageId, formatTask(await ctx.queue.cancel(action.id)));
   }
   if (action.kind === "approve") {
-    return ctx.notifier.reply(event.messageId, formatTask(await ctx.queue.approve(action.id, action.action)));
+    try {
+      return ctx.notifier.reply(
+        event.messageId,
+        formatTask(
+          await runApprovedAction({
+            queue: ctx.queue,
+            config: ctx.config,
+            commandId: action.id,
+            action: action.action,
+          }),
+        ),
+      );
+    } catch (error) {
+      return ctx.notifier.reply(event.messageId, `Approval failed: ${error.message}`);
+    }
   }
   if (action.kind === "rejected") return ctx.notifier.reply(event.messageId, action.reason);
   if (action.kind !== "task") return;

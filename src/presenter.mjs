@@ -11,6 +11,9 @@ export function formatHelp() {
     "/codex status rcmd_xxx",
     "/codex diff rcmd_xxx",
     "/codex cancel rcmd_xxx",
+    "/codex approve rcmd_xxx test",
+    "/codex approve rcmd_xxx commit",
+    "/codex approve rcmd_xxx push",
   ].join("\n");
 }
 
@@ -72,6 +75,8 @@ export function formatFinal(command) {
     "",
     "Next actions:",
     `/codex diff ${command.id}`,
+    `/codex approve ${command.id} test`,
+    `/codex approve ${command.id} commit`,
     `/codex cancel ${command.id}`,
   ].join("\n");
 }
@@ -80,4 +85,3 @@ function formatCounts(counts = {}) {
   const keys = ["pending", "running", "waiting_review", "completed", "failed", "timeout", "cancelled"];
   return keys.map((key) => `${key}=${counts[key] || 0}`).join(" ");
 }
-

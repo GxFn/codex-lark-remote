@@ -63,6 +63,20 @@ const tools = [
     },
   },
   {
+    name: "codex_lark_send",
+    description: "Create a Codex Lark Remote task manually through the running bridge. Useful for local testing without Feishu/Lark.",
+    inputSchema: {
+      type: "object",
+      required: ["prompt"],
+      properties: {
+        prompt: { type: "string" },
+        repoKey: { type: "string" },
+        dataDir: { type: "string" },
+        configPath: { type: "string" },
+      },
+    },
+  },
+  {
     name: "codex_lark_cancel",
     description: "Cancel a pending, running, or waiting_review Codex Lark Remote task.",
     inputSchema: {
@@ -157,6 +171,16 @@ async function callTool(name, args) {
   if (name === "codex_lark_history") {
     const limit = Number(args.limit || 20);
     return textContent(formatJson(await bridgeFetch(state, `/bridge/tasks?limit=${limit}`)));
+  }
+  if (name === "codex_lark_send") {
+    return textContent(
+      formatJson(
+        await bridgeFetch(state, "/bridge/tasks", {
+          method: "POST",
+          body: { prompt: args.prompt, repoKey: args.repoKey },
+        }),
+      ),
+    );
   }
   if (name === "codex_lark_task") {
     return textContent(formatJson(await bridgeFetch(state, `/bridge/tasks/${encodeURIComponent(args.id)}`)));

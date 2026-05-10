@@ -33,6 +33,12 @@ export CODEX_LARK_ALLOWED_USERS=user_id_1,user_id_2
 codex_lark_start
 ```
 
+4. For local testing without Feishu/Lark, create a task manually:
+
+```text
+codex_lark_send prompt="fix the failing test" repoKey="example"
+```
+
 The bridge exposes a loopback HTTP API for MCP tools and a `/bridge/lark/event`
 webhook route for Feishu/Lark event delivery. For a real Feishu webhook, put a
 trusted tunnel or reverse proxy in front of that route.
@@ -46,7 +52,10 @@ trusted tunnel or reverse proxy in front of that route.
 /codex status rcmd_xxx
 /codex diff rcmd_xxx
 /codex cancel rcmd_xxx
+/codex approve rcmd_xxx test
 /codex approve rcmd_xxx commit
+/codex approve rcmd_xxx push
 ```
 
-Commit and push are intentionally not automatic in the first version.
+Commit and push are never automatic. They only run after an explicit approve
+command and use the task worktree/branch.
