@@ -154,7 +154,13 @@ export class CodexCliRunner {
     const resultsDir = path.join(this.config.dataDir, "results");
     await fs.mkdir(resultsDir, { recursive: true });
     const outputFile = path.join(resultsDir, `${safeFileName(command.id)}.txt`);
-    const args = buildCodexResumeArgs({ runner, threadId: command.codexSessionId, prompt, outputFile });
+    const args = buildCodexResumeArgs({
+      runner,
+      threadId: command.codexSessionId,
+      prompt,
+      outputFile,
+      cwd: command.projectRoot,
+    });
     const result = await runProcess(runner.codexPath || "codex", args, {
       timeoutMs: Number(runner.timeoutMs || 30 * 60 * 1000),
     });
@@ -198,10 +204,13 @@ export function buildCodexExecArgs({ runner = {}, worktreePath, prompt }) {
   return args;
 }
 
-export function buildCodexResumeArgs({ runner = {}, threadId, prompt, outputFile }) {
+export function buildCodexResumeArgs({ runner = {}, threadId, prompt, outputFile, cwd }) {
   if (!threadId) throw new Error("Codex handoff thread id is required");
-  const args = ["exec", "resume", "--json"];
+  const args = ["exec"];
   if (runner.ignoreUserConfig !== false) args.push("--ignore-user-config");
+  args.push("--sandbox", runner.sandbox || "workspace-write");
+  if (cwd) args.push("-C", cwd);
+  args.push("resume", "--json");
   if (runner.skipGitRepoCheck !== false) args.push("--skip-git-repo-check");
   if (runner.model) args.push("-m", runner.model);
   if (outputFile) args.push("-o", outputFile);

@@ -34,19 +34,24 @@ test("buildCodexExecArgs can load user config when explicitly requested", () => 
   assert.equal(args.includes("--ignore-user-config"), false);
 });
 
-test("buildCodexResumeArgs resumes a Codex thread without worktree flags", () => {
+test("buildCodexResumeArgs resumes a Codex thread in the handoff workspace", () => {
   const args = buildCodexResumeArgs({
-    runner: { ignoreUserConfig: true, model: "gpt-test" },
+    runner: { ignoreUserConfig: true, model: "gpt-test", sandbox: "workspace-write" },
     threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
     prompt: "continue from lark",
     outputFile: "/tmp/final.txt",
+    cwd: "/workspace",
   });
 
   assert.deepEqual(args, [
     "exec",
+    "--ignore-user-config",
+    "--sandbox",
+    "workspace-write",
+    "-C",
+    "/workspace",
     "resume",
     "--json",
-    "--ignore-user-config",
     "--skip-git-repo-check",
     "-m",
     "gpt-test",
@@ -55,8 +60,6 @@ test("buildCodexResumeArgs resumes a Codex thread without worktree flags", () =>
     "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
     "continue from lark",
   ]);
-  assert.equal(args.includes("-C"), false);
-  assert.equal(args.includes("--sandbox"), false);
 });
 
 test("buildCodexResumeArgs can keep the git repo check when explicitly requested", () => {

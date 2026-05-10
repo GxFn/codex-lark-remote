@@ -49,6 +49,28 @@ test("processLarkEvent still rejects non-whoami messages outside allowlist", asy
   assert.deepEqual(replies, [{ messageId: "om_1", text: "Permission denied." }]);
 });
 
+test("processLarkEvent deduplicates direct command replies and reports websocket status", async () => {
+  const replies = [];
+  const ctx = {
+    config: { lark: { allowedUsers: ["ou_allowed"], transport: "websocket" } },
+    queue: {
+      findByMessageId: async () => null,
+      counts: async () => ({}),
+    },
+    notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+    runner: { busy: false },
+    larkWs: { status: () => ({ enabled: true, connected: true, message: "Connected via WebSocket" }) },
+  };
+
+  const first = await processLarkEvent(ctx, textEvent({ text: "/codex status", userId: "ou_allowed" }));
+  const second = await processLarkEvent(ctx, textEvent({ text: "/codex status", userId: "ou_allowed" }));
+
+  assert.equal(first.success, true);
+  assert.equal(second.duplicate, true);
+  assert.equal(replies.length, 1);
+  assert.match(replies[0].text, /Feishu\/Lark: websocket connected/);
+});
+
 test("processLarkEvent routes normal messages to current-thread handoff when active", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-bridge-"));
   await activateHandoff({

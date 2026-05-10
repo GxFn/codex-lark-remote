@@ -19,7 +19,7 @@ export async function startBridge(options = {}) {
   const queue = new RemoteCommandQueue({ dataDir: config.dataDir });
   const notifier = new LarkNotifier(config.lark || {});
   const runner = new CodexCliRunner({ queue, config, notifier });
-  const bridge = { config, queue, notifier, runner, token: null, server: null, larkWs: null };
+  const bridge = { config, queue, notifier, runner, token: null, server: null, larkWs: null, seenMessageIds: new Map() };
   const token = options.token || process.env.CODEX_LARK_BRIDGE_TOKEN || crypto.randomBytes(24).toString("hex");
   bridge.token = token;
   const host = options.host || DEFAULT_BRIDGE_HOST;
@@ -188,6 +188,7 @@ async function handleLarkEvent(ctx, incomingBody, rawBody, headers) {
 export async function processLarkEvent(ctx, body) {
   const event = parseLarkEvent(body);
   if (event.kind !== "message") return { success: true, ignored: true };
+  if (rememberLarkMessage(ctx, event.messageId)) return { success: true, duplicate: true };
 
   if (event.messageType && event.messageType !== "text") {
     await ctx.notifier.reply(event.messageId, "Please send a text message.");
@@ -220,6 +221,7 @@ async function handleChatAction(ctx, event, action) {
         counts,
         workerBusy: ctx.runner.busy,
         handoff,
+        larkWs: ctx.larkWs?.status(),
         url: publicUrl(ctx.config),
       }),
     );
@@ -365,4 +367,19 @@ function normalizeLarkBody(body, config) {
     return decryptLarkPayload(body.encrypt, config.lark?.encryptKey || process.env.CODEX_LARK_ENCRYPT_KEY || "");
   }
   return body;
+}
+
+function rememberLarkMessage(ctx, messageId) {
+  if (!messageId) return false;
+  if (!ctx.seenMessageIds) ctx.seenMessageIds = new Map();
+  if (ctx.seenMessageIds.has(messageId)) return true;
+
+  ctx.seenMessageIds.set(messageId, Date.now());
+  if (ctx.seenMessageIds.size > 1000) {
+    const stale = [...ctx.seenMessageIds.entries()]
+      .sort((left, right) => left[1] - right[1])
+      .slice(0, 200);
+    for (const [id] of stale) ctx.seenMessageIds.delete(id);
+  }
+  return false;
 }
