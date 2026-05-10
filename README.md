@@ -47,7 +47,7 @@ leave empty
 ```
 
 After adding the marketplace, enable `codex-lark-remote` from the plugin list.
-For a tagged release, set **Git ref** to a release tag, for example `v0.1.14`.
+For a tagged release, set **Git ref** to a release tag, for example `v0.1.15`.
 
 ## Configure Feishu/Lark
 
@@ -133,10 +133,13 @@ The Feishu/Lark replies are optimized for remote coding:
 - Long answers are split into multiple Feishu/Lark messages instead of being
   truncated.
 - Progress replies do not include internal task ids by default.
-- Command output keeps line breaks when the content is useful.
+- Commands are shown for audit, and potentially risky commands include a
+  `Warning:` line.
+- Command `Output:` is limited to one high-signal line with line/character
+  counts when more content was omitted.
 - Source inspection output from commands such as `cat`, `nl`, `sed`, `grep`, and
   ordinary `rg` searches is summarized instead of dumping large code blocks.
-- High-signal output such as tests, errors, warnings, and git summaries is kept.
+- Secrets in command text are redacted before they are sent to Feishu/Lark.
 
 This keeps Feishu/Lark focused on what Codex did, what changed, and what needs
 attention.

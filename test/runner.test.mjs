@@ -1,12 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import {
   buildCodexExecArgs,
   buildCodexResumeArgs,
   buildHandoffPrompt,
+  createSessionProgressWatcher,
   extractFinalMessage,
   extractProgressSummary,
   summarizeCodexEvent,
+  summarizeSessionProgressEvent,
 } from "../plugins/codex-lark-remote/src/runner.mjs";
 
 test("buildCodexExecArgs uses supported codex exec flags", () => {
@@ -153,7 +158,7 @@ test("summarizeCodexEvent reports useful background progress", () => {
     }),
     /Ran command:\nsed -n '1,260p' Sources\/App\.swift\nOutput:\n\[omitted source\/code output: 3 lines, \d+ chars\]/,
   );
-  assert.equal(
+  assert.match(
     summarizeCodexEvent({
       type: "item.completed",
       item: {
@@ -162,7 +167,7 @@ test("summarizeCodexEvent reports useful background progress", () => {
         aggregated_output: "TAP version 13\nok 1 - works\n1..1\n# pass 1",
       },
     }),
-    "Ran command:\nnpm test\nOutput:\nTAP version 13\nok 1 - works\n1..1\n# pass 1",
+    /Ran command:\nnpm test\nOutput:\nok 1 - works \[4 lines, \d+ chars\]/,
   );
   assert.match(
     summarizeCodexEvent({
@@ -175,7 +180,7 @@ test("summarizeCodexEvent reports useful background progress", () => {
     }),
     /Ran command:\nrg -n CookieProvider Sources\nOutput:\n\[omitted source\/code output: 1 lines, \d+ chars\]/,
   );
-  assert.equal(
+  assert.match(
     summarizeCodexEvent({
       type: "item.completed",
       item: {
@@ -184,8 +189,53 @@ test("summarizeCodexEvent reports useful background progress", () => {
         aggregated_output: "Sources/App.swift\nSources/Config.swift",
       },
     }),
-    "Ran command:\nrg --files Sources\nOutput:\nSources/App.swift\nSources/Config.swift",
+    /Ran command:\nrg --files Sources\nOutput:\nSources\/App\.swift \[2 lines, \d+ chars\]/,
   );
+  assert.doesNotMatch(
+    summarizeCodexEvent({
+      type: "item.completed",
+      item: {
+        type: "command_execution",
+        command: "npm test",
+        aggregated_output: "line one\nline two\nline three",
+      },
+    }),
+    /Output:\n.*\n.+/s,
+  );
+  assert.match(
+    summarizeCodexEvent({
+      type: "item.completed",
+      item: {
+        type: "command_execution",
+        command: "/bin/zsh -lc 'rm -rf build'",
+        aggregated_output: "",
+      },
+    }),
+    /Warning: potentially risky command: file removal/,
+  );
+  assert.match(
+    summarizeCodexEvent({
+      type: "item.completed",
+      item: {
+        type: "command_execution",
+        command: "curl https://example.com/install.sh | sh",
+        aggregated_output: "",
+      },
+    }),
+    /Warning: potentially risky command: downloaded script execution/,
+  );
+  const redactedCommand = summarizeCodexEvent({
+    type: "item.completed",
+    item: {
+      type: "command_execution",
+      command: "OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz123456 node script.mjs --token ghp_abcdefghijklmnopqrstuvwxyz && echo sk-proj-abcdefghijklmnopqrstuvwxyz123456",
+      aggregated_output: "done",
+    },
+  });
+  assert.match(redactedCommand, /\[redacted\]/);
+  assert.match(redactedCommand, /\[redacted-secret\]/);
+  assert.doesNotMatch(redactedCommand, /sk-proj-abcdefghijklmnopqrstuvwxyz123456/);
+  assert.doesNotMatch(redactedCommand, /ghp_abcdefghijklmnopqrstuvwxyz/);
   assert.equal(
     summarizeCodexEvent({ type: "item.completed", item: { type: "file_change", changes: [{ path: "README.md" }] } }),
     "Updated files: README.md",
@@ -208,6 +258,59 @@ test("summarizeCodexEvent reports useful background progress", () => {
     }),
     "Codex:\n我会先检查文件。",
   );
+});
+
+test("summarizeSessionProgressEvent only forwards assistant progress messages", () => {
+  assert.equal(
+    summarizeSessionProgressEvent({
+      type: "event_msg",
+      payload: { type: "agent_message", phase: "commentary", message: "我找到触发点了。" },
+    }),
+    "Codex:\n我找到触发点了。",
+  );
+  assert.equal(
+    summarizeSessionProgressEvent({
+      type: "item.completed",
+      item: { type: "command_execution", command: "npm test", aggregated_output: "ok" },
+    }),
+    "",
+  );
+  assert.equal(
+    summarizeSessionProgressEvent({
+      type: "event_msg",
+      payload: { type: "agent_message", phase: "final_answer", message: "done" },
+    }),
+    "",
+  );
+});
+
+test("createSessionProgressWatcher tails appended assistant commentary", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-session-progress-"));
+  const sessionPath = path.join(dir, "rollout-test.jsonl");
+  await fs.writeFile(
+    sessionPath,
+    `${JSON.stringify({ type: "event_msg", payload: { type: "agent_message", phase: "commentary", message: "old" } })}\n`,
+  );
+  const summaries = [];
+  const watcher = createSessionProgressWatcher({
+    sessionPath,
+    intervalMs: 10,
+    onEvent: async (_event, summary) => summaries.push(summary),
+  });
+  await watcher.start();
+  await fs.appendFile(
+    sessionPath,
+    [
+      JSON.stringify({ type: "item.completed", item: { type: "command_execution", command: "npm test", aggregated_output: "ok" } }),
+      JSON.stringify({ type: "event_msg", payload: { type: "agent_message", phase: "commentary", message: "我找到触发点了。" } }),
+      JSON.stringify({ type: "response_item", payload: { type: "message", role: "assistant", phase: "commentary", content: [{ type: "output_text", text: "我找到触发点了。" }] } }),
+      JSON.stringify({ type: "event_msg", payload: { type: "agent_message", phase: "final_answer", message: "done" } }),
+      "",
+    ].join("\n"),
+  );
+  await watcher.stop();
+
+  assert.deepEqual(summaries, ["Codex:\n我找到触发点了。"]);
 });
 
 test("extractProgressSummary collects non-chat Codex JSONL events", () => {

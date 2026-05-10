@@ -168,11 +168,21 @@ export class CodexCliRunner {
       outputFile,
       cwd: command.projectRoot,
     });
-    const result = await runProcess(runner.codexPath || "codex", args, {
-      timeoutMs: Number(runner.timeoutMs || 30 * 60 * 1000),
-      cwd: command.projectRoot || undefined,
+    const sessionWatcher = createSessionProgressWatcher({
+      sessionPath: command.codexSessionPath,
       onEvent,
     });
+    await sessionWatcher.start();
+    let result;
+    try {
+      result = await runProcess(runner.codexPath || "codex", args, {
+        timeoutMs: Number(runner.timeoutMs || 30 * 60 * 1000),
+        cwd: command.projectRoot || undefined,
+        onEvent,
+      });
+    } finally {
+      await sessionWatcher.stop();
+    }
     try {
       const finalFromFile = (await fs.readFile(outputFile, "utf8")).trim();
       if (finalFromFile) result.finalMessage = finalFromFile;
@@ -390,7 +400,12 @@ export function summarizeCodexEvent(event) {
   if (command) {
     const output = item.aggregated_output || item.output || item.stdout || item.stderr || event.output || "";
     const summarizedOutput = summarizeCommandOutput(command, output);
-    return [`Ran command:\n${progressText(command)}`, summarizedOutput ? `Output:\n${summarizedOutput}` : ""]
+    const commandSummary = summarizeCommand(command);
+    return [
+      `Ran command:\n${commandSummary.command}`,
+      commandSummary.warning ? `Warning: ${commandSummary.warning}` : "",
+      summarizedOutput ? `Output:\n${summarizedOutput}` : "",
+    ]
       .filter(Boolean)
       .join("\n");
   }
@@ -412,6 +427,84 @@ export function summarizeCodexEvent(event) {
   }
 
   return "";
+}
+
+export function summarizeSessionProgressEvent(event) {
+  const type = String(event?.type || event?.method || "");
+  const params = event?.params || {};
+  const item = event?.item || params.item || event?.payload || params;
+  const itemType = String(item?.type || "");
+  const isAssistantMessage = itemType === "agent_message"
+    || (itemType === "message" && item.role === "assistant")
+    || /agentMessage/i.test(type);
+  if (!isAssistantMessage || item.phase === "final_answer") return "";
+  return summarizeCodexEvent(event);
+}
+
+export function createSessionProgressWatcher({ sessionPath, onEvent, intervalMs = 500 } = {}) {
+  let offset = 0;
+  let buffer = "";
+  let timer = null;
+  let reading = false;
+  let chain = Promise.resolve();
+  let lastSummary = "";
+
+  const readNew = async () => {
+    if (reading || !sessionPath || !onEvent) return;
+    reading = true;
+    try {
+      const handle = await fs.open(sessionPath, "r");
+      try {
+        const stat = await handle.stat();
+        if (stat.size <= offset) return;
+        const chunk = Buffer.alloc(stat.size - offset);
+        await handle.read(chunk, 0, chunk.length, offset);
+        offset = stat.size;
+        buffer += chunk.toString("utf8");
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() || "";
+        for (const line of lines) handleSessionLine(line);
+      } finally {
+        await handle.close();
+      }
+    } catch {
+      // Session files are best-effort progress sources. stdout remains primary.
+    } finally {
+      reading = false;
+    }
+  };
+
+  const handleSessionLine = (line) => {
+    if (!line.trim()) return;
+    try {
+      const event = JSON.parse(line);
+      const summary = summarizeSessionProgressEvent(event);
+      if (!summary || summary === lastSummary) return;
+      lastSummary = summary;
+      chain = chain.then(() => onEvent(event, summary)).catch(() => {});
+    } catch {
+      // Ignore partial or non-JSON session lines.
+    }
+  };
+
+  return {
+    async start() {
+      if (!sessionPath || !onEvent) return;
+      try {
+        offset = (await fs.stat(sessionPath)).size;
+      } catch {
+        offset = 0;
+      }
+      timer = setInterval(readNew, intervalMs);
+      timer.unref?.();
+    },
+    async stop() {
+      if (timer) clearInterval(timer);
+      timer = null;
+      await readNew();
+      await chain.catch(() => {});
+    },
+  };
 }
 
 function createProgressNotifier({ command, config, notify }) {
@@ -487,15 +580,53 @@ function progressText(value) {
     .trim();
 }
 
+function redactSensitiveText(value) {
+  return String(value || "")
+    .replace(/([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|ACCESS_KEY|PRIVATE_KEY)[A-Z0-9_]*=)(["']?)[^\s"']+/gi, "$1$2[redacted]")
+    .replace(/(--(?:token|secret|password|api-key|access-key|private-key|app-secret)\s+)([^\s]+)/gi, "$1[redacted]")
+    .replace(/\b(sk-(?:proj-)?[A-Za-z0-9_-]{12,})\b/g, "[redacted-secret]")
+    .replace(/\b(ghp_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,})\b/g, "[redacted-secret]")
+    .replace(/\b(xox[baprs]-[A-Za-z0-9-]{12,})\b/g, "[redacted-secret]")
+    .replace(/\b(AKIA[0-9A-Z]{12,})\b/g, "[redacted-secret]")
+    .replace(/(https?:\/\/[^:\s/@]+:)[^@\s]+(@)/g, "$1[redacted]$2");
+}
+
+function summarizeCommand(command) {
+  const text = redactSensitiveText(progressText(command));
+  return {
+    command: text,
+    warning: classifyCommandRisk(text),
+  };
+}
+
+function classifyCommandRisk(command) {
+  const value = String(command || "").replace(/\s+/g, " ").trim();
+  const checks = [
+    [/\b(?:sudo|doas)\b/i, "privileged command"],
+    [/\b(?:rm|rmdir|unlink)\b/i, "file removal"],
+    [/\b(?:mv|cp)\b[^|;&]*\s(?:\/|~\/|\.\.\/)/i, "filesystem write"],
+    [/\b(?:chmod|chown|chgrp)\b/i, "permission or ownership change"],
+    [/\b(?:kill|killall|pkill)\b/i, "process termination"],
+    [/\bgit\s+(?:reset\s+--hard|clean\b|checkout\s+--|restore\b.*\s--source=)/i, "destructive git operation"],
+    [/\bgit\s+push\b/i, "remote git push"],
+    [/\b(?:npm|pnpm|yarn)\s+(?:publish|unpublish)\b/i, "package registry publish"],
+    [/\b(?:curl|wget)\b.*\|\s*(?:sh|bash|zsh|python|ruby|node)\b/i, "downloaded script execution"],
+    [/\bdd\b.*\bof=/i, "raw disk write"],
+    [/\b(?:diskutil|mkfs|mount|umount)\b/i, "disk operation"],
+    [/\bdefaults\s+write\b/i, "system settings write"],
+    [/\bsecurity\s+(?:add|delete|set|unlock|find)-/i, "keychain operation"],
+  ];
+  const match = checks.find(([pattern]) => pattern.test(value));
+  return match ? `potentially risky command: ${match[1]}` : "";
+}
+
 function summarizeCommandOutput(command, output) {
   const text = progressText(output);
   if (!text) return "";
   if (isCodeInspectionCommand(command) && !looksLikeHighSignalOutput(command, text)) {
     return `[omitted source/code output: ${lineCount(text)} lines, ${text.length} chars]`;
   }
-  if (text.length <= 2400) return text;
-  if (looksLikeHighSignalOutput(command, text)) return text;
-  return `${firstLines(text, 40)}\n\n[output shortened: ${lineCount(text)} lines, ${text.length} chars]`;
+  return oneLineCommandOutput(text);
 }
 
 function isCodeInspectionCommand(command) {
@@ -509,6 +640,25 @@ function looksLikeHighSignalOutput(command, output) {
   return /\b(test|pytest|vitest|jest|mocha|node --test|swift test|xcodebuild|npm test|pnpm test|yarn test)\b/i.test(value)
     || /\b(git diff|git status|git log|git show|git grep)\b/i.test(value)
     || /\b(error|failed|failure|exception|traceback|panic|fatal|warning|passed|ok \d+|not ok)\b/i.test(output);
+}
+
+function oneLineCommandOutput(text, max = 360) {
+  const lines = String(text || "")
+    .split(/\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!lines.length) return "";
+  const selected = lines.find(isHighSignalLine) || lines[0];
+  const oneLine = selected.replace(/\s+/g, " ").trim();
+  const omitted = lines.length > 1 || text.length > oneLine.length;
+  const suffix = omitted ? ` [${lineCount(text)} lines, ${text.length} chars]` : "";
+  const budget = Math.max(20, max - suffix.length);
+  const clipped = oneLine.length > budget ? `${oneLine.slice(0, budget - 3)}...` : oneLine;
+  return `${clipped}${suffix}`;
+}
+
+function isHighSignalLine(line) {
+  return /\b(error|failed|failure|exception|traceback|panic|fatal|warning|passed|ok \d+|not ok|# pass|# fail|build succeeded|build failed)\b/i.test(line);
 }
 
 function lineCount(text) {

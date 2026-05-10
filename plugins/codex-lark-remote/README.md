@@ -33,7 +33,7 @@ leave empty
 ```
 
 Enable `codex-lark-remote` from the plugin list. For a pinned install, set
-**Git ref** to a release tag such as `v0.1.14`.
+**Git ref** to a release tag such as `v0.1.15`.
 
 ## Configure Feishu/Lark
 
@@ -112,10 +112,13 @@ Remote replies are optimized for coding on a phone or in chat:
 - No `Codex progress` title is added to progress messages.
 - Internal task ids are not shown in normal progress replies.
 - Long replies are split into multiple Feishu/Lark messages.
-- Line breaks are preserved for useful output.
+- Commands are shown for audit, and potentially risky commands include a
+  `Warning:` line.
+- Command `Output:` is limited to one high-signal line with line/character
+  counts when more content was omitted.
 - Source/code inspection output is summarized when it comes from commands such
   as `cat`, `nl`, `sed`, `grep`, or ordinary `rg` searches.
-- Test output, errors, warnings, and git summaries are kept.
+- Secrets in command text are redacted before they are sent to Feishu/Lark.
 
 ## Mac keep-awake
 
