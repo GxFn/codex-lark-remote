@@ -272,7 +272,7 @@ async function runProcess(command, args, { timeoutMs, cwd, onEvent }) {
         stdoutTail: tail(stdout),
         stderrTail: tail(stderr),
         finalMessage: extractFinalMessage(stdout),
-        progressSummary: progress.slice(-12).join("\n"),
+        progressSummary: progress.join("\n"),
       });
     };
 
@@ -378,18 +378,19 @@ export function summarizeCodexEvent(event) {
   if (itemType === "message" && item.role === "assistant") {
     if (item.phase === "final_answer") return "";
     const text = textFromEvent(event);
-    return text ? `Codex: ${oneLine(text, 900)}` : "";
+    return text ? `Codex:\n${progressText(text)}` : "";
   }
 
   if (itemType === "agent_message" || /agentMessage/i.test(type)) {
     if (item.phase === "final_answer") return "";
-    return item.message ? `Codex: ${oneLine(item.message, 900)}` : "";
+    return item.message ? `Codex:\n${progressText(item.message)}` : "";
   }
 
   const command = commandFromEvent(event, item);
   if (command) {
     const output = item.aggregated_output || item.output || item.stdout || item.stderr || event.output || "";
-    return [`Ran command: ${oneLine(command, 220)}`, output ? `Output: ${oneLine(output, 700)}` : ""]
+    const summarizedOutput = summarizeCommandOutput(command, output);
+    return [`Ran command:\n${progressText(command)}`, summarizedOutput ? `Output:\n${summarizedOutput}` : ""]
       .filter(Boolean)
       .join("\n");
   }
@@ -402,12 +403,12 @@ export function summarizeCodexEvent(event) {
 
   if (itemType === "custom_tool_call_output") {
     const output = item.output || event.output || "";
-    return output ? `Tool output: ${oneLine(output, 900)}` : "";
+    return output ? `Tool output:\n${progressText(output)}` : "";
   }
 
   if (/error|failed/i.test(type)) {
     const message = event.message || event.error?.message || event.error || item.message || "Codex reported an error.";
-    return `Error: ${oneLine(message, 700)}`;
+    return `Error:\n${progressText(message)}`;
   }
 
   return "";
@@ -416,25 +417,13 @@ export function summarizeCodexEvent(event) {
 function createProgressNotifier({ command, config, notify }) {
   const handoff = config.handoff || {};
   if (handoff.notifyProgress === false || command.mode !== "thread_handoff") return async () => {};
-  const minIntervalMs = Number(handoff.progressIntervalMs || 2500);
-  const maxMessages = Number(handoff.maxProgressMessages || 5);
-  let sent = 0;
-  let lastAt = 0;
   let lastText = "";
 
   return async (_event, summary) => {
-    if (!summary || summary === lastText || sent >= maxMessages) return;
-    const now = Date.now();
-    if (sent > 0 && now - lastAt < minIntervalMs && !isImportantProgress(summary)) return;
-    sent += 1;
-    lastAt = now;
+    if (!summary || summary === lastText) return;
     lastText = summary;
     await notify(formatProgress(command, summary));
   };
-}
-
-function isImportantProgress(summary) {
-  return /^(Ran command|Updated files|Used tool|Error:)/.test(summary);
 }
 
 function formatUsage(usage) {
@@ -492,11 +481,46 @@ function textFromEvent(event) {
   return event?.message || event?.text || event?.content || event?.delta || "";
 }
 
-function oneLine(value, max) {
-  const text = String(value || "")
-    .replace(/\s+/g, " ")
+function progressText(value) {
+  return String(value || "")
+    .replace(/\r\n/g, "\n")
     .trim();
-  return text.length > max ? `${text.slice(0, max - 1)}...` : text;
+}
+
+function summarizeCommandOutput(command, output) {
+  const text = progressText(output);
+  if (!text) return "";
+  if (isCodeInspectionCommand(command) && !looksLikeHighSignalOutput(command, text)) {
+    return `[omitted source/code output: ${lineCount(text)} lines, ${text.length} chars]`;
+  }
+  if (text.length <= 2400) return text;
+  if (looksLikeHighSignalOutput(command, text)) return text;
+  return `${firstLines(text, 40)}\n\n[output shortened: ${lineCount(text)} lines, ${text.length} chars]`;
+}
+
+function isCodeInspectionCommand(command) {
+  const value = String(command || "");
+  return /\b(cat|nl|sed|awk|less|more|head|tail|grep)\b/.test(value)
+    || (/\brg\b/.test(value) && !/(^|\s)(--files|-l|--files-with-matches)(\s|$)/.test(value));
+}
+
+function looksLikeHighSignalOutput(command, output) {
+  const value = `${command}\n${output}`;
+  return /\b(test|pytest|vitest|jest|mocha|node --test|swift test|xcodebuild|npm test|pnpm test|yarn test)\b/i.test(value)
+    || /\b(git diff|git status|git log|git show|git grep)\b/i.test(value)
+    || /\b(error|failed|failure|exception|traceback|panic|fatal|warning|passed|ok \d+|not ok)\b/i.test(output);
+}
+
+function lineCount(text) {
+  return String(text || "").split(/\n/).length;
+}
+
+function firstLines(text, maxLines) {
+  return String(text || "")
+    .split(/\n/)
+    .slice(0, maxLines)
+    .join("\n")
+    .trim();
 }
 
 function tail(value, max = 3000) {

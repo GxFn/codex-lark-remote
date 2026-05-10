@@ -129,7 +129,62 @@ test("extractFinalMessage reads desktop session style final messages", () => {
 test("summarizeCodexEvent reports useful background progress", () => {
   assert.equal(
     summarizeCodexEvent({ type: "item.completed", item: { type: "command_execution", command: "npm test", aggregated_output: "51 passed" } }),
-    "Ran command: npm test\nOutput: 51 passed",
+    "Ran command:\nnpm test\nOutput:\n51 passed",
+  );
+  assert.match(
+    summarizeCodexEvent({
+      type: "item.completed",
+      item: {
+        type: "command_execution",
+        command: "nl -ba file.swift",
+        aggregated_output: "1 import Foundation\n2 let value = true",
+      },
+    }),
+    /Ran command:\nnl -ba file\.swift\nOutput:\n\[omitted source\/code output: 2 lines, \d+ chars\]/,
+  );
+  assert.match(
+    summarizeCodexEvent({
+      type: "item.completed",
+      item: {
+        type: "command_execution",
+        command: "sed -n '1,260p' Sources/App.swift",
+        aggregated_output: "import Foundation\nfunc run() {}\nlet value = true",
+      },
+    }),
+    /Ran command:\nsed -n '1,260p' Sources\/App\.swift\nOutput:\n\[omitted source\/code output: 3 lines, \d+ chars\]/,
+  );
+  assert.equal(
+    summarizeCodexEvent({
+      type: "item.completed",
+      item: {
+        type: "command_execution",
+        command: "npm test",
+        aggregated_output: "TAP version 13\nok 1 - works\n1..1\n# pass 1",
+      },
+    }),
+    "Ran command:\nnpm test\nOutput:\nTAP version 13\nok 1 - works\n1..1\n# pass 1",
+  );
+  assert.match(
+    summarizeCodexEvent({
+      type: "item.completed",
+      item: {
+        type: "command_execution",
+        command: "rg -n CookieProvider Sources",
+        aggregated_output: "Sources/App.swift:12:let cookieProvider = CookieProvider()",
+      },
+    }),
+    /Ran command:\nrg -n CookieProvider Sources\nOutput:\n\[omitted source\/code output: 1 lines, \d+ chars\]/,
+  );
+  assert.equal(
+    summarizeCodexEvent({
+      type: "item.completed",
+      item: {
+        type: "command_execution",
+        command: "rg --files Sources",
+        aggregated_output: "Sources/App.swift\nSources/Config.swift",
+      },
+    }),
+    "Ran command:\nrg --files Sources\nOutput:\nSources/App.swift\nSources/Config.swift",
   );
   assert.equal(
     summarizeCodexEvent({ type: "item.completed", item: { type: "file_change", changes: [{ path: "README.md" }] } }),
@@ -151,7 +206,7 @@ test("summarizeCodexEvent reports useful background progress", () => {
       type: "event_msg",
       payload: { type: "agent_message", phase: "commentary", message: "我会先检查文件。" },
     }),
-    "Codex: 我会先检查文件。",
+    "Codex:\n我会先检查文件。",
   );
 });
 
@@ -167,7 +222,7 @@ test("extractProgressSummary collects non-chat Codex JSONL events", () => {
     extractProgressSummary(stdout),
     [
       "Started working on the Feishu/Lark message.",
-      "Ran command: npm test\nOutput: ok",
+      "Ran command:\nnpm test\nOutput:\nok",
       "Codex turn completed. Tokens: input=10 output=20",
     ].join("\n"),
   );

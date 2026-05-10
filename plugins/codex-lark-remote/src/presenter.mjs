@@ -93,7 +93,7 @@ export function formatFinal(command) {
   }
   if (command.mode === "thread_handoff") {
     if (command.presentation === "chat" && command.status === "completed") {
-      return truncateForLark(command.result || "Codex finished.", 2800);
+      return command.result || "Codex finished.";
     }
     return [
       `Codex message ${command.status}: ${command.id}`,
@@ -125,14 +125,7 @@ export function formatFinal(command) {
 }
 
 export function formatProgress(command, text) {
-  return [
-    "Codex progress",
-    command.id ? `Task: ${command.id}` : "",
-    "",
-    truncateForLark(text, 1800),
-  ]
-    .filter(Boolean)
-    .join("\n");
+  return String(text || "").trim() || "Codex is working.";
 }
 
 function formatCounts(counts = {}) {

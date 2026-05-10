@@ -6,25 +6,29 @@ Chinese version: [README.zh-CN.md](README.zh-CN.md)
 
 This repository is the `gxfn` Codex plugin marketplace. The installable plugin
 bundle lives in [`plugins/codex-lark-remote/`](plugins/codex-lark-remote/).
-The repository root intentionally keeps its own full README so first-time users
-can understand installation, configuration, and usage before opening the bundled
-plugin docs.
+The repository root keeps a full README so first-time users can understand the
+product before opening the bundled plugin docs.
 
 Bundled plugin docs:
 
 - [English plugin README](plugins/codex-lark-remote/README.md)
 - [Chinese plugin README](plugins/codex-lark-remote/README.zh-CN.md)
 
-## What it does
+## Overview
 
 Codex Lark Remote lets you start a handoff from an active Codex chat, leave your
-Mac, and continue the same Codex conversation from Feishu/Lark. Feishu/Lark
-messages are passed to Codex as normal user messages, and the bot replies with
-the final Codex answer plus useful progress updates while longer work is running.
+Mac, and keep talking to the same Codex thread from Feishu/Lark.
 
-The default path is deliberately simple: one active Codex conversation, one
-Feishu/Lark bot, and WebSocket-first delivery. The plugin does not ask users to
-choose between multiple operating modes during normal use.
+The default experience is intentionally narrow:
+
+- Start from the Codex conversation you want to continue.
+- Confirm that this conversation may be handed to the local bridge.
+- Send normal messages to the Feishu/Lark bot.
+- Receive Codex answers and useful progress in Feishu/Lark.
+
+Feishu/Lark messages are treated as ordinary user messages in the same Codex
+conversation. The plugin is WebSocket-first and does not ask users to choose
+between multiple modes during normal use.
 
 ## Install
 
@@ -43,11 +47,11 @@ leave empty
 ```
 
 After adding the marketplace, enable `codex-lark-remote` from the plugin list.
-For a tagged release, set **Git ref** to the release tag, for example `v0.1.10`.
+For a tagged release, set **Git ref** to a release tag, for example `v0.1.12`.
 
 ## Configure Feishu/Lark
 
-If you do not have Feishu/Lark app credentials yet:
+Create a Feishu/Lark bot app first:
 
 1. Open [Feishu Open Platform](https://open.feishu.cn/) or
    [Lark Open Platform](https://open.larksuite.com/).
@@ -59,7 +63,7 @@ If you do not have Feishu/Lark app credentials yet:
 6. Add the message receive/reply permissions requested by the platform, then
    publish or enable the app for your tenant.
 
-Start from a trusted local Codex chat and paste the required values:
+Then paste the values into a trusted local Codex chat:
 
 ```text
 Please configure codex-lark-remote.
@@ -75,30 +79,36 @@ Please call codex_lark_configure with these values, then run
 codex_lark_check_auth.
 ```
 
-The plugin stores private runtime config in `~/.codex-lark-remote/config.json`.
-Do not commit that file. If you do not know your Feishu/Lark sender id yet,
-leave `allowedUsers` empty for first setup, send `/codex whoami` to the bot from
-Feishu/Lark, then add the returned `senderId`.
+The plugin stores private runtime config in:
 
-When `appId` or `appSecret` is missing, the plugin does not start the local
-bridge and does not attach the Codex conversation. It returns setup guidance
-instead.
+```text
+~/.codex-lark-remote/config.json
+```
+
+Do not commit that file.
+
+If you do not know your Feishu/Lark sender id yet, leave `allowedUsers` empty
+for first setup, send `/codex whoami` to the bot from Feishu/Lark, then add the
+returned `senderId`.
+
+When `appId` or `appSecret` is missing, the plugin does not start the bridge and
+does not attach the Codex conversation. It returns setup guidance instead.
 
 ## Start handoff
 
-From the Codex conversation you want to continue remotely, ask Codex:
+From the Codex conversation you want to continue remotely, ask:
 
 ```text
 Start codex-lark-remote.
 ```
 
-Codex will ask for explicit consent before handing the current conversation and
-necessary routing metadata to the local plugin bridge. After you confirm, the
-plugin starts the bridge, attaches the current Codex thread, and waits for
-Feishu/Lark messages.
+Codex will ask for explicit consent before sending the current conversation and
+necessary routing metadata to the local bridge. After you confirm, the plugin
+starts the bridge, attaches the current Codex thread, and waits for Feishu/Lark
+messages.
 
-When startup succeeds, send any normal message to the Feishu/Lark bot. It will
-continue the same Codex conversation and reply in Feishu/Lark.
+When startup succeeds, send any normal message to the Feishu/Lark bot. Codex
+will continue the same conversation and reply in Feishu/Lark.
 
 Useful Feishu/Lark commands:
 
@@ -108,23 +118,42 @@ Useful Feishu/Lark commands:
 /codex handoff off
 ```
 
-The bot also recognizes natural requests such as asking to disconnect or stop
+The bot also recognizes natural requests such as asking to stop or disconnect
 the handoff.
+
+## Output behavior
+
+The Feishu/Lark replies are optimized for remote coding:
+
+- Final Codex answers are sent back as normal text.
+- Long answers are split into multiple Feishu/Lark messages instead of being
+  truncated.
+- Progress replies do not include internal task ids by default.
+- Command output keeps line breaks when the content is useful.
+- Source inspection output from commands such as `cat`, `nl`, `sed`, `grep`, and
+  ordinary `rg` searches is summarized instead of dumping large code blocks.
+- High-signal output such as tests, errors, warnings, and git summaries is kept.
+
+This keeps Feishu/Lark focused on what Codex did, what changed, and what needs
+attention.
 
 ## Troubleshooting
 
 If Codex says the `codex_lark_*` tools are not available, the plugin MCP server
 was not loaded in that conversation. Refresh or re-enable the plugin, then start
-a new Codex conversation. Normal startup should use the plugin MCP tools rather
-than local shell scripts.
+a new Codex conversation. Normal startup should use the plugin MCP tools, not
+local shell script fallbacks.
 
 If `/codex status` shows `websocket disabled`, verify that `appId` and
-`appSecret` are present in `~/.codex-lark-remote/config.json`, then restart the
-handoff from Codex.
+`appSecret` exist in `~/.codex-lark-remote/config.json`, then start handoff
+again from Codex.
 
 If Feishu/Lark replies twice to the same message, check for an older local
 bridge process or duplicate plugin installation and stop the stale one before
 starting again.
+
+If Codex writes files into the plugin cache, start the handoff from the Codex
+conversation whose working directory is the project you want to edit.
 
 ## Local development
 
@@ -139,7 +168,7 @@ source = "/absolute/path/to/codex-lark-remote"
 enabled = true
 ```
 
-Run the test suite before publishing:
+Run tests before publishing:
 
 ```text
 npm test

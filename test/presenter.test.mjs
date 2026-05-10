@@ -61,10 +61,11 @@ test("formatFinal returns only the Codex answer for chat handoff completions", (
   assert.equal(text, "这是 Codex 的直接回复。");
 });
 
-test("formatProgress creates a compact Feishu progress reply", () => {
-  const text = formatProgress({ id: "rcmd_test" }, "Ran command: npm test");
+test("formatProgress returns only readable progress content", () => {
+  const text = formatProgress({ id: "rcmd_test" }, "Ran command:\nnpm test\nOutput:\n51 passed");
 
-  assert.match(text, /Codex progress/);
-  assert.match(text, /Task: rcmd_test/);
-  assert.match(text, /Ran command: npm test/);
+  assert.doesNotMatch(text, /Codex progress/);
+  assert.doesNotMatch(text, /Task: rcmd_test/);
+  assert.match(text, /Ran command:\nnpm test/);
+  assert.match(text, /Output:\n51 passed/);
 });

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { LarkNotifier } from "../plugins/codex-lark-remote/src/notifier.mjs";
+import { LarkNotifier, splitForLarkText } from "../plugins/codex-lark-remote/src/notifier.mjs";
 
 test("LarkNotifier.checkAuth reports missing credentials without throwing", async () => {
   const notifier = new LarkNotifier({ appId: "", appSecret: "" });
@@ -48,4 +48,35 @@ test("LarkNotifier.reply returns delivered message id when Feishu accepts the re
 
   assert.equal(result.ok, true);
   assert.equal(result.messageId, "om_reply");
+});
+
+test("LarkNotifier.reply splits long text replies without truncating content", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const sentTexts = [];
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes("/auth/v3/tenant_access_token/internal")) {
+      return Response.json({ code: 0, tenant_access_token: "token", expire: 3600 });
+    }
+    const body = JSON.parse(init.body);
+    sentTexts.push(JSON.parse(body.content).text);
+    return Response.json({ code: 0, data: { message_id: `om_reply_${sentTexts.length}` } });
+  };
+
+  const longText = ["first line", "x".repeat(2900), "last line"].join("\n");
+  const notifier = new LarkNotifier({ appId: "cli_test", appSecret: "secret" });
+  const result = await notifier.reply("om_test", longText);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.totalParts, sentTexts.length);
+  assert.ok(sentTexts.length > 1);
+  assert.equal(sentTexts.join(""), longText);
+  assert.equal(result.messageId, "om_reply_1");
+});
+
+test("splitForLarkText prefers newline boundaries", () => {
+  assert.deepEqual(splitForLarkText("a\nb\nc", 4), ["a\nb\n", "c"]);
 });

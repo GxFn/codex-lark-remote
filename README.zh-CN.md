@@ -6,21 +6,27 @@ English version: [README.md](README.md)
 
 这个仓库是 `gxfn` Codex 插件 marketplace。真正可安装的插件包位于
 [`plugins/codex-lark-remote/`](plugins/codex-lark-remote/)。
-仓库根目录也保留一份完整 README，方便首次安装用户在 GitHub 首页直接了解安装、配置和使用方式。
+仓库根目录保留完整 README，方便首次安装用户在 GitHub 首页直接了解产品。
 
 插件包随附文档：
 
 - [英文插件 README](plugins/codex-lark-remote/README.md)
 - [中文插件 README](plugins/codex-lark-remote/README.zh-CN.md)
 
-## 功能
+## 概览
 
-Codex Lark Remote 让你在一个已经打开的 Codex 对话里启动接管，然后离开 Mac，
-直接从飞书/Lark 继续同一个 Codex 对话。飞书/Lark 消息会作为普通用户消息交给
-Codex，机器人会把最终回答和长任务过程中的关键进度发回飞书/Lark。
+Codex Lark Remote 可以把一个正在进行的 Codex 对话交给飞书/Lark 接管。你可以在
+Mac 上启动接管，然后离开电脑，继续从飞书/Lark 给同一个 Codex 线程发消息。
 
-默认路径刻意保持简单：一个当前 Codex 对话、一个飞书/Lark 机器人、WebSocket
-优先连接。正常使用时不要求用户理解或选择多种模式。
+默认体验刻意收窄：
+
+- 从你想继续的 Codex 对话里启动。
+- 明确同意把当前对话交给本地 bridge。
+- 直接给飞书/Lark 机器人发送普通消息。
+- 在飞书/Lark 收到 Codex 的最终回答和关键进度。
+
+飞书/Lark 消息会作为普通用户消息进入同一个 Codex 对话。插件默认 WebSocket
+优先，正常使用时不要求用户理解或选择多种模式。
 
 ## 安装
 
@@ -37,12 +43,12 @@ main
 留空
 ```
 
-添加市场后，在插件列表里启用 `codex-lark-remote`。发布 tag 之后，可以把“Git
-引用”改成具体版本号，例如 `v0.1.10`。
+添加市场后，在插件列表里启用 `codex-lark-remote`。如果要安装固定版本，可以把
+“Git 引用”改成具体 release tag，例如 `v0.1.12`。
 
 ## 配置飞书/Lark
 
-如果还没有飞书/Lark 应用凭据：
+先创建飞书/Lark 机器人应用：
 
 1. 打开 [飞书开放平台](https://open.feishu.cn/) 或
    [Lark Open Platform](https://open.larksuite.com/)。
@@ -50,9 +56,9 @@ main
 3. 启用机器人能力。
 4. 在“凭证与基础信息”里复制 **App ID** 和 **App Secret**。
 5. 在“事件订阅”里选择长连接/WebSocket，并订阅 `im.message.receive_v1`。
-6. 按平台提示开通消息接收/回复相关权限，然后发布或启用应用。
+6. 按平台提示开通消息接收和回复相关权限，然后发布或启用应用。
 
-在可信的本地 Codex 对话里粘贴必要配置：
+然后把配置粘贴到可信的本地 Codex 对话里：
 
 ```text
 请配置 codex-lark-remote。
@@ -67,12 +73,19 @@ main
 请用这些值调用 codex_lark_configure，然后运行 codex_lark_check_auth。
 ```
 
-插件默认把私密运行配置写到 `~/.codex-lark-remote/config.json`。不要提交这个文件。
+插件默认把私密运行配置写到：
+
+```text
+~/.codex-lark-remote/config.json
+```
+
+不要提交这个文件。
+
 如果还不知道自己的飞书/Lark sender id，可以首次配置时先让 `allowedUsers` 为空，
 从飞书向机器人发送 `/codex whoami`，再把返回的 `senderId` 加进去。
 
-缺少 `appId` 或 `appSecret` 时，插件不会启动本地 bridge，也不会接管当前 Codex
-对话；它只会返回配置指引。
+缺少 `appId` 或 `appSecret` 时，插件不会启动 bridge，也不会接管当前 Codex 对话；
+它只会返回配置指引。
 
 ## 启动接管
 
@@ -82,8 +95,8 @@ main
 启动 codex-lark-remote。
 ```
 
-Codex 会先要求你明确同意，把当前对话和必要路由元数据交给本地插件 bridge。
-确认后，插件会启动 bridge、挂载当前 Codex 线程，并等待飞书/Lark 消息。
+Codex 会先要求你明确同意，把当前对话和必要路由元数据交给本地 bridge。确认后，
+插件会启动 bridge、挂载当前 Codex 线程，并等待飞书/Lark 消息。
 
 启动成功后，直接给飞书/Lark 机器人发送普通消息即可。Codex 会继续同一个对话，
 并把回答发回飞书/Lark。
@@ -96,7 +109,21 @@ Codex 会先要求你明确同意，把当前对话和必要路由元数据交�
 /codex handoff off
 ```
 
-机器人也会识别“断开连接”“停止接管”等自然语言请求。
+机器人也会识别“停止接管”“断开连接”等自然语言请求。
+
+## 输出策略
+
+飞书/Lark 回复会按远程编程场景做精简：
+
+- Codex 最终回答会作为普通文本发回飞书/Lark。
+- 长回答会拆成多条飞书/Lark 消息，而不是直接截断。
+- 进度消息默认不展示内部 task id。
+- 有价值的命令输出会保留换行。
+- `cat`、`nl`、`sed`、`grep`、普通 `rg` 搜索这类源码查看输出会被摘要化，
+  避免大段源码刷屏。
+- 测试结果、错误、warning、git 摘要等高价值输出会保留。
+
+这样飞书/Lark 里看到的是 Codex 做了什么、改了什么、哪里需要注意，而不是整屏源码。
 
 ## 排查
 
@@ -110,6 +137,8 @@ Codex 重新启动接管。
 
 如果同一条飞书/Lark 消息收到两次回复，通常是旧 bridge 进程或重复安装还在运行。
 先停止旧进程或重复插件，再重新启动。
+
+如果 Codex 把文件写进插件缓存目录，请从目标项目所在的 Codex 对话里启动接管。
 
 ## 本地开发
 

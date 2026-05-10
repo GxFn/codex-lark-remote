@@ -107,8 +107,6 @@ export function defaultConfig(dataDir = resolveDataDir()) {
       notifyQueued: false,
       notifyStarted: false,
       notifyProgress: true,
-      progressIntervalMs: 2500,
-      maxProgressMessages: 5,
     },
     policy: {
       requireReviewForCommit: true,
