@@ -1,0 +1,20 @@
+{
+  "name": "codex-lark-remote",
+  "interface": {
+    "displayName": "Codex Lark Remote"
+  },
+  "plugins": [
+    {
+      "name": "codex-lark-remote",
+      "source": {
+        "source": "local",
+        "path": "."
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

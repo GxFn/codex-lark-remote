@@ -11,6 +11,26 @@ This plugin keeps the first version intentionally small:
 
 ## Quick Start
 
+### Local Codex Install
+
+This repository is a standalone Codex plugin root. To install it locally, add the
+repo marketplace to `~/.codex/config.toml` and enable
+`codex-lark-remote@codex-lark-remote`:
+
+```toml
+[marketplaces.codex-lark-remote]
+source_type = "local"
+source = "/absolute/path/to/codex-lark-remote"
+
+[plugins."codex-lark-remote@codex-lark-remote"]
+enabled = true
+```
+
+After Codex reloads plugins, the MCP tools are available in new conversations.
+The installed plugin reads runtime data and private credentials from
+`~/.codex-lark-remote/config.json` unless a tool call passes `dataDir` or
+`configPath`.
+
 1. Copy the example config:
 
 ```bash
