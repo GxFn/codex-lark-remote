@@ -110,6 +110,7 @@ export class CodexCliRunner {
 
     return runProcess(runner.codexPath || "codex", args, {
       timeoutMs: Number(runner.timeoutMs || 30 * 60 * 1000),
+      cwd: command.worktreePath,
     });
   }
 
@@ -163,6 +164,7 @@ export class CodexCliRunner {
     });
     const result = await runProcess(runner.codexPath || "codex", args, {
       timeoutMs: Number(runner.timeoutMs || 30 * 60 * 1000),
+      cwd: command.projectRoot || undefined,
     });
     try {
       const finalFromFile = (await fs.readFile(outputFile, "utf8")).trim();
@@ -237,9 +239,9 @@ function normalizeDelivery(delivery) {
   return delivery;
 }
 
-async function runProcess(command, args, { timeoutMs }) {
+async function runProcess(command, args, { timeoutMs, cwd }) {
   return new Promise((resolve) => {
-    const child = execFile(command, args, { timeout: timeoutMs, maxBuffer: 1024 * 1024 * 8 }, (error, stdout, stderr) => {
+    const child = execFile(command, args, { timeout: timeoutMs, maxBuffer: 1024 * 1024 * 8, cwd }, (error, stdout, stderr) => {
       const exitCode = typeof error?.code === "number" ? error.code : error ? 1 : 0;
       resolve({
         exitCode,

@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
-import { bridgeLogFilePath, loadConfig, stateFilePath } from "./config.mjs";
+import { bridgeLogFilePath, loadConfig, readPackageVersion, stateFilePath } from "./config.mjs";
 import { formatMissingLarkCredentials, hasLarkAppCredentials } from "./setup-guide.mjs";
 
 export async function readBridgeState(options = {}) {
@@ -16,19 +16,30 @@ export async function readBridgeState(options = {}) {
 
 export async function bridgeStatus(options = {}) {
   const config = await loadConfig(options);
+  const expectedVersion = await readPackageVersion();
   const state = await readBridgeState(options);
   if (!state?.url || !state?.token) {
     return { running: false, message: "Bridge is not running", config };
   }
   try {
     const data = await bridgeFetch(state, "/bridge/status");
+    const runningVersion = data.data?.version || state.version || "";
+    if (runningVersion !== expectedVersion) {
+      return {
+        running: false,
+        restartRequired: true,
+        state,
+        config,
+        ...data,
+        message: runningVersion
+          ? `Bridge version ${runningVersion} does not match plugin version ${expectedVersion}`
+          : `Bridge version is unknown; plugin version is ${expectedVersion}`,
+      };
+    }
     return { running: true, state, config, ...data };
   } catch (error) {
-    if (state.pid && !isProcessAlive(state.pid)) {
-      await fs.rm(stateFilePath(config.dataDir), { force: true }).catch(() => {});
-      return { running: false, config, message: `Removed stale bridge state for exited process ${state.pid}` };
-    }
-    return { running: false, state, config, message: error.message };
+    await removeBridgeState(config);
+    return { running: false, config, message: `Removed stale bridge state: ${error.message}` };
   }
 }
 
@@ -45,6 +56,9 @@ export async function startBridgeProcess(options = {}) {
 
   const current = await bridgeStatus(options);
   if (current.running) return current;
+  if (current.restartRequired && current.state?.url) {
+    await stopBridgeProcess(options).catch(() => {});
+  }
 
   const bridgeUrl = new URL("../bin/codex-lark-bridge.mjs", import.meta.url);
   const logPath = bridgeLogFilePath(config.dataDir);
@@ -71,11 +85,13 @@ export async function startBridgeProcess(options = {}) {
 }
 
 export async function stopBridgeProcess(options = {}) {
+  const config = await loadConfig(options);
   const state = await readBridgeState(options);
   if (!state?.url || !state?.token) return { success: true, message: "Bridge is not running" };
   try {
     const result = await bridgeFetch(state, "/bridge/stop", { method: "POST" });
     const stopped = await waitForProcessExit(state.pid);
+    await removeBridgeState(config);
     if (stopped) return { ...result, stopped: true };
     if (state.pid) {
       process.kill(state.pid, "SIGTERM");
@@ -83,15 +99,8 @@ export async function stopBridgeProcess(options = {}) {
     }
     return { ...result, stopped: false };
   } catch (error) {
-    if (state.pid) {
-      try {
-        process.kill(state.pid, "SIGTERM");
-        return { success: true, message: "Bridge process signalled", stopped: await waitForProcessExit(state.pid) };
-      } catch {
-        return { success: false, error: error.message };
-      }
-    }
-    return { success: false, error: error.message };
+    await removeBridgeState(config);
+    return { success: true, message: `Removed stale bridge state: ${error.message}` };
   }
 }
 
@@ -112,6 +121,10 @@ function isProcessAlive(pid) {
   } catch {
     return false;
   }
+}
+
+async function removeBridgeState(config) {
+  await fs.rm(stateFilePath(config.dataDir), { force: true }).catch(() => {});
 }
 
 export async function bridgeFetch(state, route, options = {}) {

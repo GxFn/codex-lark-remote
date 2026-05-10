@@ -1,7 +1,7 @@
 import http from "node:http";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
-import { DEFAULT_BRIDGE_HOST, ensureDir, loadConfig, nowIso, stateFilePath } from "./config.mjs";
+import { DEFAULT_BRIDGE_HOST, ensureDir, loadConfig, nowIso, readPackageVersion, stateFilePath } from "./config.mjs";
 import { runApprovedAction } from "./actions.mjs";
 import { decryptLarkPayload, verifyLarkSignature } from "./crypto.mjs";
 import { activateHandoff, clearHandoff, readHandoff } from "./handoff.mjs";
@@ -20,6 +20,7 @@ export async function startBridge(options = {}) {
   const notifier = new LarkNotifier(config.lark || {});
   const runner = new CodexCliRunner({ queue, config, notifier });
   const bridge = { config, queue, notifier, runner, token: null, server: null, larkWs: null, seenMessageIds: new Map() };
+  const version = await readPackageVersion();
   const token = options.token || process.env.CODEX_LARK_BRIDGE_TOKEN || crypto.randomBytes(24).toString("hex");
   bridge.token = token;
   const host = options.host || DEFAULT_BRIDGE_HOST;
@@ -42,7 +43,7 @@ export async function startBridge(options = {}) {
   await new Promise((resolve) => server.listen(port, host, resolve));
   const address = server.address();
   const url = `http://${host}:${address.port}`;
-  await writeState(config.dataDir, { pid: process.pid, host, port: address.port, url, token, startedAt: nowIso() });
+  await writeState(config.dataDir, { pid: process.pid, version, host, port: address.port, url, token, startedAt: nowIso() });
   await bridge.larkWs.start();
 
   if (config.runner?.workerEnabled !== false) {
@@ -70,6 +71,7 @@ async function route(ctx) {
       success: true,
       data: {
         url: publicUrl(ctx.config),
+        version: await readPackageVersion(),
         counts,
         workerBusy: ctx.runner.busy,
         handoff: await readHandoff({ dataDir: ctx.config.dataDir }),
