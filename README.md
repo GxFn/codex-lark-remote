@@ -27,9 +27,14 @@ export CODEX_LARK_VERIFICATION_TOKEN=xxx
 export CODEX_LARK_ALLOWED_USERS=user_id_1,user_id_2
 ```
 
+You can also put `lark.appId`, `lark.appSecret`, and `lark.verificationToken`
+in `~/.codex-lark-remote/config.json` or another config path passed to the MCP
+tools. Keep that config out of git.
+
 3. Start the bridge through Codex MCP:
 
 ```text
+codex_lark_check_auth
 codex_lark_start
 ```
 

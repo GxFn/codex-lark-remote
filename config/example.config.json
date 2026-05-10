@@ -1,4 +1,10 @@
 {
+  "lark": {
+    "appId": "cli_xxx",
+    "appSecret": "xxx",
+    "verificationToken": "",
+    "encryptKey": ""
+  },
   "defaultRepo": "example",
   "repos": {
     "example": {
@@ -21,4 +27,3 @@
     "allowNetwork": false
   }
 }
-

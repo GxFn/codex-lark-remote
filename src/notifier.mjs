@@ -6,6 +6,19 @@ export class LarkNotifier {
     this.tenantTokenExpiresAt = 0;
   }
 
+  async checkAuth() {
+    if (!this.appId || !this.appSecret) {
+      return { ok: false, hasCredentials: false, message: "Missing Lark appId/appSecret" };
+    }
+    const token = await this.#tenantToken();
+    return {
+      ok: Boolean(token),
+      hasCredentials: true,
+      appIdPrefix: `${this.appId.slice(0, 8)}...`,
+      message: token ? "Tenant access token acquired" : "Tenant access token request failed",
+    };
+  }
+
   async reply(messageId, text) {
     if (!messageId || !this.appId || !this.appSecret) return false;
     const token = await this.#tenantToken();
@@ -47,4 +60,3 @@ export function truncateForLark(text, max = 3000) {
   if (value.length <= max) return value;
   return `${value.slice(0, max)}\n\n... truncated`;
 }
-

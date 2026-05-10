@@ -70,6 +70,12 @@ export async function loadConfig(options = {}) {
 export function defaultConfig(dataDir = resolveDataDir()) {
   return {
     dataDir,
+    lark: {
+      appId: "",
+      appSecret: "",
+      verificationToken: "",
+      encryptKey: "",
+    },
     defaultRepo: "",
     repos: {},
     runner: {
@@ -94,6 +100,7 @@ function mergeConfig(base, override) {
   return {
     ...base,
     ...override,
+    lark: { ...(base.lark || {}), ...(override.lark || {}) },
     repos: { ...(base.repos || {}), ...(override.repos || {}) },
     runner: { ...(base.runner || {}), ...(override.runner || {}) },
     policy: { ...(base.policy || {}), ...(override.policy || {}) },
@@ -126,4 +133,3 @@ export function parseCsv(value) {
     .map((item) => item.trim())
     .filter(Boolean);
 }
-

@@ -12,7 +12,7 @@ import { CodexCliRunner } from "./runner.mjs";
 export async function startBridge(options = {}) {
   const config = await loadConfig({ dataDir: options.dataDir, configPath: options.configPath });
   const queue = new RemoteCommandQueue({ dataDir: config.dataDir });
-  const notifier = new LarkNotifier();
+  const notifier = new LarkNotifier(config.lark || {});
   const runner = new CodexCliRunner({ queue, config, notifier });
   const token = options.token || process.env.CODEX_LARK_BRIDGE_TOKEN || crypto.randomBytes(24).toString("hex");
   const host = options.host || DEFAULT_BRIDGE_HOST;
@@ -117,7 +117,7 @@ async function route(ctx) {
 }
 
 async function handleLarkEvent(ctx, body) {
-  const token = process.env.CODEX_LARK_VERIFICATION_TOKEN || "";
+  const token = ctx.config.lark?.verificationToken || process.env.CODEX_LARK_VERIFICATION_TOKEN || "";
   const headerToken = body?.header?.token || body?.token || "";
   if (token && headerToken !== token) {
     return sendJson(ctx.res, 403, { success: false, error: "Invalid verification token" });

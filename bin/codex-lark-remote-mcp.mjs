@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import readline from "node:readline";
-import { readPackageVersion } from "../src/config.mjs";
+import { loadConfig, readPackageVersion } from "../src/config.mjs";
+import { LarkNotifier } from "../src/notifier.mjs";
 import { bridgeFetch, bridgeStatus, readBridgeState, startBridgeProcess, stopBridgeProcess } from "../src/supervisor.mjs";
 
 const tools = [
@@ -12,6 +13,17 @@ const tools = [
       properties: {
         dataDir: { type: "string", description: "Optional data directory override." },
         configPath: { type: "string", description: "Optional config file path override." },
+      },
+    },
+  },
+  {
+    name: "codex_lark_check_auth",
+    description: "Check whether configured Feishu/Lark app credentials can acquire a tenant access token. Does not print secrets.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dataDir: { type: "string" },
+        configPath: { type: "string" },
       },
     },
   },
@@ -158,6 +170,11 @@ async function callTool(name, args) {
   }
   if (name === "codex_lark_status") {
     return textContent(formatStatus(await bridgeStatus(args)));
+  }
+  if (name === "codex_lark_check_auth") {
+    const config = await loadConfig(args);
+    const notifier = new LarkNotifier(config.lark || {});
+    return textContent(formatJson(await notifier.checkAuth()));
   }
 
   const state = await readBridgeState(args);
