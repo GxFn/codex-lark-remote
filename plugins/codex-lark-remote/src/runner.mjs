@@ -104,18 +104,7 @@ export class CodexCliRunner {
 
   async #runCodex(command, prompt) {
     const runner = this.config.runner || {};
-    const args = [
-      "exec",
-      "--json",
-      "--sandbox",
-      runner.sandbox || "workspace-write",
-      "--ask-for-approval",
-      runner.askForApproval || "never",
-      "-C",
-      command.worktreePath,
-    ];
-    if (runner.model) args.push("-m", runner.model);
-    args.push(prompt);
+    const args = buildCodexExecArgs({ runner, worktreePath: command.worktreePath, prompt });
 
     return runProcess(runner.codexPath || "codex", args, {
       timeoutMs: Number(runner.timeoutMs || 30 * 60 * 1000),
@@ -129,6 +118,13 @@ export class CodexCliRunner {
       // Notification failure should not fail the task.
     }
   }
+}
+
+export function buildCodexExecArgs({ runner = {}, worktreePath, prompt }) {
+  const args = ["exec", "--json", "--sandbox", runner.sandbox || "workspace-write", "-C", worktreePath];
+  if (runner.model) args.push("-m", runner.model);
+  args.push(prompt);
+  return args;
 }
 
 async function runProcess(command, args, { timeoutMs }) {
@@ -157,13 +153,16 @@ async function gitMaybe(args) {
   }
 }
 
-function extractFinalMessage(stdout) {
+export function extractFinalMessage(stdout) {
   let final = "";
   for (const line of String(stdout || "").split(/\r?\n/)) {
     if (!line.trim()) continue;
     try {
       const event = JSON.parse(line);
-      const text = event.message || event.text || event.content || event.delta;
+      const text = event.item?.text || event.message || event.text || event.content || event.delta;
+      if (event.type === "item.completed" && event.item?.type === "agent_message" && typeof text === "string") {
+        final = text.trim();
+      }
       if (typeof text === "string" && text.trim()) final = text.trim();
       if (event.type && /final|assistant|message/i.test(event.type) && typeof text === "string") {
         final = text.trim();
@@ -179,4 +178,3 @@ function tail(value, max = 3000) {
   const text = String(value || "");
   return text.length > max ? text.slice(-max) : text;
 }
-
