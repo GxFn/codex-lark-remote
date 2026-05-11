@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { processLarkEvent, startBridge } from "../plugins/codex-lark-remote/src/bridge-server.mjs";
-import { stateFilePath } from "../plugins/codex-lark-remote/src/config.mjs";
+import { configFilePath, stateFilePath } from "../plugins/codex-lark-remote/src/config.mjs";
 import { activateHandoff } from "../plugins/codex-lark-remote/src/handoff.mjs";
 
 test("startBridge refuses to run before Feishu app credentials are configured", async () => {
@@ -119,6 +119,26 @@ test("processLarkEvent routes normal messages to current-thread handoff when act
   assert.equal(enqueued[0].prompt, "[demo] update README from Feishu");
   assert.equal(enqueued[0].codexSessionId, "019e0ffb-52e9-7ee3-bb87-42019b58eaa2");
   assert.deepEqual(replies, []);
+});
+
+test("processLarkEvent updates command display preference", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-commands-"));
+  const replies = [];
+  const ctx = {
+    config: {
+      dataDir,
+      lark: { allowedUsers: ["ou_allowed"] },
+      handoff: { showCommands: false },
+    },
+    queue: { findByMessageId: async () => null },
+    notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+  };
+
+  await processLarkEvent(ctx, textEvent({ text: "/codex commands on", userId: "ou_allowed" }));
+
+  assert.equal(ctx.config.handoff.showCommands, true);
+  assert.match(replies[0].text, /Command display: on/);
+  assert.equal(JSON.parse(await fs.readFile(configFilePath(dataDir), "utf8")).handoff.showCommands, true);
 });
 
 test("processLarkEvent treats shell-looking text as chat input during handoff", async () => {

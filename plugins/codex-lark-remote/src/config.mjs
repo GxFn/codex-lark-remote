@@ -107,6 +107,7 @@ export function defaultConfig(dataDir = resolveDataDir()) {
       notifyQueued: false,
       notifyStarted: false,
       notifyProgress: true,
+      showCommands: false,
       keepAwake: true,
       keepAwakeCommand: "caffeinate",
       keepAwakeArgs: ["-dimsu"],

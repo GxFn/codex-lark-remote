@@ -33,7 +33,7 @@ leave empty
 ```
 
 Enable `codex-lark-remote` from the plugin list. For a pinned install, set
-**Git ref** to a release tag such as `v0.1.15`.
+**Git ref** to a release tag such as `v0.1.16`.
 
 ## Configure Feishu/Lark
 
@@ -100,6 +100,8 @@ Useful commands:
 ```text
 /codex whoami
 /codex status
+/codex commands on
+/codex commands off
 /codex handoff off
 ```
 
@@ -112,10 +114,13 @@ Remote replies are optimized for coding on a phone or in chat:
 - No `Codex progress` title is added to progress messages.
 - Internal task ids are not shown in normal progress replies.
 - Long replies are split into multiple Feishu/Lark messages.
-- Commands are shown for audit, and potentially risky commands include a
-  `Warning:` line.
-- Command `Output:` is limited to one high-signal line with line/character
-  counts when more content was omitted.
+- Normal shell commands and `Output:` are hidden by default.
+- Use `/codex commands on` or say "show commands" to enable command display.
+  Use `/codex commands off` to hide them again.
+- Potentially risky commands are always shown with a `Warning:` line, even when
+  normal command display is off.
+- When command display is on, command `Output:` is still limited to one
+  high-signal line with line/character counts when more content was omitted.
 - Source/code inspection output is summarized when it comes from commands such
   as `cat`, `nl`, `sed`, `grep`, or ordinary `rg` searches.
 - Secrets in command text are redacted before they are sent to Feishu/Lark.

@@ -57,3 +57,8 @@ the user asks for diagnostics or plugin development debugging.
 When a Feishu/Lark turn is completed, answer in the same concise style you would
 use in Codex chat. Include changed files and validation only when they matter to
 the user's request.
+
+Normal shell commands and command output are hidden from Feishu/Lark by default.
+If the user asks to inspect command details, tell them to send
+`/codex commands on`. Risky commands are still shown with a warning even when
+normal command display is off.

@@ -101,6 +101,11 @@ function parseManagementCommand(text) {
   if (!action || action === "help") return { kind: "help" };
   if (action === "whoami") return { kind: "whoami" };
   if (action === "status") return id ? { kind: "task_status", id } : { kind: "status" };
+  if (["command", "commands", "show-commands"].includes(action)) {
+    if (["on", "enable", "enabled", "show", "true"].includes(id)) return { kind: "command_visibility", enabled: true };
+    if (["off", "disable", "disabled", "hide", "false"].includes(id)) return { kind: "command_visibility", enabled: false };
+    return { kind: "command_visibility" };
+  }
   if (action === "handoff") {
     if (id === "off" || id === "stop" || id === "disable") return { kind: "handoff_disable" };
     return { kind: "handoff_status" };
@@ -125,6 +130,19 @@ function parseNaturalManagementCommand(text) {
   }
   if (/^(接管状态|查看接管|看下接管|当前接管|是否接管|还在接管吗|handoff status)[。.?？!！]?$/.test(normalized)) {
     return { kind: "handoff_status" };
+  }
+
+  if (/^(命令显示状态|查看命令显示|commands status|command status|show commands status)[。.?？!！]?$/.test(normalized)) {
+    return { kind: "command_visibility" };
+  }
+  if (/^(打开|开启|启用|显示|展示)(命令|命令显示|command display|commands|show commands)吧?[。.!！]?$/.test(normalized)
+    || /^(commands on|command on|show commands|show commands on|enable commands)[。.!！]?$/.test(normalized)) {
+    return { kind: "command_visibility", enabled: true };
+  }
+  if (/^(关闭|关掉|停止|禁用|隐藏)(命令|命令显示|command display|commands|show commands)吧?[。.!！]?$/.test(normalized)
+    || /^(不要|别)(显示|展示)?(命令|命令显示)了?[。.!！]?$/.test(normalized)
+    || /^(commands off|command off|hide commands|disable commands)[。.!！]?$/.test(normalized)) {
+    return { kind: "command_visibility", enabled: false };
   }
 
   if (/^断开(连接|接管)?吧?[。.!！]?$/.test(normalized)) return { kind: "handoff_disable" };

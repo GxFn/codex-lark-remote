@@ -4,6 +4,7 @@ import { formatBridgeStatus, formatFinal, formatHelp, formatProgress, formatTask
 
 test("formatHelp includes whoami command", () => {
   assert.match(formatHelp(), /\/codex whoami/);
+  assert.match(formatHelp(), /\/codex commands on\|off/);
 });
 
 test("formatWhoami returns the sender id needed for allowlist setup", () => {
@@ -24,7 +25,7 @@ test("formatWhoami returns the sender id needed for allowlist setup", () => {
 
 test("formatBridgeStatus includes Mac keep-awake state", () => {
   const text = formatBridgeStatus({
-    config: { lark: { transport: "websocket" } },
+    config: { lark: { transport: "websocket" }, handoff: { showCommands: false } },
     counts: {},
     workerBusy: false,
     url: "http://127.0.0.1:1234",
@@ -34,6 +35,7 @@ test("formatBridgeStatus includes Mac keep-awake state", () => {
   });
 
   assert.match(text, /Mac keep-awake: active pid=1234/);
+  assert.match(text, /Command display: off \(risky only\)/);
 });
 
 

@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import { DEFAULT_BRIDGE_HOST, ensureDir, loadConfig, nowIso, readPackageVersion, stateFilePath } from "./config.mjs";
 import { runApprovedAction } from "./actions.mjs";
 import { decryptLarkPayload, verifyLarkSignature } from "./crypto.mjs";
+import { updateRuntimeConfig } from "./config-writer.mjs";
 import { activateHandoff, clearHandoff, readHandoff } from "./handoff.mjs";
 import { KeepAwakeController } from "./keep-awake.mjs";
 import { LarkWebSocketReceiver } from "./lark-ws.mjs";
@@ -256,6 +257,9 @@ async function handleChatAction(ctx, event, action) {
   if (action.kind === "handoff_status") {
     return ctx.notifier.reply(event.messageId, formatHandoffStatus(handoff));
   }
+  if (action.kind === "command_visibility") {
+    return handleCommandVisibility(ctx, event, action);
+  }
   if (action.kind === "handoff_disable") {
     const handoffState = await clearHandoff({ dataDir: ctx.config.dataDir });
     ctx.keepAwake?.stop();
@@ -314,6 +318,19 @@ async function handleChatAction(ctx, event, action) {
   Promise.resolve(ctx.runner.processAll()).catch(() => {});
 }
 
+async function handleCommandVisibility(ctx, event, action) {
+  if (typeof action.enabled !== "boolean") {
+    return ctx.notifier.reply(event.messageId, formatCommandVisibility(ctx.config));
+  }
+  await updateRuntimeConfig({
+    dataDir: ctx.config.dataDir,
+    configPath: ctx.config.configPath,
+    handoff: { showCommands: action.enabled },
+  });
+  ctx.config.handoff = { ...(ctx.config.handoff || {}), showCommands: action.enabled };
+  return ctx.notifier.reply(event.messageId, formatCommandVisibility(ctx.config));
+}
+
 async function enqueueTask(ctx, input) {
   const repo = ctx.config.repos?.[input.repoKey];
   if (!repo?.path) throw new Error(`Repo is not configured: ${input.repoKey}`);
@@ -363,6 +380,18 @@ function formatHandoffStatus(handoff) {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function formatCommandVisibility(config) {
+  const enabled = config.handoff?.showCommands === true;
+  return [
+    `Command display: ${enabled ? "on" : "off"}`,
+    enabled
+      ? "Normal commands and one-line output summaries will be sent to Feishu/Lark."
+      : "Normal commands and Output are hidden. Risky commands are still shown with a warning.",
+    "",
+    "Use /codex commands on or /codex commands off.",
+  ].join("\n");
 }
 
 function isAuthorized(req, token) {

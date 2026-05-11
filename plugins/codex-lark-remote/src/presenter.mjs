@@ -10,6 +10,7 @@ export function formatHelp() {
     "Task controls: 查看任务 rcmd_..., 看改动 rcmd_..., 取消任务 rcmd_..., 批准提交 rcmd_...",
     "/codex whoami",
     "/codex status",
+    "/codex commands on|off",
     "/codex handoff off",
   ].join("\n");
 }
@@ -36,6 +37,7 @@ export function formatBridgeStatus({ config, counts, workerBusy, url, larkWs, ha
     `Bridge: ${url || "running"}`,
     `Feishu/Lark: ${formatLarkTransport({ transport, larkWs })}`,
     `Conversation: ${formatHandoffState(handoff)}`,
+    `Command display: ${formatCommandDisplay(config.handoff?.showCommands)}`,
     `Mac keep-awake: ${formatKeepAwake(keepAwake)}`,
     `Pending replies: ${formatCounts(counts)}`,
     `Codex worker: ${workerBusy ? "busy" : "idle"}`,
@@ -147,6 +149,10 @@ function formatHandoffState(handoff) {
   const thread = handoff.threadId ? handoff.threadId.slice(0, 8) : "unknown";
   const name = handoff.name ? ` ${handoff.name}` : "";
   return `attached ${thread}${name}`;
+}
+
+function formatCommandDisplay(showCommands) {
+  return showCommands === true ? "on" : "off (risky only)";
 }
 
 function formatKeepAwake(keepAwake) {

@@ -111,6 +111,7 @@ export class CodexCliRunner {
     return runProcess(runner.codexPath || "codex", args, {
       timeoutMs: Number(runner.timeoutMs || 30 * 60 * 1000),
       cwd: command.worktreePath,
+      eventOptions: { showCommands: this.config.handoff?.showCommands === true },
     });
   }
 
@@ -179,6 +180,7 @@ export class CodexCliRunner {
         timeoutMs: Number(runner.timeoutMs || 30 * 60 * 1000),
         cwd: command.projectRoot || undefined,
         onEvent,
+        eventOptions: { showCommands: this.config.handoff?.showCommands === true },
       });
     } finally {
       await sessionWatcher.stop();
@@ -256,7 +258,7 @@ function normalizeDelivery(delivery) {
   return delivery;
 }
 
-async function runProcess(command, args, { timeoutMs, cwd, onEvent }) {
+async function runProcess(command, args, { timeoutMs, cwd, onEvent, eventOptions = {} }) {
   return new Promise((resolve) => {
     const child = spawn(command, args, { cwd, stdio: ["pipe", "pipe", "pipe"] });
     const progress = [];
@@ -297,7 +299,7 @@ async function runProcess(command, args, { timeoutMs, cwd, onEvent }) {
       if (!line.trim()) return;
       try {
         const event = JSON.parse(line);
-        const summary = summarizeCodexEvent(event);
+        const summary = summarizeCodexEvent(event, eventOptions);
         if (summary && progress[progress.length - 1] !== summary) progress.push(summary);
         if (onEvent && summary) {
           progressChain = progressChain
@@ -362,12 +364,12 @@ export function extractFinalMessage(stdout) {
   return final;
 }
 
-export function extractProgressSummary(stdout) {
+export function extractProgressSummary(stdout, options = {}) {
   const progress = [];
   for (const line of String(stdout || "").split(/\r?\n/)) {
     if (!line.trim()) continue;
     try {
-      const summary = summarizeCodexEvent(JSON.parse(line));
+      const summary = summarizeCodexEvent(JSON.parse(line), options);
       if (summary && progress[progress.length - 1] !== summary) progress.push(summary);
     } catch {
       // Ignore non-JSON output.
@@ -376,7 +378,7 @@ export function extractProgressSummary(stdout) {
   return progress.join("\n");
 }
 
-export function summarizeCodexEvent(event) {
+export function summarizeCodexEvent(event, { showCommands = false } = {}) {
   const type = String(event?.type || event?.method || "");
   const params = event?.params || {};
   const item = event?.item || params.item || event?.payload || params;
@@ -399,8 +401,9 @@ export function summarizeCodexEvent(event) {
   const command = commandFromEvent(event, item);
   if (command) {
     const output = item.aggregated_output || item.output || item.stdout || item.stderr || event.output || "";
-    const summarizedOutput = summarizeCommandOutput(command, output);
     const commandSummary = summarizeCommand(command);
+    if (!showCommands && !commandSummary.warning) return "";
+    const summarizedOutput = showCommands ? summarizeCommandOutput(command, output) : "";
     return [
       `Ran command:\n${commandSummary.command}`,
       commandSummary.warning ? `Warning: ${commandSummary.warning}` : "",

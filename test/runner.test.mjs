@@ -134,72 +134,97 @@ test("extractFinalMessage reads desktop session style final messages", () => {
 test("summarizeCodexEvent reports useful background progress", () => {
   assert.equal(
     summarizeCodexEvent({ type: "item.completed", item: { type: "command_execution", command: "npm test", aggregated_output: "51 passed" } }),
+    "",
+  );
+  assert.equal(
+    summarizeCodexEvent(
+      { type: "item.completed", item: { type: "command_execution", command: "npm test", aggregated_output: "51 passed" } },
+      { showCommands: true },
+    ),
     "Ran command:\nnpm test\nOutput:\n51 passed",
   );
   assert.match(
-    summarizeCodexEvent({
-      type: "item.completed",
-      item: {
-        type: "command_execution",
-        command: "nl -ba file.swift",
-        aggregated_output: "1 import Foundation\n2 let value = true",
+    summarizeCodexEvent(
+      {
+        type: "item.completed",
+        item: {
+          type: "command_execution",
+          command: "nl -ba file.swift",
+          aggregated_output: "1 import Foundation\n2 let value = true",
+        },
       },
-    }),
+      { showCommands: true },
+    ),
     /Ran command:\nnl -ba file\.swift\nOutput:\n\[omitted source\/code output: 2 lines, \d+ chars\]/,
   );
   assert.match(
-    summarizeCodexEvent({
-      type: "item.completed",
-      item: {
-        type: "command_execution",
-        command: "sed -n '1,260p' Sources/App.swift",
-        aggregated_output: "import Foundation\nfunc run() {}\nlet value = true",
+    summarizeCodexEvent(
+      {
+        type: "item.completed",
+        item: {
+          type: "command_execution",
+          command: "sed -n '1,260p' Sources/App.swift",
+          aggregated_output: "import Foundation\nfunc run() {}\nlet value = true",
+        },
       },
-    }),
+      { showCommands: true },
+    ),
     /Ran command:\nsed -n '1,260p' Sources\/App\.swift\nOutput:\n\[omitted source\/code output: 3 lines, \d+ chars\]/,
   );
   assert.match(
-    summarizeCodexEvent({
-      type: "item.completed",
-      item: {
-        type: "command_execution",
-        command: "npm test",
-        aggregated_output: "TAP version 13\nok 1 - works\n1..1\n# pass 1",
+    summarizeCodexEvent(
+      {
+        type: "item.completed",
+        item: {
+          type: "command_execution",
+          command: "npm test",
+          aggregated_output: "TAP version 13\nok 1 - works\n1..1\n# pass 1",
+        },
       },
-    }),
+      { showCommands: true },
+    ),
     /Ran command:\nnpm test\nOutput:\nok 1 - works \[4 lines, \d+ chars\]/,
   );
   assert.match(
-    summarizeCodexEvent({
-      type: "item.completed",
-      item: {
-        type: "command_execution",
-        command: "rg -n CookieProvider Sources",
-        aggregated_output: "Sources/App.swift:12:let cookieProvider = CookieProvider()",
+    summarizeCodexEvent(
+      {
+        type: "item.completed",
+        item: {
+          type: "command_execution",
+          command: "rg -n CookieProvider Sources",
+          aggregated_output: "Sources/App.swift:12:let cookieProvider = CookieProvider()",
+        },
       },
-    }),
+      { showCommands: true },
+    ),
     /Ran command:\nrg -n CookieProvider Sources\nOutput:\n\[omitted source\/code output: 1 lines, \d+ chars\]/,
   );
   assert.match(
-    summarizeCodexEvent({
-      type: "item.completed",
-      item: {
-        type: "command_execution",
-        command: "rg --files Sources",
-        aggregated_output: "Sources/App.swift\nSources/Config.swift",
+    summarizeCodexEvent(
+      {
+        type: "item.completed",
+        item: {
+          type: "command_execution",
+          command: "rg --files Sources",
+          aggregated_output: "Sources/App.swift\nSources/Config.swift",
+        },
       },
-    }),
+      { showCommands: true },
+    ),
     /Ran command:\nrg --files Sources\nOutput:\nSources\/App\.swift \[2 lines, \d+ chars\]/,
   );
   assert.doesNotMatch(
-    summarizeCodexEvent({
-      type: "item.completed",
-      item: {
-        type: "command_execution",
-        command: "npm test",
-        aggregated_output: "line one\nline two\nline three",
+    summarizeCodexEvent(
+      {
+        type: "item.completed",
+        item: {
+          type: "command_execution",
+          command: "npm test",
+          aggregated_output: "line one\nline two\nline three",
+        },
       },
-    }),
+      { showCommands: true },
+    ),
     /Output:\n.*\n.+/s,
   );
   assert.match(
@@ -213,6 +238,17 @@ test("summarizeCodexEvent reports useful background progress", () => {
     }),
     /Warning: potentially risky command: file removal/,
   );
+  assert.doesNotMatch(
+    summarizeCodexEvent({
+      type: "item.completed",
+      item: {
+        type: "command_execution",
+        command: "/bin/zsh -lc 'rm -rf build'",
+        aggregated_output: "removed many files",
+      },
+    }),
+    /Output:/,
+  );
   assert.match(
     summarizeCodexEvent({
       type: "item.completed",
@@ -224,14 +260,17 @@ test("summarizeCodexEvent reports useful background progress", () => {
     }),
     /Warning: potentially risky command: downloaded script execution/,
   );
-  const redactedCommand = summarizeCodexEvent({
-    type: "item.completed",
-    item: {
-      type: "command_execution",
-      command: "OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz123456 node script.mjs --token ghp_abcdefghijklmnopqrstuvwxyz && echo sk-proj-abcdefghijklmnopqrstuvwxyz123456",
-      aggregated_output: "done",
+  const redactedCommand = summarizeCodexEvent(
+    {
+      type: "item.completed",
+      item: {
+        type: "command_execution",
+        command: "OPENAI_API_KEY=sk-proj-abcdefghijklmnopqrstuvwxyz123456 node script.mjs --token ghp_abcdefghijklmnopqrstuvwxyz && echo sk-proj-abcdefghijklmnopqrstuvwxyz123456",
+        aggregated_output: "done",
+      },
     },
-  });
+    { showCommands: true },
+  );
   assert.match(redactedCommand, /\[redacted\]/);
   assert.match(redactedCommand, /\[redacted-secret\]/);
   assert.doesNotMatch(redactedCommand, /sk-proj-abcdefghijklmnopqrstuvwxyz123456/);
@@ -323,6 +362,13 @@ test("extractProgressSummary collects non-chat Codex JSONL events", () => {
 
   assert.equal(
     extractProgressSummary(stdout),
+    [
+      "Started working on the Feishu/Lark message.",
+      "Codex turn completed. Tokens: input=10 output=20",
+    ].join("\n"),
+  );
+  assert.equal(
+    extractProgressSummary(stdout, { showCommands: true }),
     [
       "Started working on the Feishu/Lark message.",
       "Ran command:\nnpm test\nOutput:\nok",

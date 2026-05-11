@@ -30,7 +30,7 @@ main
 ```
 
 添加后，在插件列表里启用 `codex-lark-remote`。如果要固定版本，可以把“Git 引用”
-改成具体 release tag，例如 `v0.1.15`。
+改成具体 release tag，例如 `v0.1.16`。
 
 ## 配置飞书/Lark
 
@@ -91,6 +91,8 @@ Codex 必须先请求你的明确同意，才会启动接管。确认后，插�
 ```text
 /codex whoami
 /codex status
+/codex commands on
+/codex commands off
 /codex handoff off
 ```
 
@@ -103,8 +105,11 @@ Codex 必须先请求你的明确同意，才会启动接管。确认后，插�
 - 进度消息不再额外显示 `Codex progress` 标题。
 - 普通进度回复不展示内部 task id。
 - 长回复会拆成多条飞书/Lark 消息。
-- 命令本身会显示，便于远程审计；潜在风险命令会额外显示 `Warning:`。
-- 命令 `Output:` 只保留一行高价值摘要，省略时附带行数和字符数。
+- 普通命令和 `Output:` 默认不展示。
+- 需要查看命令时，可以发送 `/codex commands on` 或“打开命令显示”。
+  发送 `/codex commands off` 或“关闭命令显示”可再次隐藏。
+- 潜在风险命令始终会显示，并额外带 `Warning:`，即使命令显示处于关闭状态。
+- 打开命令显示后，命令 `Output:` 仍只保留一行高价值摘要，省略时附带行数和字符数。
 - `cat`、`nl`、`sed`、`grep`、普通 `rg` 搜索这类源码查看输出会被摘要化。
 - 命令里的 token、secret、password 等敏感内容会先脱敏。
 

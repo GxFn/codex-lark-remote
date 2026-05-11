@@ -43,6 +43,16 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
     id: "rcmd_1",
   });
 
+  assert.deepEqual(classifyChatText("/codex commands on", config), {
+    kind: "command_visibility",
+    enabled: true,
+  });
+
+  assert.deepEqual(classifyChatText("/codex commands off", config), {
+    kind: "command_visibility",
+    enabled: false,
+  });
+
   assert.deepEqual(classifyChatText("/codex whoami", config), {
     kind: "whoami",
   });
@@ -81,6 +91,16 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
 
   assert.deepEqual(classifyChatText("接管状态", config), {
     kind: "handoff_status",
+  });
+
+  assert.deepEqual(classifyChatText("打开命令显示", config), {
+    kind: "command_visibility",
+    enabled: true,
+  });
+
+  assert.deepEqual(classifyChatText("不要显示命令了", config), {
+    kind: "command_visibility",
+    enabled: false,
   });
 
   assert.deepEqual(classifyChatText("不要接管了", config), {
