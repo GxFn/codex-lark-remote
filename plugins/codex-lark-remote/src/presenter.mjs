@@ -68,8 +68,8 @@ export function formatObservationStatus(observation) {
   if (!observation?.active) return "Codex Lark Remote observation: off";
   return [
     "Codex Lark Remote observation: active",
+    observation.name ? `Title: ${observation.name}` : "",
     `Thread: ${String(observation.threadId || "").slice(0, 8) || "unknown"}`,
-    observation.name ? `Name: ${observation.name}` : "",
     observation.cwd ? `Cwd: ${observation.cwd}` : "",
     "This is read-only progress streaming. Feishu/Lark messages are not sent to the observed session.",
     "Use /codex observe off to stop.",

@@ -111,8 +111,8 @@ function parseManagementCommand(text) {
     return { kind: "handoff_status" };
   }
   if (["observe", "observer", "watch"].includes(action)) {
-    if (!id || id === "list" || id === "status") return { kind: "observe_list" };
-    if (["off", "stop", "disable", "end", "close"].includes(id)) return { kind: "observe_disable" };
+    if (!id || ["list", "status", "列表", "查看", "窗口", "会话"].includes(id)) return { kind: "observe_list" };
+    if (["off", "stop", "disable", "end", "close", "关闭", "停止", "结束"].includes(id)) return { kind: "observe_disable" };
     return { kind: "observe_enable", selector: id };
   }
   if (action === "diff" && id) return { kind: "task_diff", id };

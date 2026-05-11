@@ -176,10 +176,11 @@ async function readSessionMeta(filePath) {
     const record = JSON.parse(firstLine);
     if (record.type !== "session_meta") return null;
     const payload = record.payload || {};
+    const name = await inferSessionTitle(filePath, payload.name || payload.title || "");
     return {
       id: payload.id || idFromPath(filePath),
       cwd: payload.cwd || "",
-      name: payload.name || "",
+      name,
       source: payload.source || "",
       threadSource: payload.thread_source || "",
       agentRole: payload.agent_role || "",
@@ -217,6 +218,71 @@ async function readFirstLine(filePath) {
   } finally {
     await handle.close();
   }
+}
+
+async function inferSessionTitle(filePath, fallback = "") {
+  const fallbackTitle = cleanTitle(fallback);
+  if (fallbackTitle) return fallbackTitle;
+  for (const line of await readInitialLines(filePath)) {
+    let record = null;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const payload = record?.payload || {};
+    const explicit = cleanTitle(payload.title || payload.name || payload.session_title || "");
+    if (explicit) return explicit;
+    const userText = extractUserText(record);
+    const title = cleanTitle(userText);
+    if (title) return title;
+  }
+  return "";
+}
+
+async function readInitialLines(filePath, { maxBytes = 512 * 1024, maxLines = 120 } = {}) {
+  const handle = await fs.open(filePath, "r");
+  try {
+    const buffer = Buffer.alloc(maxBytes);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    return buffer
+      .subarray(0, bytesRead)
+      .toString("utf8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .slice(0, maxLines);
+  } finally {
+    await handle.close();
+  }
+}
+
+function extractUserText(record) {
+  const payload = record?.payload || {};
+  if (record.type === "event_msg" && payload.type === "user_message") return payload.message || "";
+  if (record.type === "response_item" && payload.type === "message" && payload.role === "user") {
+    return extractContentText(payload.content);
+  }
+  if (payload.role === "user" && Array.isArray(payload.content)) return extractContentText(payload.content);
+  return "";
+}
+
+function extractContentText(content) {
+  return content
+    .map((item) => item?.text || "")
+    .filter(Boolean)
+    .join("\n");
+}
+
+function cleanTitle(value) {
+  const text = String(value || "")
+    .replace(/<environment_context>[\s\S]*?<\/environment_context>/g, "")
+    .replace(/<codex_lark_remote_note>[\s\S]*?<\/codex_lark_remote_note>/g, "")
+    .replace(/\[@([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text || /^<[^>]+>$/.test(text)) return "";
+  if (/^(system|developer|assistant):/i.test(text)) return "";
+  return text.length > 80 ? `${text.slice(0, 77)}...` : text;
 }
 
 function idFromPath(filePath) {

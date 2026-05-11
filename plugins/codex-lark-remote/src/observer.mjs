@@ -125,9 +125,15 @@ export class CodexSessionObserver {
     const live = await readObservation({ dataDir: this.config.dataDir });
     if (!live?.active || live.threadId !== this.state.threadId) return;
     try {
-      await this.notifier.reply(this.state.messageId, summary);
+      await this.notifier.reply(this.state.messageId, withObservationTitle(summary, this.state));
     } catch (error) {
       this.logger.warn?.(`Codex Lark Remote observer notify failed: ${error.message}`);
     }
   }
+}
+
+function withObservationTitle(summary, state) {
+  const title = String(state?.name || "").trim();
+  if (!title) return summary;
+  return `Title: ${title}\n${summary}`;
 }

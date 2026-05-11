@@ -69,6 +69,10 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
     kind: "observe_list",
   });
 
+  assert.deepEqual(classifyChatText("/codex observe 列表", config), {
+    kind: "observe_list",
+  });
+
   assert.deepEqual(classifyChatText("/codex observe 2", config), {
     kind: "observe_enable",
     selector: "2",

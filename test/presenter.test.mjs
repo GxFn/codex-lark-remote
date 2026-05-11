@@ -69,6 +69,7 @@ test("formatObservationList and status describe read-only session streaming", ()
 
   assert.match(list, /Observable Codex sessions/);
   assert.match(list, /\/codex observe <number or thread prefix>/);
+  assert.match(active, /Title: Current migration/);
   assert.match(active, /read-only progress streaming/);
 });
 

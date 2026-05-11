@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { activateHandoff, clearHandoff, readHandoff, resolveCodexThread } from "../plugins/codex-lark-remote/src/handoff.mjs";
+import { activateHandoff, clearHandoff, listCodexThreads, readHandoff, resolveCodexThread } from "../plugins/codex-lark-remote/src/handoff.mjs";
 
 test("activateHandoff stores an explicit thread id", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-handoff-"));
@@ -96,11 +96,35 @@ test("resolveCodexThread skips hidden subagent and exec sessions", async () => {
   assert.equal(resolved.threadId, "019e0000-0000-7000-8000-000000000005");
 });
 
-async function writeSession({ file, id, cwd, source = "vscode", threadSource = "", mtime }) {
+test("listCodexThreads infers title from the first user message", async () => {
+  const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-home-title-"));
+  const sessions = path.join(codexHome, "sessions", "2026", "05", "11");
+  await fs.mkdir(sessions, { recursive: true });
+  await writeSession({
+    file: path.join(sessions, "rollout-2026-05-11T10-00-00-019e0000-0000-7000-8000-000000000006.jsonl"),
+    id: "019e0000-0000-7000-8000-000000000006",
+    cwd: "/workspace/project",
+    userMessage: "分析说明 BiliDili 项目架构\n<codex_lark_remote_note>ignore</codex_lark_remote_note>",
+    mtime: new Date("2026-05-11T10:00:00Z"),
+  });
+
+  const [thread] = await listCodexThreads({ codexHome, cwd: "/workspace/project" });
+
+  assert.equal(thread.name, "分析说明 BiliDili 项目架构");
+});
+
+async function writeSession({ file, id, cwd, source = "vscode", threadSource = "", userMessage = "", mtime }) {
   const line = JSON.stringify({
     type: "session_meta",
     payload: { id, cwd, source, thread_source: threadSource },
   });
-  await fs.writeFile(file, `${line}\n`);
+  const lines = [line];
+  if (userMessage) {
+    lines.push(JSON.stringify({
+      type: "event_msg",
+      payload: { type: "user_message", message: userMessage },
+    }));
+  }
+  await fs.writeFile(file, `${lines.join("\n")}\n`);
   await fs.utimes(file, mtime, mtime);
 }
