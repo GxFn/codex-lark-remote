@@ -19,6 +19,8 @@ export class RemoteCommandQueue {
         presentation: input.presentation || (input.mode === "thread_handoff" ? "chat" : "task"),
         notifyQueued: input.notifyQueued === true,
         notifyStarted: input.notifyStarted === true,
+        handoffGuidance: input.handoffGuidance === true,
+        guidanceForCommandId: input.guidanceForCommandId || "",
         repoKey: input.repoKey,
         projectRoot: input.projectRoot,
         prompt: input.prompt,

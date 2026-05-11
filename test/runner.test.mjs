@@ -10,6 +10,7 @@ import {
   createSessionProgressWatcher,
   extractFinalMessage,
   extractProgressSummary,
+  formatPermissionBoundaryNotice,
   summarizeCodexEvent,
   summarizeSessionProgressEvent,
 } from "../plugins/codex-lark-remote/src/runner.mjs";
@@ -91,7 +92,9 @@ test("buildHandoffPrompt sends Feishu input as direct Codex conversation text by
     prompt: "fix README",
   });
 
-  assert.equal(prompt, "fix README");
+  assert.match(prompt, /^fix README/);
+  assert.match(prompt, /Feishu\/Lark cannot click native Codex Desktop permission dialogs/);
+  assert.match(prompt, /Reply with a concise prompt explaining what permission is needed/);
 });
 
 test("buildHandoffPrompt can still annotate Feishu input when configured", () => {
@@ -103,7 +106,16 @@ test("buildHandoffPrompt can still annotate Feishu input when configured", () =>
 
   assert.match(prompt, /Codex Lark Remote handoff/);
   assert.match(prompt, /Feishu\/Lark/);
+  assert.match(prompt, /Permission boundary:/);
   assert.match(prompt, /fix README/);
+});
+
+test("formatPermissionBoundaryNotice explains approval UI boundaries", () => {
+  const text = formatPermissionBoundaryNotice("This action was rejected due to unacceptable risk.");
+
+  assert.match(text, /Permission needed/);
+  assert.match(text, /cannot click Codex Desktop permission dialogs/);
+  assert.match(text, /Codex security review blocked the action/);
 });
 
 test("extractFinalMessage reads Codex JSONL agent messages", () => {
@@ -135,6 +147,17 @@ test("summarizeCodexEvent reports useful background progress", () => {
   assert.equal(
     summarizeCodexEvent({ type: "item.completed", item: { type: "command_execution", command: "npm test", aggregated_output: "51 passed" } }),
     "",
+  );
+  assert.match(
+    summarizeCodexEvent({
+      type: "item.completed",
+      item: {
+        type: "command_execution",
+        command: "npm install",
+        aggregated_output: "Network access is restricted. Ask for approval before downloading dependencies.",
+      },
+    }),
+    /Permission needed[\s\S]*Network or dependency access needs approval/,
   );
   assert.equal(
     summarizeCodexEvent(
@@ -295,7 +318,14 @@ test("summarizeCodexEvent reports useful background progress", () => {
       type: "event_msg",
       payload: { type: "agent_message", phase: "commentary", message: "我会先检查文件。" },
     }),
-    "Codex:\n我会先检查文件。",
+    "我会先检查文件。",
+  );
+  assert.match(
+    summarizeCodexEvent({
+      type: "event_msg",
+      payload: { type: "error", message: "tool call rejected: requires approval in Codex Desktop" },
+    }),
+    /Permission needed[\s\S]*Codex approval is required/,
   );
 });
 
@@ -305,7 +335,7 @@ test("summarizeSessionProgressEvent only forwards assistant progress messages", 
       type: "event_msg",
       payload: { type: "agent_message", phase: "commentary", message: "我找到触发点了。" },
     }),
-    "Codex:\n我找到触发点了。",
+    "我找到触发点了。",
   );
   assert.equal(
     summarizeSessionProgressEvent({
@@ -349,7 +379,7 @@ test("createSessionProgressWatcher tails appended assistant commentary", async (
   );
   await watcher.stop();
 
-  assert.deepEqual(summaries, ["Codex:\n我找到触发点了。"]);
+  assert.deepEqual(summaries, ["我找到触发点了。"]);
 });
 
 test("extractProgressSummary collects non-chat Codex JSONL events", () => {
@@ -363,14 +393,12 @@ test("extractProgressSummary collects non-chat Codex JSONL events", () => {
   assert.equal(
     extractProgressSummary(stdout),
     [
-      "Started working on the Feishu/Lark message.",
       "Codex turn completed. Tokens: input=10 output=20",
     ].join("\n"),
   );
   assert.equal(
     extractProgressSummary(stdout, { showCommands: true }),
     [
-      "Started working on the Feishu/Lark message.",
       "Ran command:\nnpm test\nOutput:\nok",
       "Codex turn completed. Tokens: input=10 output=20",
     ].join("\n"),

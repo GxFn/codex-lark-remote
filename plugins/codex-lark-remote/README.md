@@ -33,7 +33,7 @@ leave empty
 ```
 
 Enable `codex-lark-remote` from the plugin list. For a pinned install, set
-**Git ref** to a release tag such as `v0.1.16`.
+**Git ref** to a release tag such as `v0.1.17`.
 
 ## Configure Feishu/Lark
 
@@ -124,6 +124,26 @@ Remote replies are optimized for coding on a phone or in chat:
 - Source/code inspection output is summarized when it comes from commands such
   as `cat`, `nl`, `sed`, `grep`, or ordinary `rg` searches.
 - Secrets in command text are redacted before they are sent to Feishu/Lark.
+
+## Permission boundaries
+
+Codex Lark Remote takes over the conversation stream, not the native Codex
+Desktop UI. Feishu/Lark cannot click permission dialogs, MCP approvals,
+sandbox-escalation prompts, network/install approvals, or other native Codex UI
+popups.
+
+When Codex hits one of those boundaries, the bridge and prompt contract ask the
+agent to send a clear Feishu/Lark message instead of waiting silently. The
+message explains what permission is needed and whether you must approve it in
+Codex Desktop on the Mac or can reply in Feishu/Lark with explicit text consent.
+
+## Mid-run guidance
+
+If you send another Feishu/Lark message while Codex is still working, the plugin
+does not try to hot-inject text into the already running Codex process. Instead,
+it stores the message as supplemental guidance for the same handoff thread,
+acknowledges it in Feishu/Lark, and runs it as the next turn as soon as the
+current turn finishes.
 
 ## Mac keep-awake
 

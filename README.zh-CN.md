@@ -44,7 +44,7 @@ main
 ```
 
 添加市场后，在插件列表里启用 `codex-lark-remote`。如果要安装固定版本，可以把
-“Git 引用”改成具体 release tag，例如 `v0.1.16`。
+“Git 引用”改成具体 release tag，例如 `v0.1.17`。
 
 ## 配置飞书/Lark
 
@@ -134,6 +134,22 @@ Mac 睡眠。关闭接管或停止 bridge 时，这个 keep-awake 进程会一�
 - 命令里的 token、secret、password 等敏感内容会先脱敏。
 
 这样飞书/Lark 里看到的是 Codex 做了什么、改了什么、哪里需要注意，而不是整屏源码。
+
+## 权限边界
+
+Codex Lark Remote 接管的是对话输入输出链路，不是 Codex Desktop 的原生 UI。
+飞书/Lark 不能点击权限弹窗、MCP 审批、沙箱提权、联网/安装依赖审批，或其他
+Codex 原生 UI 弹窗。
+
+当 Codex 遇到这类边界时，bridge 和 prompt 契约会要求 agent 不要沉默等待，而是
+发回一条明确的飞书/Lark 提示：说明需要什么权限，以及你是必须回到 Mac 上的 Codex
+Desktop 批准，还是可以在飞书/Lark 里用文字明确授权后继续。
+
+## 执行中的补充引导
+
+如果 Codex 仍在执行时你又发了一条飞书/Lark 消息，插件不会尝试把文本热注入已经
+运行中的 Codex 进程。它会把这条消息保存为同一个 handoff 线程的补充引导，在飞书
+/Lark 里回复“已收到”，并在当前轮结束后立即作为下一轮继续执行。
 
 ## Mac 保持唤醒
 

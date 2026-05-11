@@ -121,6 +121,51 @@ test("processLarkEvent routes normal messages to current-thread handoff when act
   assert.deepEqual(replies, []);
 });
 
+test("processLarkEvent turns mid-run handoff messages into queued guidance", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-guidance-"));
+  await activateHandoff({
+    dataDir,
+    threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
+    cwd: "/workspace",
+    activatedBy: "test",
+  });
+  const replies = [];
+  const enqueued = [];
+
+  await processLarkEvent(
+    {
+      config: {
+        dataDir,
+        lark: { allowedUsers: ["ou_allowed"] },
+      },
+      queue: {
+        findByMessageId: async () => null,
+        list: async () => [{
+          id: "rcmd_running",
+          mode: "thread_handoff",
+          status: "running",
+          codexSessionId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
+        }],
+        enqueue: async (input) => {
+          const command = { id: "rcmd_guidance", status: "pending", ...input };
+          enqueued.push(command);
+          return command;
+        },
+      },
+      notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+      runner: { busy: true, processAll: () => {} },
+    },
+    textEvent({ text: "先别改 README，优先修测试", userId: "ou_allowed" }),
+  );
+
+  assert.equal(enqueued.length, 1);
+  assert.equal(enqueued[0].handoffGuidance, true);
+  assert.equal(enqueued[0].guidanceForCommandId, "rcmd_running");
+  assert.match(enqueued[0].prompt, /Supplemental guidance/);
+  assert.match(enqueued[0].prompt, /先别改 README，优先修测试/);
+  assert.match(replies[0].text, /已收到补充引导/);
+});
+
 test("processLarkEvent updates command display preference", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-commands-"));
   const replies = [];

@@ -62,3 +62,15 @@ Normal shell commands and command output are hidden from Feishu/Lark by default.
 If the user asks to inspect command details, tell them to send
 `/codex commands on`. Risky commands are still shown with a warning even when
 normal command display is off.
+
+Feishu/Lark cannot approve native Codex Desktop permission UI. If a request
+needs MCP approval, sandbox escalation, network/install permission, writing
+outside allowed roots, or another native permission dialog, do not wait silently.
+Turn it into a clear Feishu/Lark prompt that says what permission is needed and
+whether the user must approve it in Codex Desktop or can reply with explicit
+text consent in Feishu/Lark.
+
+If another Feishu/Lark message arrives while Codex is already running, treat the
+next turn as supplemental guidance for the same conversation. Reconcile it with
+any work already completed by the previous turn instead of restarting from
+scratch.

@@ -45,6 +45,10 @@ export function buildRemoteContext(command, config) {
     "  final_format: concise_remote_task_report",
     "  include: [summary, files_changed, validation, risks, next_actions]",
     "  exclude: [raw_secrets, long_logs, full_diff]",
+    "permission_boundary:",
+    "  feishu_lark_cannot_click_codex_desktop_permission_ui: true",
+    "  if_permission_or_approval_is_required: send_a_clear_lark_prompt_instead_of_waiting",
+    "  mention_whether_the_user_must_return_to_codex_desktop_or_can_reply_with_text_consent",
     "</codex_lark_remote_context>",
   ].join("\n");
 }
@@ -52,4 +56,3 @@ export function buildRemoteContext(command, config) {
 function escapeLine(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
-

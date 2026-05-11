@@ -58,7 +58,7 @@ export class CodexCliRunner {
           result: result.finalMessage || result.stdoutTail || "",
           diffSummary: diffSummary.trim(),
           testSummary: "",
-          error: result.exitCode === 0 ? "" : result.stderrTail || `Codex exited with ${result.exitCode}`,
+          error: result.exitCode === 0 ? "" : formatRunnerError(result),
           completedAt: nowIso(),
         },
         result.exitCode === 0 ? "codex_completed" : "codex_failed",
@@ -69,12 +69,16 @@ export class CodexCliRunner {
         command.id,
         {
           status: "failed",
-          error: error.message,
+          error: formatPermissionBoundaryNotice(error.message) || error.message,
           completedAt: nowIso(),
         },
         "runner_error",
       );
-      await this.#notify(failed || command, formatFinal(failed || { ...command, status: "failed", error: error.message }));
+      await this.#notify(failed || command, formatFinal(failed || {
+        ...command,
+        status: "failed",
+        error: formatPermissionBoundaryNotice(error.message) || error.message,
+      }));
     }
   }
 
@@ -137,7 +141,7 @@ export class CodexCliRunner {
           progressSummary: result.progressSummary || "",
           diffSummary: diffSummary.trim(),
           testSummary: "",
-          error: result.exitCode === 0 ? "" : result.stderrTail || `Codex exited with ${result.exitCode}`,
+          error: result.exitCode === 0 ? "" : formatRunnerError(result),
           completedAt: nowIso(),
         },
         result.exitCode === 0 ? "codex_resume_completed" : "codex_resume_failed",
@@ -148,12 +152,16 @@ export class CodexCliRunner {
         command.id,
         {
           status: "failed",
-          error: error.message,
+          error: formatPermissionBoundaryNotice(error.message) || error.message,
           completedAt: nowIso(),
         },
         "runner_error",
       );
-      await this.#notify(failed || command, formatFinal(failed || { ...command, status: "failed", error: error.message }));
+      await this.#notify(failed || command, formatFinal(failed || {
+        ...command,
+        status: "failed",
+        error: formatPermissionBoundaryNotice(error.message) || error.message,
+      }));
     }
   }
 
@@ -240,22 +248,42 @@ export function buildCodexResumeArgs({ runner = {}, threadId, prompt, outputFile
 }
 
 export function buildHandoffPrompt(command, { promptStyle = "direct" } = {}) {
-  if (promptStyle === "direct") return command.prompt || "";
+  if (promptStyle === "direct") return withHandoffPermissionNote(command.prompt || "");
 
   return [
     "[Codex Lark Remote handoff]",
     "The user is sending this message from Feishu/Lark to continue the current Codex conversation.",
     `Sender: ${command.userName || "lark_user"}${command.userIdHash ? ` (${command.userIdHash})` : ""}`,
     "",
+    "Permission boundary:",
+    "Feishu/Lark cannot click native Codex Desktop permission dialogs. If approval, sandbox escalation, network/install permission, or another UI permission is required, do not wait silently. Reply with a concise prompt explaining what permission is needed and whether the user must approve it in Codex Desktop or can provide explicit text consent in Feishu/Lark.",
+    "",
     "User message:",
     command.prompt,
   ].join("\n");
+}
+
+function withHandoffPermissionNote(prompt) {
+  return [
+    prompt,
+    "",
+    "<codex_lark_remote_note>",
+    "This message came from Feishu/Lark remote takeover. Feishu/Lark cannot click native Codex Desktop permission dialogs. If approval, sandbox escalation, network/install permission, or another UI permission is required, do not wait silently. Reply with a concise prompt explaining what permission is needed and whether the user must approve it in Codex Desktop or can provide explicit text consent in Feishu/Lark.",
+    "</codex_lark_remote_note>",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function normalizeDelivery(delivery) {
   if (delivery === true) return { ok: true };
   if (delivery === false || !delivery) return { ok: false, error: "Lark reply returned false" };
   return delivery;
+}
+
+function formatRunnerError(result) {
+  const raw = [result.stderrTail, result.stdoutTail].filter(Boolean).join("\n");
+  return formatPermissionBoundaryNotice(raw) || result.stderrTail || `Codex exited with ${result.exitCode}`;
 }
 
 async function runProcess(command, args, { timeoutMs, cwd, onEvent, eventOptions = {} }) {
@@ -384,23 +412,25 @@ export function summarizeCodexEvent(event, { showCommands = false } = {}) {
   const item = event?.item || params.item || event?.payload || params;
   const itemType = String(item?.type || "");
 
-  if (/turn[./]started/i.test(type)) return "Started working on the Feishu/Lark message.";
+  if (/turn[./]started/i.test(type)) return "";
   if (/turn[./]completed/i.test(type)) return formatUsage(event?.usage || params.turn?.usage || params.usage);
 
   if (itemType === "message" && item.role === "assistant") {
     if (item.phase === "final_answer") return "";
     const text = textFromEvent(event);
-    return text ? `Codex:\n${progressText(text)}` : "";
+    return text ? progressText(text) : "";
   }
 
   if (itemType === "agent_message" || /agentMessage/i.test(type)) {
     if (item.phase === "final_answer") return "";
-    return item.message ? `Codex:\n${progressText(item.message)}` : "";
+    return item.message ? progressText(item.message) : "";
   }
 
   const command = commandFromEvent(event, item);
   if (command) {
     const output = item.aggregated_output || item.output || item.stdout || item.stderr || event.output || "";
+    const permissionNotice = formatPermissionBoundaryNotice(output);
+    if (permissionNotice) return permissionNotice;
     const commandSummary = summarizeCommand(command);
     if (!showCommands && !commandSummary.warning) return "";
     const summarizedOutput = showCommands ? summarizeCommandOutput(command, output) : "";
@@ -421,11 +451,15 @@ export function summarizeCodexEvent(event, { showCommands = false } = {}) {
 
   if (itemType === "custom_tool_call_output") {
     const output = item.output || event.output || "";
+    const permissionNotice = formatPermissionBoundaryNotice(output);
+    if (permissionNotice) return permissionNotice;
     return output ? `Tool output:\n${progressText(output)}` : "";
   }
 
-  if (/error|failed/i.test(type)) {
+  if (/error|failed/i.test(`${type} ${itemType}`)) {
     const message = event.message || event.error?.message || event.error || item.message || "Codex reported an error.";
+    const permissionNotice = formatPermissionBoundaryNotice(message);
+    if (permissionNotice) return permissionNotice;
     return `Error:\n${progressText(message)}`;
   }
 
@@ -528,6 +562,36 @@ function formatUsage(usage) {
   const output = usage.output_tokens ?? usage.outputTokens;
   if (input || output) return `Codex turn completed. Tokens: input=${input || 0} output=${output || 0}`;
   return "Codex turn completed.";
+}
+
+export function formatPermissionBoundaryNotice(value) {
+  const reason = classifyPermissionBoundary(value);
+  if (!reason) return "";
+  const details = oneLineCommandOutput(redactSensitiveText(progressText(value)), 280);
+  return [
+    "Permission needed",
+    "Feishu/Lark takeover cannot click Codex Desktop permission dialogs directly.",
+    `Reason: ${reason}`,
+    details ? `Details: ${details}` : "",
+    "",
+    "If a Codex permission dialog is open, approve it on the Mac. If text consent is enough, reply in Feishu/Lark with explicit approval and what to allow.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function classifyPermissionBoundary(value) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  const checks = [
+    [/\b(unacceptable risk|auto[- ]?review.*rejected|rejected due to unacceptable risk|must be denied)\b/i, "Codex security review blocked the action."],
+    [/\b(network access is restricted|network.*(?:denied|blocked|restricted)|dns.*restricted|host resolution|dependency download failed)\b/i, "Network or dependency access needs approval."],
+    [/\b(approval|approve|requires? approval|requires? confirmation|permission dialog|ask-for-approval|escalat(?:e|ion))\b/i, "Codex approval is required."],
+    [/\b(operation not permitted|not permitted|permission denied|eacces|eperm|access denied)\b/i, "The sandbox or operating system denied the operation."],
+    [/\b(read[- ]?only sandbox|outside (?:the )?(?:workspace|sandbox)|workspace-write|writable roots?|not inside a trusted directory|trusted directory|skip-git-repo-check)\b/i, "The current sandbox or trust policy blocked the workspace action."],
+    [/\b(tool call.*rejected|mcp.*(?:rejected|permission|approval))\b/i, "A tool or MCP permission boundary interrupted the turn."],
+  ];
+  return checks.find(([pattern]) => pattern.test(text))?.[1] || "";
 }
 
 function commandFromEvent(event, item) {

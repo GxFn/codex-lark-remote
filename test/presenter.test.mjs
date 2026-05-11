@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatBridgeStatus, formatFinal, formatHelp, formatProgress, formatTask, formatWhoami } from "../plugins/codex-lark-remote/src/presenter.mjs";
+import { formatBridgeStatus, formatFinal, formatGuidanceQueued, formatHelp, formatProgress, formatTask, formatWhoami } from "../plugins/codex-lark-remote/src/presenter.mjs";
 
 test("formatHelp includes whoami command", () => {
   assert.match(formatHelp(), /\/codex whoami/);
@@ -76,6 +76,17 @@ test("formatFinal returns only the Codex answer for chat handoff completions", (
   });
 
   assert.equal(text, "这是 Codex 的直接回复。");
+});
+
+test("formatGuidanceQueued explains deferred guidance", () => {
+  const text = formatGuidanceQueued({
+    prompt: "优先修测试",
+    normalizedTask: "优先修测试",
+  });
+
+  assert.match(text, /已收到补充引导/);
+  assert.match(text, /当前轮结束后/);
+  assert.match(text, /优先修测试/);
 });
 
 test("formatProgress returns only readable progress content", () => {

@@ -84,6 +84,15 @@ export function formatQueued(command) {
   ].join("\n");
 }
 
+export function formatGuidanceQueued(command) {
+  return [
+    "已收到补充引导。",
+    "当前 Codex 还在执行时，无法稳定热注入这条消息；我会在当前轮结束后立刻把它作为下一条引导继续同一个对话。",
+    "",
+    `补充: ${truncateForLark(command.normalizedTask || command.prompt, 500)}`,
+  ].join("\n");
+}
+
 export function formatFinal(command) {
   if (command.status === "failed") {
     return [

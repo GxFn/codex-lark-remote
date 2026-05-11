@@ -10,7 +10,7 @@ import { KeepAwakeController } from "./keep-awake.mjs";
 import { LarkWebSocketReceiver } from "./lark-ws.mjs";
 import { parseLarkEvent, isUserAllowed, classifyChatText } from "./lark.mjs";
 import { LarkNotifier } from "./notifier.mjs";
-import { formatBridgeStatus, formatHelp, formatQueued, formatTask, formatWhoami } from "./presenter.mjs";
+import { formatBridgeStatus, formatGuidanceQueued, formatHelp, formatQueued, formatTask, formatWhoami } from "./presenter.mjs";
 import { RemoteCommandQueue } from "./queue.mjs";
 import { CodexCliRunner } from "./runner.mjs";
 import { assertLarkAppCredentials } from "./setup-guide.mjs";
@@ -303,6 +303,7 @@ async function handleChatAction(ctx, event, action) {
         chatIdHash: event.chatIdHash,
         userIdHash: event.userIdHash,
         userName: event.senderName,
+        runningCommand: await findRunningHandoffTask(ctx, handoff),
       })
     : await enqueueTask(ctx, {
         repoKey: action.repoKey,
@@ -312,7 +313,9 @@ async function handleChatAction(ctx, event, action) {
         userIdHash: event.userIdHash,
         userName: event.senderName,
   });
-  if (created.mode !== "thread_handoff" || created.notifyQueued) {
+  if (created.handoffGuidance) {
+    await ctx.notifier.reply(event.messageId, formatGuidanceQueued(created));
+  } else if (created.mode !== "thread_handoff" || created.notifyQueued) {
     await ctx.notifier.reply(event.messageId, formatQueued(created));
   }
   Promise.resolve(ctx.runner.processAll()).catch(() => {});
@@ -348,15 +351,19 @@ async function enqueueTask(ctx, input) {
 }
 
 async function enqueueHandoffTask(ctx, input) {
+  const guidance = Boolean(input.runningCommand);
+  const text = guidance ? buildHandoffGuidancePrompt(input.text, input.runningCommand) : input.text;
   return ctx.queue.enqueue({
     source: "lark",
     mode: "thread_handoff",
     presentation: "chat",
-    notifyQueued: ctx.config.handoff?.notifyQueued === true,
+    notifyQueued: guidance || ctx.config.handoff?.notifyQueued === true,
     notifyStarted: ctx.config.handoff?.notifyStarted === true,
+    handoffGuidance: guidance,
+    guidanceForCommandId: input.runningCommand?.id || "",
     repoKey: "current",
     projectRoot: input.handoff.cwd || "",
-    prompt: input.text,
+    prompt: text,
     normalizedTask: input.text,
     messageId: input.messageId,
     chatIdHash: input.chatIdHash,
@@ -365,6 +372,29 @@ async function enqueueHandoffTask(ctx, input) {
     codexSessionId: input.handoff.threadId,
     codexSessionPath: input.handoff.threadPath || "",
   });
+}
+
+async function findRunningHandoffTask(ctx, handoff) {
+  if (!ctx.runner?.busy || !handoff?.threadId || typeof ctx.queue.list !== "function") return null;
+  const commands = await ctx.queue.list({ limit: 50 });
+  return commands.find((command) =>
+    command.mode === "thread_handoff"
+    && command.status === "running"
+    && command.codexSessionId === handoff.threadId
+  ) || null;
+}
+
+function buildHandoffGuidancePrompt(text, runningCommand) {
+  return [
+    "[Supplemental guidance received while the previous Feishu/Lark turn was still running]",
+    "Treat this as additional guidance for the same Codex conversation. Apply it after reconciling any work already completed by the previous turn. Do not restart from scratch unless the user asks.",
+    runningCommand?.id ? `Previous running task: ${runningCommand.id}` : "",
+    "",
+    "User guidance:",
+    text,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function formatHandoffStatus(handoff) {
