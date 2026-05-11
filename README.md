@@ -4,6 +4,8 @@ Continue the current Codex conversation from Feishu/Lark.
 
 Chinese version: [README.zh-CN.md](README.zh-CN.md)
 
+Marketplace page: [codex-lark-remote](https://www.codex-marketplace.com/plugins/codex-lark-remote)
+
 This repository is the `gxfn` Codex plugin marketplace. The installable plugin
 bundle lives in [`plugins/codex-lark-remote/`](plugins/codex-lark-remote/).
 The repository root keeps a full README so first-time users can understand the
@@ -32,22 +34,66 @@ between multiple modes during normal use.
 
 ## Install
 
-First-time users do not need to clone this repository. In Codex, open plugin
-marketplace settings, choose **Add plugin marketplace**, and fill the dialog:
+First-time users do not need to clone this repository.
+
+### Option A: Codex Marketplace CLI
+
+Install the approved marketplace artifact:
+
+```bash
+npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plugin
+```
+
+To pin the exact reviewed release:
+
+```bash
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.1.23/plugins/codex-lark-remote --plugin
+```
+
+Then restart or refresh Codex if the plugin list does not update immediately.
+
+### Option B: Codex Desktop GitHub install
+
+If Codex asks for a GitHub target or direct artifact path, use the plugin bundle
+path, not the repository root:
+
+```text
+https://github.com/GxFn/codex-lark-remote/tree/v0.1.23/plugins/codex-lark-remote
+```
+
+If the Codex dialog separates source, ref, and sparse path, fill it like this:
 
 ```text
 Source:
 https://github.com/GxFn/codex-lark-remote.git
 
 Git ref:
-main
+v0.1.23
+
+Sparse path:
+plugins/codex-lark-remote
+```
+
+Enable `codex-lark-remote` from the plugin list after installation.
+
+### Option C: Add this repository as a marketplace
+
+This repository also includes `.agents/plugins/marketplace.json`. If you want to
+add the whole `gxfn` marketplace instead of the single plugin, use:
+
+```text
+Source:
+https://github.com/GxFn/codex-lark-remote.git
+
+Git ref:
+v0.1.23
 
 Sparse path:
 leave empty
 ```
 
-After adding the marketplace, enable `codex-lark-remote` from the plugin list.
-For a tagged release, set **Git ref** to a release tag, for example `v0.1.23`.
+Use `main` instead of a tag only if you intentionally want the latest unreleased
+changes.
 
 ## Configure Feishu/Lark
 

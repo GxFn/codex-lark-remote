@@ -4,6 +4,8 @@
 
 English version: [README.md](README.md)
 
+Marketplace 页面：[codex-lark-remote](https://www.codex-marketplace.com/plugins/codex-lark-remote)
+
 这份 README 会随可安装的 Codex 插件包一起发布。仓库首页也保留了一份完整的首次安装说明。
 
 ## 默认流程
@@ -14,23 +16,43 @@ Codex Lark Remote 只围绕一个默认流程设计：从当前 Codex 对话启�
 飞书/Lark 消息会作为普通用户消息交给 Codex。机器人会把最终回答和执行过程中的关键
 进度发回飞书/Lark。
 
-## 从 Codex 安装
+## 安装
 
-在 Codex 的插件市场设置里打开“添加插件市场”，按下面填写：
+安装已经通过审核的 Codex Marketplace 插件：
+
+```bash
+npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plugin
+```
+
+如果要固定到当前审核版本：
+
+```bash
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.1.23/plugins/codex-lark-remote --plugin
+```
+
+如果 Codex 要求填写 GitHub Target 或直接 artifact path，请填写：
+
+```text
+https://github.com/GxFn/codex-lark-remote/tree/v0.1.23/plugins/codex-lark-remote
+```
+
+如果 Codex 弹窗把来源、Git 引用、稀疏路径拆开填写，请这样填：
 
 ```text
 来源：
 https://github.com/GxFn/codex-lark-remote.git
 
 Git 引用：
-main
+v0.1.23
 
 稀疏路径：
-留空
+plugins/codex-lark-remote
 ```
 
-添加后，在插件列表里启用 `codex-lark-remote`。如果要固定版本，可以把“Git 引用”
-改成具体 release tag，例如 `v0.1.23`。
+安装后在插件列表里启用 `codex-lark-remote`。
+
+如果要添加整个 `gxfn` 仓库 marketplace，而不是只安装这个插件，可以使用仓库根目录
+并让稀疏路径留空。只有在明确想使用未发布改动时，才使用 `main`。
 
 ## 配置飞书/Lark
 
