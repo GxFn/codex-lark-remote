@@ -1,6 +1,6 @@
 {
   "name": "codex-lark-remote",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "description": "Remote Codex programming from Feishu/Lark chat.",
   "author": {
     "name": "Codex Lark Remote Contributors"
@@ -32,7 +32,7 @@
       "Show Codex Lark Remote setup status"
     ],
     "brandColor": "#00B96B",
-    "composerIcon": "./assets/icon.png",
-    "logo": "./assets/icon.png"
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/icon.svg"
   }
 }
