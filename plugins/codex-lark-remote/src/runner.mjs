@@ -429,7 +429,7 @@ export function summarizeCodexEvent(event, { showCommands = false } = {}) {
   const command = commandFromEvent(event, item);
   if (command) {
     const output = item.aggregated_output || item.output || item.stdout || item.stderr || event.output || "";
-    const permissionNotice = formatPermissionBoundaryNotice(output);
+    const permissionNotice = commandFailed(event, item) ? formatPermissionBoundaryNotice(output) : "";
     if (permissionNotice) return permissionNotice;
     const commandSummary = summarizeCommand(command);
     if (!showCommands && !commandSummary.warning) return "";
@@ -451,6 +451,7 @@ export function summarizeCodexEvent(event, { showCommands = false } = {}) {
 
   if (itemType === "custom_tool_call_output") {
     const output = item.output || event.output || "";
+    if (!errorLikeEvent(event, item)) return "";
     const permissionNotice = formatPermissionBoundaryNotice(output);
     if (permissionNotice) return permissionNotice;
     return output ? `Tool output:\n${progressText(output)}` : "";
@@ -586,12 +587,24 @@ function classifyPermissionBoundary(value) {
   const checks = [
     [/\b(unacceptable risk|auto[- ]?review.*rejected|rejected due to unacceptable risk|must be denied)\b/i, "Codex security review blocked the action."],
     [/\b(network access is restricted|network access (?:denied|blocked|restricted)|network is (?:denied|blocked|restricted)|dns (?:resolution )?(?:denied|blocked|restricted)|host resolution (?:denied|blocked|restricted)|dependency download failed)\b/i, "Network or dependency access needs approval."],
-    [/\b(approval|approve|requires? approval|requires? confirmation|permission dialog|ask-for-approval|escalat(?:e|ion))\b/i, "Codex approval is required."],
+    [/\b(approval (?:is )?required|requires? (?:user )?(?:approval|confirmation|permission)|permission dialog|ask-for-approval|escalat(?:e|ion) (?:required|request|needed)|needs approval)\b/i, "Codex approval is required."],
     [/\b(operation not permitted|not permitted|permission denied|eacces|eperm|access denied)\b/i, "The sandbox or operating system denied the operation."],
     [/\b(read[- ]?only sandbox|outside (?:the )?(?:workspace|sandbox)|workspace-write|writable roots?|not inside a trusted directory|trusted directory|skip-git-repo-check)\b/i, "The current sandbox or trust policy blocked the workspace action."],
-    [/\b(tool call.*rejected|mcp.*(?:rejected|permission|approval))\b/i, "A tool or MCP permission boundary interrupted the turn."],
+    [/\btool call (?:error: )?(?:was )?(?:rejected|denied|blocked)\b/i, "A tool permission boundary interrupted the turn."],
   ];
   return checks.find(([pattern]) => pattern.test(text))?.[1] || "";
+}
+
+function commandFailed(event, item) {
+  const exitCode = item?.exit_code ?? item?.exitCode ?? event?.exit_code ?? event?.exitCode;
+  if (typeof exitCode === "number") return exitCode !== 0;
+  if (typeof exitCode === "string" && exitCode.trim()) return exitCode !== "0";
+  return /\b(failed|error|cancelled|timed_out|timeout)\b/i.test(`${event?.status || ""} ${item?.status || ""}`);
+}
+
+function errorLikeEvent(event, item) {
+  if (item?.is_error === true || item?.error === true || event?.is_error === true || event?.error === true) return true;
+  return /\b(error|failed|rejected|denied|blocked)\b/i.test(`${event?.type || ""} ${item?.type || ""} ${event?.status || ""} ${item?.status || ""}`);
 }
 
 function commandFromEvent(event, item) {

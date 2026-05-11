@@ -155,9 +155,28 @@ test("summarizeCodexEvent reports useful background progress", () => {
         type: "command_execution",
         command: "npm install",
         aggregated_output: "Network access is restricted. Ask for approval before downloading dependencies.",
+        exit_code: 1,
+        status: "failed",
       },
     }),
     /Permission needed[\s\S]*Network or dependency access needs approval/,
+  );
+  assert.equal(
+    summarizeCodexEvent({
+      type: "item.completed",
+      item: {
+        type: "command_execution",
+        command: "sed -n '1,220p' Alembic-legacy/templates/recipes-setup/seed-error-handling.md",
+        aggregated_output: [
+          "Alembic Guard skill requires an MCP tool when available.",
+          "Feishu/Lark cannot click native Codex Desktop permission dialogs.",
+          "A team member may request approval before saving a project convention.",
+        ].join("\n"),
+        exit_code: 0,
+        status: "completed",
+      },
+    }),
+    "",
   );
   assert.equal(
     summarizeCodexEvent({
@@ -327,6 +346,27 @@ test("summarizeCodexEvent reports useful background progress", () => {
       payload: { type: "custom_tool_call", name: "apply_patch", input: "*** Begin Patch\n*** Add File: test.md\n+\n*** End Patch\n" },
     }),
     "Updated files: test.md",
+  );
+  assert.equal(
+    summarizeCodexEvent({
+      type: "response_item",
+      payload: {
+        type: "custom_tool_call_output",
+        output: "Alembic-legacy/templates/recipes-setup/seed-error-handling.md mentions MCP permission and approval.",
+      },
+    }),
+    "",
+  );
+  assert.match(
+    summarizeCodexEvent({
+      type: "response_item",
+      payload: {
+        type: "custom_tool_call_output",
+        is_error: true,
+        output: "tool call rejected: requires approval in Codex Desktop",
+      },
+    }),
+    /Permission needed[\s\S]*Codex approval is required/,
   );
   assert.equal(
     summarizeCodexEvent({
