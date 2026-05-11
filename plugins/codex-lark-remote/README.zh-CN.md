@@ -27,13 +27,13 @@ npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plu
 如果要固定到当前审核版本：
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.1.23/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.1.24/plugins/codex-lark-remote --plugin
 ```
 
 如果 Codex 要求填写 GitHub Target 或直接 artifact path，请填写：
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.1.23/plugins/codex-lark-remote
+https://github.com/GxFn/codex-lark-remote/tree/v0.1.24/plugins/codex-lark-remote
 ```
 
 如果 Codex 弹窗把来源、Git 引用、稀疏路径拆开填写，请这样填：
@@ -43,7 +43,7 @@ https://github.com/GxFn/codex-lark-remote/tree/v0.1.23/plugins/codex-lark-remote
 https://github.com/GxFn/codex-lark-remote.git
 
 Git 引用：
-v0.1.23
+v0.1.24
 
 稀疏路径：
 plugins/codex-lark-remote

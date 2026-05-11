@@ -92,11 +92,25 @@ test("buildHandoffPrompt sends Feishu input as direct Codex conversation text by
     userName: "ou_user",
     userIdHash: "u_hash",
     prompt: "fix README",
+    includeRemoteNote: true,
   });
 
   assert.match(prompt, /^fix README/);
   assert.match(prompt, /Feishu\/Lark cannot click native Codex Desktop permission dialogs/);
   assert.match(prompt, /Reply with a concise prompt explaining what permission is needed/);
+});
+
+test("buildHandoffPrompt omits the Feishu takeover note after the first handoff turn", () => {
+  const prompt = buildHandoffPrompt({
+    userName: "ou_user",
+    userIdHash: "u_hash",
+    prompt: "fix README",
+    includeRemoteNote: false,
+  });
+
+  assert.equal(prompt, "fix README");
+  assert.doesNotMatch(prompt, /codex_lark_remote_note/);
+  assert.doesNotMatch(prompt, /Feishu\/Lark cannot click native Codex Desktop permission dialogs/);
 });
 
 test("buildHandoffPrompt can still annotate Feishu input when configured", () => {

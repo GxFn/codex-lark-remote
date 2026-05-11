@@ -118,8 +118,43 @@ test("processLarkEvent routes normal messages to current-thread handoff when act
   assert.equal(enqueued[0].projectRoot, "/workspace");
   assert.equal(enqueued[0].prompt, "[demo] update README from Feishu");
   assert.equal(enqueued[0].notifyStarted, true);
+  assert.equal(enqueued[0].includeRemoteNote, true);
   assert.equal(enqueued[0].codexSessionId, "019e0ffb-52e9-7ee3-bb87-42019b58eaa2");
   assert.deepEqual(replies, []);
+});
+
+test("processLarkEvent only includes the remote note on the first handoff message", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-note-once-"));
+  await activateHandoff({
+    dataDir,
+    threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
+    cwd: "/workspace",
+    activatedBy: "test",
+  });
+  const enqueued = [];
+  const ctx = {
+    config: {
+      dataDir,
+      lark: { allowedUsers: ["ou_allowed"] },
+    },
+    queue: {
+      findByMessageId: async () => null,
+      enqueue: async (input) => {
+        const command = { id: `rcmd_${enqueued.length + 1}`, status: "pending", ...input };
+        enqueued.push(command);
+        return command;
+      },
+    },
+    notifier: { reply: async () => {} },
+    runner: { processAll: () => {} },
+  };
+
+  await processLarkEvent(ctx, textEvent({ text: "检查架构", userId: "ou_allowed", messageId: "om_1" }));
+  await processLarkEvent(ctx, textEvent({ text: "继续分析", userId: "ou_allowed", messageId: "om_2" }));
+
+  assert.equal(enqueued.length, 2);
+  assert.equal(enqueued[0].includeRemoteNote, true);
+  assert.equal(enqueued[1].includeRemoteNote, false);
 });
 
 test("processLarkEvent turns mid-run handoff messages into queued guidance", async () => {

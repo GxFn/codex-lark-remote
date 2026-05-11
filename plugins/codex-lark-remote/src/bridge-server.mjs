@@ -5,7 +5,7 @@ import { DEFAULT_BRIDGE_HOST, ensureDir, loadConfig, nowIso, readPackageVersion,
 import { runApprovedAction } from "./actions.mjs";
 import { decryptLarkPayload, verifyLarkSignature } from "./crypto.mjs";
 import { updateRuntimeConfig } from "./config-writer.mjs";
-import { activateHandoff, clearHandoff, readHandoff } from "./handoff.mjs";
+import { activateHandoff, clearHandoff, markHandoffRemoteNoteSent, readHandoff } from "./handoff.mjs";
 import { KeepAwakeController } from "./keep-awake.mjs";
 import { LarkWebSocketReceiver } from "./lark-ws.mjs";
 import { parseLarkEvent, isUserAllowed, classifyChatText } from "./lark.mjs";
@@ -407,12 +407,17 @@ async function enqueueTask(ctx, input) {
 async function enqueueHandoffTask(ctx, input) {
   const guidance = Boolean(input.runningCommand);
   const text = guidance ? buildHandoffGuidancePrompt(input.text, input.runningCommand) : input.text;
+  const includeRemoteNote = await markHandoffRemoteNoteSent({
+    dataDir: ctx.config.dataDir,
+    threadId: input.handoff.threadId,
+  });
   return ctx.queue.enqueue({
     source: "lark",
     mode: "thread_handoff",
     presentation: "chat",
     notifyQueued: guidance || ctx.config.handoff?.notifyQueued === true,
     notifyStarted: ctx.config.handoff?.notifyStarted !== false,
+    includeRemoteNote,
     handoffGuidance: guidance,
     guidanceForCommandId: input.runningCommand?.id || "",
     repoKey: "current",

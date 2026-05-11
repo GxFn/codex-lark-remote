@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { activateHandoff, clearHandoff, listCodexThreads, readHandoff, resolveCodexThread } from "../plugins/codex-lark-remote/src/handoff.mjs";
+import { activateHandoff, clearHandoff, listCodexThreads, markHandoffRemoteNoteSent, readHandoff, resolveCodexThread } from "../plugins/codex-lark-remote/src/handoff.mjs";
 
 test("activateHandoff stores an explicit thread id", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-handoff-"));
@@ -21,6 +21,26 @@ test("activateHandoff stores an explicit thread id", async () => {
   const cleared = await clearHandoff({ dataDir });
   assert.equal(cleared.active, false);
   assert.equal(await readHandoff({ dataDir }), null);
+});
+
+test("markHandoffRemoteNoteSent only marks once per handoff activation", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-handoff-note-"));
+  await activateHandoff({
+    dataDir,
+    threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
+    cwd: "/workspace",
+    activatedBy: "test",
+  });
+
+  assert.equal(await markHandoffRemoteNoteSent({
+    dataDir,
+    threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
+  }), true);
+  assert.match((await readHandoff({ dataDir })).remoteNoteSentAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(await markHandoffRemoteNoteSent({
+    dataDir,
+    threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
+  }), false);
 });
 
 test("activateHandoff refuses to guess a thread when strict binding is required", async () => {

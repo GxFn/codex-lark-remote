@@ -278,7 +278,10 @@ export function buildCodexResumeArgs({ runner = {}, threadId, prompt, outputFile
 }
 
 export function buildHandoffPrompt(command, { promptStyle = "direct" } = {}) {
-  if (promptStyle === "direct") return withHandoffPermissionNote(command.prompt || "");
+  if (promptStyle === "direct") {
+    const prompt = command.prompt || "";
+    return command.includeRemoteNote === true ? withHandoffPermissionNote(prompt) : prompt;
+  }
 
   return [
     "[Codex Lark Remote handoff]",
