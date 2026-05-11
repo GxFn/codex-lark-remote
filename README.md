@@ -47,7 +47,7 @@ leave empty
 ```
 
 After adding the marketplace, enable `codex-lark-remote` from the plugin list.
-For a tagged release, set **Git ref** to a release tag, for example `v0.1.17`.
+For a tagged release, set **Git ref** to a release tag, for example `v0.1.18`.
 
 ## Configure Feishu/Lark
 

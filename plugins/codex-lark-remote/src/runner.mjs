@@ -585,7 +585,7 @@ function classifyPermissionBoundary(value) {
   if (!text) return "";
   const checks = [
     [/\b(unacceptable risk|auto[- ]?review.*rejected|rejected due to unacceptable risk|must be denied)\b/i, "Codex security review blocked the action."],
-    [/\b(network access is restricted|network.*(?:denied|blocked|restricted)|dns.*restricted|host resolution|dependency download failed)\b/i, "Network or dependency access needs approval."],
+    [/\b(network access is restricted|network access (?:denied|blocked|restricted)|network is (?:denied|blocked|restricted)|dns (?:resolution )?(?:denied|blocked|restricted)|host resolution (?:denied|blocked|restricted)|dependency download failed)\b/i, "Network or dependency access needs approval."],
     [/\b(approval|approve|requires? approval|requires? confirmation|permission dialog|ask-for-approval|escalat(?:e|ion))\b/i, "Codex approval is required."],
     [/\b(operation not permitted|not permitted|permission denied|eacces|eperm|access denied)\b/i, "The sandbox or operating system denied the operation."],
     [/\b(read[- ]?only sandbox|outside (?:the )?(?:workspace|sandbox)|workspace-write|writable roots?|not inside a trusted directory|trusted directory|skip-git-repo-check)\b/i, "The current sandbox or trust policy blocked the workspace action."],

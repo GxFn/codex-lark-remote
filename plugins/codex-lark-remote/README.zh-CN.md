@@ -30,7 +30,7 @@ main
 ```
 
 添加后，在插件列表里启用 `codex-lark-remote`。如果要固定版本，可以把“Git 引用”
-改成具体 release tag，例如 `v0.1.17`。
+改成具体 release tag，例如 `v0.1.18`。
 
 ## 配置飞书/Lark
 

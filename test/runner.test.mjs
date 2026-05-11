@@ -160,6 +160,21 @@ test("summarizeCodexEvent reports useful background progress", () => {
     /Permission needed[\s\S]*Network or dependency access needs approval/,
   );
   assert.equal(
+    summarizeCodexEvent({
+      type: "item.completed",
+      item: {
+        type: "command_execution",
+        command: "nl -ba Sources/AppAudio.swift",
+        aggregated_output: [
+          "1 Logger.app.error(\"AVAudioSession 设置失败: \\(error.localizedDescription)\")",
+          "2 public enum NetworkStatus { case reachable, restricted }",
+          "3 let dependencyDirection = FeatureDependencyDirection.outbound",
+        ].join("\n"),
+      },
+    }),
+    "",
+  );
+  assert.equal(
     summarizeCodexEvent(
       { type: "item.completed", item: { type: "command_execution", command: "npm test", aggregated_output: "51 passed" } },
       { showCommands: true },
