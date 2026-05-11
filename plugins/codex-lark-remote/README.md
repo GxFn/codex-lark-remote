@@ -33,7 +33,7 @@ leave empty
 ```
 
 Enable `codex-lark-remote` from the plugin list. For a pinned install, set
-**Git ref** to a release tag such as `v0.1.21`.
+**Git ref** to a release tag such as `v0.1.22`.
 
 ## Configure Feishu/Lark
 

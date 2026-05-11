@@ -123,7 +123,7 @@ export class CodexCliRunner {
   async #runHandoffOne(command) {
     try {
       if (await this.#isCancelled(command.id)) return;
-      if (command.notifyStarted || this.config.handoff?.notifyStarted === true) {
+      if (shouldNotifyStarted(this.config, command)) {
         await this.#notify(command, "Started working on the Feishu/Lark message.");
       }
       const progressNotifier = createProgressNotifier({
@@ -247,6 +247,11 @@ export class CodexCliRunner {
       return false;
     }
   }
+}
+
+function shouldNotifyStarted(config, command) {
+  if (command?.notifyStarted === true) return true;
+  return config?.handoff?.notifyStarted !== false;
 }
 
 export function buildCodexExecArgs({ runner = {}, worktreePath, prompt }) {

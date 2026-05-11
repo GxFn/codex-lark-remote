@@ -44,7 +44,7 @@ main
 ```
 
 添加市场后，在插件列表里启用 `codex-lark-remote`。如果要安装固定版本，可以把
-“Git 引用”改成具体 release tag，例如 `v0.1.21`。
+“Git 引用”改成具体 release tag，例如 `v0.1.22`。
 
 ## 配置飞书/Lark
 

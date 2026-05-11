@@ -412,7 +412,7 @@ async function enqueueHandoffTask(ctx, input) {
     mode: "thread_handoff",
     presentation: "chat",
     notifyQueued: guidance || ctx.config.handoff?.notifyQueued === true,
-    notifyStarted: ctx.config.handoff?.notifyStarted === true,
+    notifyStarted: ctx.config.handoff?.notifyStarted !== false,
     handoffGuidance: guidance,
     guidanceForCommandId: input.runningCommand?.id || "",
     repoKey: "current",

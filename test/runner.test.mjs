@@ -112,7 +112,7 @@ test("buildHandoffPrompt can still annotate Feishu input when configured", () =>
   assert.match(prompt, /fix README/);
 });
 
-test("CodexCliRunner sends a handoff started acknowledgement", async () => {
+test("CodexCliRunner sends a handoff started acknowledgement by default", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-started-"));
   const fakeCodex = path.join(dataDir, "fake-codex");
   await fs.writeFile(fakeCodex, "#!/bin/sh\necho '{\"type\":\"turn.completed\"}'\nexit 0\n");
@@ -146,7 +146,7 @@ test("CodexCliRunner sends a handoff started acknowledgement", async () => {
     config: {
       dataDir,
       runner: { codexPath: fakeCodex },
-      handoff: { notifyProgress: false, notifyStarted: true },
+      handoff: { notifyProgress: false },
     },
     notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
   });
@@ -157,6 +157,50 @@ test("CodexCliRunner sends a handoff started acknowledgement", async () => {
     messageId: "om_1",
     text: "Started working on the Feishu/Lark message.",
   });
+});
+
+test("CodexCliRunner suppresses the handoff started acknowledgement when explicitly disabled", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-started-off-"));
+  const fakeCodex = path.join(dataDir, "fake-codex");
+  await fs.writeFile(fakeCodex, "#!/bin/sh\necho '{\"type\":\"turn.completed\"}'\nexit 0\n");
+  await fs.chmod(fakeCodex, 0o755);
+  await activateHandoff({ dataDir, threadId: "thread-1", cwd: dataDir });
+
+  let command = {
+    id: "rcmd_started_off",
+    mode: "thread_handoff",
+    status: "pending",
+    messageId: "om_1",
+    projectRoot: dataDir,
+    prompt: "continue",
+    codexSessionId: "thread-1",
+  };
+  const replies = [];
+  const queue = {
+    claimNext: async () => {
+      if (command.status !== "pending") return null;
+      command = { ...command, status: "running" };
+      return command;
+    },
+    update: async (_id, patch) => {
+      command = { ...command, ...patch };
+      return command;
+    },
+    get: async () => command,
+  };
+  const runner = new CodexCliRunner({
+    queue,
+    config: {
+      dataDir,
+      runner: { codexPath: fakeCodex },
+      handoff: { notifyProgress: false, notifyStarted: false },
+    },
+    notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+  });
+
+  await runner.processAll();
+
+  assert.equal(replies.some((reply) => reply.text === "Started working on the Feishu/Lark message."), false);
 });
 
 test("CodexCliRunner suppresses handoff notifications after handoff is off", async () => {

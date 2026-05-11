@@ -117,6 +117,7 @@ test("processLarkEvent routes normal messages to current-thread handoff when act
   assert.equal(enqueued[0].repoKey, "current");
   assert.equal(enqueued[0].projectRoot, "/workspace");
   assert.equal(enqueued[0].prompt, "[demo] update README from Feishu");
+  assert.equal(enqueued[0].notifyStarted, true);
   assert.equal(enqueued[0].codexSessionId, "019e0ffb-52e9-7ee3-bb87-42019b58eaa2");
   assert.deepEqual(replies, []);
 });
