@@ -32,9 +32,12 @@ When the user says "start this plugin" or similar:
    `codex_lark_handoff` from a generic "start" request alone.
 4. After the user explicitly consents to local bridge handoff, call
    `codex_lark_handoff` with `confirmedLocalBridgeHandoff: true`, preferably
-   with auth checking enabled when available. This is the default startup action
-   after consent. On macOS, handoff starts the plugin's built-in keep-awake
-   process unless `handoff.keepAwake` is disabled.
+   with auth checking enabled when available. Handoff must bind the exact Codex
+   thread from MCP request metadata or an explicit `threadId`; it must not guess
+   from workspace path. If the tool says the current thread id is unavailable,
+   report that startup is blocked instead of falling back to local scripts. This
+   is the default startup action after consent. On macOS, handoff starts the
+   plugin's built-in keep-awake process unless `handoff.keepAwake` is disabled.
 5. If Feishu/Lark `appId` or `appSecret` is missing, ask for the missing values
    and give the short platform path: create an internal/custom app in
    Feishu/Lark Open Platform, enable bot capability, copy App ID/App Secret from
@@ -74,3 +77,9 @@ If another Feishu/Lark message arrives while Codex is already running, treat the
 next turn as supplemental guidance for the same conversation. Reconcile it with
 any work already completed by the previous turn instead of restarting from
 scratch.
+
+Observation is separate from takeover. Use `/codex observe` in Feishu/Lark to
+list observable Codex sessions, `/codex observe <number or thread prefix>` to
+stream read-only progress from a selected session, and `/codex observe off` to
+stop. Observation must never route Feishu/Lark user messages into the observed
+session.

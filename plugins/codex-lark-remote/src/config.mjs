@@ -29,6 +29,10 @@ export function handoffFilePath(dataDir) {
   return path.join(dataDir, "handoff.json");
 }
 
+export function observationFilePath(dataDir) {
+  return path.join(dataDir, "observation.json");
+}
+
 export function configFilePath(dataDir) {
   return path.resolve(process.env.CODEX_LARK_CONFIG || path.join(dataDir, "config.json"));
 }
@@ -105,7 +109,7 @@ export function defaultConfig(dataDir = resolveDataDir()) {
       mode: "resume",
       promptStyle: "direct",
       notifyQueued: false,
-      notifyStarted: false,
+      notifyStarted: true,
       notifyProgress: true,
       showCommands: false,
       keepAwake: true,

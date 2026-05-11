@@ -10,9 +10,19 @@ import { KeepAwakeController } from "./keep-awake.mjs";
 import { LarkWebSocketReceiver } from "./lark-ws.mjs";
 import { parseLarkEvent, isUserAllowed, classifyChatText } from "./lark.mjs";
 import { LarkNotifier } from "./notifier.mjs";
-import { formatBridgeStatus, formatGuidanceQueued, formatHelp, formatQueued, formatTask, formatWhoami } from "./presenter.mjs";
+import {
+  formatBridgeStatus,
+  formatGuidanceQueued,
+  formatHelp,
+  formatObservationList,
+  formatObservationStatus,
+  formatQueued,
+  formatTask,
+  formatWhoami,
+} from "./presenter.mjs";
 import { RemoteCommandQueue } from "./queue.mjs";
 import { CodexCliRunner } from "./runner.mjs";
+import { activateObservation, clearObservation, CodexSessionObserver, listObservationTargets, readObservation } from "./observer.mjs";
 import { assertLarkAppCredentials } from "./setup-guide.mjs";
 
 export async function startBridge(options = {}) {
@@ -23,9 +33,11 @@ export async function startBridge(options = {}) {
   const runner = new CodexCliRunner({ queue, config, notifier });
   const logger = options.logger || console;
   const keepAwake = new KeepAwakeController({ config, logger });
-  const bridge = { config, queue, notifier, runner, token: null, server: null, larkWs: null, keepAwake, seenMessageIds: new Map() };
+  const observer = new CodexSessionObserver({ config, notifier, logger });
+  const bridge = { config, queue, notifier, runner, observer, token: null, server: null, larkWs: null, keepAwake, seenMessageIds: new Map() };
   const cleanup = () => {
     bridge.larkWs?.stop();
+    bridge.observer?.stop();
     bridge.keepAwake?.stop();
   };
   process.once("SIGTERM", () => {
@@ -61,9 +73,13 @@ export async function startBridge(options = {}) {
   const url = `http://${host}:${address.port}`;
   await writeState(config.dataDir, { pid: process.pid, version, host, port: address.port, url, token, startedAt: nowIso() });
   await bridge.larkWs.start();
-  if (await readHandoff({ dataDir: config.dataDir })) {
+  const activeHandoff = await readHandoff({ dataDir: config.dataDir });
+  if (activeHandoff) {
     bridge.keepAwake.start();
+  } else {
+    await cancelInactiveHandoffTasks(bridge);
   }
+  await bridge.observer.restore();
 
   if (config.runner?.workerEnabled !== false) {
     setInterval(() => runner.processAll().catch(() => {}), 2000).unref();
@@ -94,6 +110,8 @@ async function route(ctx) {
         counts,
         workerBusy: ctx.runner.busy,
         handoff: await readHandoff({ dataDir: ctx.config.dataDir }),
+        observation: await readObservation({ dataDir: ctx.config.dataDir }),
+        observer: ctx.observer?.status(),
         keepAwake: ctx.keepAwake?.status(),
         larkWs: ctx.larkWs?.status(),
         repos: Object.keys(ctx.config.repos || {}),
@@ -102,6 +120,7 @@ async function route(ctx) {
           counts,
           workerBusy: ctx.runner.busy,
           handoff: await readHandoff({ dataDir: ctx.config.dataDir }),
+          observation: await readObservation({ dataDir: ctx.config.dataDir }),
           keepAwake: ctx.keepAwake?.status(),
           larkWs: ctx.larkWs?.status(),
           url: publicUrl(ctx.config),
@@ -113,6 +132,7 @@ async function route(ctx) {
   if (req.method === "POST" && ["/bridge/stop", "/bridge/lark/stop"].includes(url.pathname)) {
     sendJson(res, 200, { success: true, message: "Stopping bridge" });
     ctx.larkWs?.stop();
+    ctx.observer?.stop();
     ctx.keepAwake?.stop();
     setTimeout(() => ctx.server.close(() => process.exit(0)), 50).unref();
     return;
@@ -139,6 +159,7 @@ async function route(ctx) {
       threadPath: body.threadPath,
       cwd: body.cwd,
       name: body.name,
+      requireExplicitThread: body.requireExplicitThread !== false,
       activatedBy: body.activatedBy || "bridge",
     });
     const keepAwake = ctx.keepAwake?.start();
@@ -248,6 +269,7 @@ async function handleChatAction(ctx, event, action) {
         counts,
         workerBusy: ctx.runner.busy,
         handoff,
+        observation: await readObservation({ dataDir: ctx.config.dataDir }),
         keepAwake: ctx.keepAwake?.status(),
         larkWs: ctx.larkWs?.status(),
         url: publicUrl(ctx.config),
@@ -260,8 +282,40 @@ async function handleChatAction(ctx, event, action) {
   if (action.kind === "command_visibility") {
     return handleCommandVisibility(ctx, event, action);
   }
+  if (action.kind === "observe_list") {
+    const targets = await listObservationTargets({ cwd: handoff?.cwd || "", limit: 10 });
+    return ctx.notifier.reply(
+      event.messageId,
+      formatObservationList(targets, await readObservation({ dataDir: ctx.config.dataDir })),
+    );
+  }
+  if (action.kind === "observe_enable") {
+    try {
+      const observation = await activateObservation({
+        dataDir: ctx.config.dataDir,
+        selector: action.selector,
+        cwd: handoff?.cwd || "",
+        messageId: event.messageId,
+        chatIdHash: event.chatIdHash,
+        userIdHash: event.userIdHash,
+        activatedBy: "lark",
+      });
+      await ctx.observer?.start(observation);
+      return ctx.notifier.reply(event.messageId, formatObservationStatus(observation));
+    } catch (error) {
+      const targets = await listObservationTargets({ cwd: handoff?.cwd || "", limit: 10 });
+      return ctx.notifier.reply(event.messageId, `${error.message}\n\n${formatObservationList(targets)}`);
+    }
+  }
+  if (action.kind === "observe_disable") {
+    const observation = await clearObservation({ dataDir: ctx.config.dataDir });
+    await ctx.observer?.stop();
+    return ctx.notifier.reply(event.messageId, formatObservationStatus(observation));
+  }
   if (action.kind === "handoff_disable") {
+    const activeHandoff = handoff;
     const handoffState = await clearHandoff({ dataDir: ctx.config.dataDir });
+    await cancelHandoffTasks(ctx, activeHandoff?.threadId || handoffState?.previous?.threadId);
     ctx.keepAwake?.stop();
     return ctx.notifier.reply(
       event.messageId,
@@ -382,6 +436,42 @@ async function findRunningHandoffTask(ctx, handoff) {
     && command.status === "running"
     && command.codexSessionId === handoff.threadId
   ) || null;
+}
+
+async function cancelHandoffTasks(ctx, threadId) {
+  if (!threadId || typeof ctx.queue.list !== "function" || typeof ctx.queue.cancel !== "function") return [];
+  const commands = await ctx.queue.list({ limit: 200 });
+  const activeStatuses = new Set(["pending", "running"]);
+  const matches = commands.filter((command) =>
+    command.mode === "thread_handoff"
+    && command.codexSessionId === threadId
+    && activeStatuses.has(command.status)
+  );
+  const cancelled = [];
+  for (const command of matches) {
+    const result = await ctx.queue.cancel(command.id, "handoff disabled by user");
+    if (result) cancelled.push(result);
+  }
+  return cancelled;
+}
+
+async function cancelInactiveHandoffTasks(ctx) {
+  const handoff = await readHandoff({ dataDir: ctx.config.dataDir });
+  const activeThreadId = handoff?.threadId || "";
+  if (typeof ctx.queue.list !== "function" || typeof ctx.queue.cancel !== "function") return [];
+  const commands = await ctx.queue.list({ limit: 200 });
+  const activeStatuses = new Set(["pending", "running"]);
+  const matches = commands.filter((command) =>
+    command.mode === "thread_handoff"
+    && activeStatuses.has(command.status)
+    && (!activeThreadId || command.codexSessionId !== activeThreadId)
+  );
+  const cancelled = [];
+  for (const command of matches) {
+    const result = await ctx.queue.cancel(command.id, "handoff inactive");
+    if (result) cancelled.push(result);
+  }
+  return cancelled;
 }
 
 function buildHandoffGuidancePrompt(text, runningCommand) {

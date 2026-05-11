@@ -10,6 +10,9 @@ export function formatHelp() {
     "Task controls: 查看任务 rcmd_..., 看改动 rcmd_..., 取消任务 rcmd_..., 批准提交 rcmd_...",
     "/codex whoami",
     "/codex status",
+    "/codex observe",
+    "/codex observe <number|thread-prefix>",
+    "/codex observe off",
     "/codex commands on|off",
     "/codex handoff off",
   ].join("\n");
@@ -30,18 +33,47 @@ export function formatWhoami(event) {
     .join("\n");
 }
 
-export function formatBridgeStatus({ config, counts, workerBusy, url, larkWs, handoff, keepAwake }) {
+export function formatBridgeStatus({ config, counts, workerBusy, url, larkWs, handoff, observation, keepAwake }) {
   const transport = config.lark?.transport || "websocket";
   return [
     "Codex Lark Remote status",
     `Bridge: ${url || "running"}`,
     `Feishu/Lark: ${formatLarkTransport({ transport, larkWs })}`,
     `Conversation: ${formatHandoffState(handoff)}`,
+    `Observation: ${formatObservationState(observation)}`,
     `Command display: ${formatCommandDisplay(config.handoff?.showCommands)}`,
     `Mac keep-awake: ${formatKeepAwake(keepAwake)}`,
     `Pending replies: ${formatCounts(counts)}`,
     `Codex worker: ${workerBusy ? "busy" : "idle"}`,
   ].join("\n");
+}
+
+export function formatObservationList(targets = [], observation = null) {
+  if (!targets.length) return "No observable Codex sessions found.";
+  return [
+    "Observable Codex sessions",
+    ...targets.map((thread, index) => [
+      `${index + 1}. ${thread.name || "Untitled Codex chat"}`,
+      `   Thread: ${String(thread.threadId).slice(0, 8)}`,
+      thread.cwd ? `   Cwd: ${thread.cwd}` : "",
+      thread.updatedAtMs ? `   Updated: ${new Date(thread.updatedAtMs).toLocaleString()}` : "",
+    ].filter(Boolean).join("\n")),
+    "",
+    "Use /codex observe <number or thread prefix> to stream that session.",
+    observation?.active ? "Use /codex observe off to stop the current observation." : "",
+  ].filter(Boolean).join("\n");
+}
+
+export function formatObservationStatus(observation) {
+  if (!observation?.active) return "Codex Lark Remote observation: off";
+  return [
+    "Codex Lark Remote observation: active",
+    `Thread: ${String(observation.threadId || "").slice(0, 8) || "unknown"}`,
+    observation.name ? `Name: ${observation.name}` : "",
+    observation.cwd ? `Cwd: ${observation.cwd}` : "",
+    "This is read-only progress streaming. Feishu/Lark messages are not sent to the observed session.",
+    "Use /codex observe off to stop.",
+  ].filter(Boolean).join("\n");
 }
 
 export function formatTask(command) {
@@ -158,6 +190,13 @@ function formatHandoffState(handoff) {
   const thread = handoff.threadId ? handoff.threadId.slice(0, 8) : "unknown";
   const name = handoff.name ? ` ${handoff.name}` : "";
   return `attached ${thread}${name}`;
+}
+
+function formatObservationState(observation) {
+  if (!observation?.active) return "off";
+  const thread = observation.threadId ? observation.threadId.slice(0, 8) : "unknown";
+  const name = observation.name ? ` ${observation.name}` : "";
+  return `streaming ${thread}${name}`;
 }
 
 function formatCommandDisplay(showCommands) {

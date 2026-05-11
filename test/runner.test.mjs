@@ -7,6 +7,7 @@ import {
   buildCodexExecArgs,
   buildCodexResumeArgs,
   buildHandoffPrompt,
+  CodexCliRunner,
   createSessionProgressWatcher,
   extractFinalMessage,
   extractProgressSummary,
@@ -14,6 +15,7 @@ import {
   summarizeCodexEvent,
   summarizeSessionProgressEvent,
 } from "../plugins/codex-lark-remote/src/runner.mjs";
+import { activateHandoff } from "../plugins/codex-lark-remote/src/handoff.mjs";
 
 test("buildCodexExecArgs uses supported codex exec flags", () => {
   const args = buildCodexExecArgs({
@@ -108,6 +110,98 @@ test("buildHandoffPrompt can still annotate Feishu input when configured", () =>
   assert.match(prompt, /Feishu\/Lark/);
   assert.match(prompt, /Permission boundary:/);
   assert.match(prompt, /fix README/);
+});
+
+test("CodexCliRunner sends a handoff started acknowledgement", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-started-"));
+  const fakeCodex = path.join(dataDir, "fake-codex");
+  await fs.writeFile(fakeCodex, "#!/bin/sh\necho '{\"type\":\"turn.completed\"}'\nexit 0\n");
+  await fs.chmod(fakeCodex, 0o755);
+  await activateHandoff({ dataDir, threadId: "thread-1", cwd: dataDir });
+
+  let command = {
+    id: "rcmd_started",
+    mode: "thread_handoff",
+    status: "pending",
+    messageId: "om_1",
+    projectRoot: dataDir,
+    prompt: "continue",
+    codexSessionId: "thread-1",
+  };
+  const replies = [];
+  const queue = {
+    claimNext: async () => {
+      if (command.status !== "pending") return null;
+      command = { ...command, status: "running" };
+      return command;
+    },
+    update: async (_id, patch) => {
+      command = { ...command, ...patch };
+      return command;
+    },
+    get: async () => command,
+  };
+  const runner = new CodexCliRunner({
+    queue,
+    config: {
+      dataDir,
+      runner: { codexPath: fakeCodex },
+      handoff: { notifyProgress: false, notifyStarted: true },
+    },
+    notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+  });
+
+  await runner.processAll();
+
+  assert.deepEqual(replies.find((reply) => reply.text === "Started working on the Feishu/Lark message."), {
+    messageId: "om_1",
+    text: "Started working on the Feishu/Lark message.",
+  });
+});
+
+test("CodexCliRunner suppresses handoff notifications after handoff is off", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-off-"));
+  const fakeCodex = path.join(dataDir, "fake-codex");
+  await fs.writeFile(fakeCodex, "#!/bin/sh\necho '{\"type\":\"turn.completed\"}'\nexit 0\n");
+  await fs.chmod(fakeCodex, 0o755);
+
+  let command = {
+    id: "rcmd_1",
+    mode: "thread_handoff",
+    status: "pending",
+    notifyStarted: true,
+    messageId: "om_1",
+    projectRoot: dataDir,
+    prompt: "continue",
+    codexSessionId: "thread-1",
+  };
+  const replies = [];
+  const queue = {
+    claimNext: async () => {
+      if (command.status !== "pending") return null;
+      command = { ...command, status: "running" };
+      return command;
+    },
+    update: async (_id, patch) => {
+      command = { ...command, ...patch };
+      return command;
+    },
+    get: async () => command,
+  };
+  const runner = new CodexCliRunner({
+    queue,
+    config: {
+      dataDir,
+      runner: { codexPath: fakeCodex },
+      handoff: { notifyProgress: true },
+    },
+    notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+  });
+
+  await runner.processAll();
+
+  assert.equal(command.status, "completed");
+  assert.deepEqual(replies, []);
 });
 
 test("formatPermissionBoundaryNotice explains approval UI boundaries", () => {

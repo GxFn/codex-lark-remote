@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 import readline from "node:readline";
+import { applyCodexContext } from "../src/codex-context.mjs";
 import { formatConfigUpdate, updateRuntimeConfig } from "../src/config-writer.mjs";
 import { loadConfig, readPackageVersion } from "../src/config.mjs";
 import { diagnoseLarkRemote, formatDiagnostics, formatHandoff } from "../src/diagnostics.mjs";
 import { LarkNotifier } from "../src/notifier.mjs";
+import { sanitizeBridgeStatus } from "../src/sanitize.mjs";
 import { formatMissingLarkCredentials, hasLarkAppCredentials } from "../src/setup-guide.mjs";
 import { bridgeFetch, bridgeStatus, readBridgeState, startBridgeProcess, stopBridgeProcess } from "../src/supervisor.mjs";
 
@@ -103,7 +105,7 @@ const tools = [
       properties: {
         dataDir: { type: "string" },
         configPath: { type: "string" },
-        threadId: { type: "string", description: "Optional explicit Codex thread/session id. Defaults to the most recent local Codex thread." },
+        threadId: { type: "string", description: "Optional explicit Codex thread/session id. When omitted, Codex request metadata is used; the tool does not guess by workspace path." },
         cwd: { type: "string", description: "Optional workspace cwd used when resolving the current thread." },
         checkAuth: { type: "boolean", description: "Also call Feishu/Lark auth API. Defaults to false." },
         confirmedLocalBridgeHandoff: {
@@ -231,12 +233,12 @@ async function handleRequest(request) {
   if (request.method === "tools/call") {
     const name = request.params?.name;
     const args = request.params?.arguments || {};
-    return response(request.id, await callTool(name, args));
+    return response(request.id, await callTool(name, args, request));
   }
   return response(request.id, {});
 }
 
-async function callTool(name, args) {
+async function callTool(name, args, request = {}) {
   if (name === "codex_lark_configure") {
     return textContent(formatConfigUpdate(await updateRuntimeConfig(args)));
   }
@@ -254,20 +256,26 @@ async function callTool(name, args) {
     if (!hasLarkAppCredentials(config)) {
       return textContent(formatHandoff(await diagnoseLarkRemote(args)));
     }
-    const bridge = await ensureBridge(args);
-    const state = bridge.state || await readBridgeState(args);
+    const handoffArgs = applyCodexContext(args, request);
+    if (!handoffArgs.threadId) {
+      return textContent(formatMissingThreadContext());
+    }
+    const bridge = await ensureBridge(handoffArgs);
+    const state = bridge.state || await readBridgeState(handoffArgs);
     if (!state?.url || !state?.token) {
       return textContent("Codex Lark Remote bridge is not running. Use codex_lark_start first.");
     }
     await bridgeFetch(state, "/bridge/handoff", {
       method: "POST",
       body: {
-        threadId: args.threadId,
-        cwd: args.cwd,
+        threadId: handoffArgs.threadId,
+        threadPath: handoffArgs.threadPath,
+        cwd: handoffArgs.cwd,
+        requireExplicitThread: true,
         activatedBy: "mcp",
       },
     });
-    return textContent(formatHandoff(await diagnoseLarkRemote(args)));
+    return textContent(formatHandoff(await diagnoseLarkRemote(handoffArgs)));
   }
   if (name === "codex_lark_stop") {
     return textContent(formatJson(await stopBridge(args)));
@@ -372,7 +380,7 @@ async function stopBridge(args) {
 
 function formatStatus(status) {
   if (status.data?.text) return status.data.text;
-  return formatJson(status);
+  return formatJson(sanitizeBridgeStatus(status));
 }
 
 function formatJson(value) {
@@ -395,5 +403,15 @@ function formatHandoffConsentRequired() {
     "",
     "If you consent, reply in this Codex chat with:",
     "I approve Codex Lark Remote local bridge handoff for this conversation.",
+  ].join("\n");
+}
+
+function formatMissingThreadContext() {
+  return [
+    "Codex Lark Remote cannot safely bind this window.",
+    "",
+    "The Codex host did not provide the current conversation thread id or exact session path to the plugin call. To avoid routing Feishu/Lark messages into another Codex window that happens to share the same workspace path, handoff was not started.",
+    "",
+    "Refresh or update Codex/plugin support for per-window MCP metadata, then start handoff from the exact Codex conversation you want Feishu/Lark to continue.",
   ].join("\n");
 }

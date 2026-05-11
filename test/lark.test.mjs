@@ -65,6 +65,23 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
     kind: "handoff_disable",
   });
 
+  assert.deepEqual(classifyChatText("/codex observe", config), {
+    kind: "observe_list",
+  });
+
+  assert.deepEqual(classifyChatText("/codex observe 2", config), {
+    kind: "observe_enable",
+    selector: "2",
+  });
+
+  assert.deepEqual(classifyChatText("/codex observe off", config), {
+    kind: "observe_disable",
+  });
+
+  assert.deepEqual(classifyChatText("/codex handoff disconnect", config), {
+    kind: "handoff_disable",
+  });
+
   assert.deepEqual(classifyChatText("断开连接吧", config), {
     kind: "handoff_disable",
   });
@@ -81,6 +98,14 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
     kind: "status",
   });
 
+  assert.deepEqual(classifyChatText("还在跑吗", config), {
+    kind: "status",
+  });
+
+  assert.deepEqual(classifyChatText("现在在干嘛", config), {
+    kind: "status",
+  });
+
   assert.deepEqual(classifyChatText("我是谁", config), {
     kind: "whoami",
   });
@@ -93,7 +118,30 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
     kind: "handoff_status",
   });
 
+  assert.deepEqual(classifyChatText("观察列表", config), {
+    kind: "observe_list",
+  });
+
+  assert.deepEqual(classifyChatText("观察第 2 个窗口", config), {
+    kind: "observe_enable",
+    selector: "2",
+  });
+
+  assert.deepEqual(classifyChatText("串流第三个", config), {
+    kind: "observe_enable",
+    selector: "3",
+  });
+
+  assert.deepEqual(classifyChatText("关闭观察", config), {
+    kind: "observe_disable",
+  });
+
   assert.deepEqual(classifyChatText("打开命令显示", config), {
+    kind: "command_visibility",
+    enabled: true,
+  });
+
+  assert.deepEqual(classifyChatText("显示终端输出", config), {
     kind: "command_visibility",
     enabled: true,
   });
@@ -103,7 +151,16 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
     enabled: false,
   });
 
+  assert.deepEqual(classifyChatText("别刷命令了", config), {
+    kind: "command_visibility",
+    enabled: false,
+  });
+
   assert.deepEqual(classifyChatText("不要接管了", config), {
+    kind: "handoff_disable",
+  });
+
+  assert.deepEqual(classifyChatText("关掉插件", config), {
     kind: "handoff_disable",
   });
 

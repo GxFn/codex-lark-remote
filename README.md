@@ -47,7 +47,7 @@ leave empty
 ```
 
 After adding the marketplace, enable `codex-lark-remote` from the plugin list.
-For a tagged release, set **Git ref** to a release tag, for example `v0.1.19`.
+For a tagged release, set **Git ref** to a release tag, for example `v0.1.20`.
 
 ## Configure Feishu/Lark
 
@@ -107,6 +107,12 @@ current thread in the local bridge. Existing chat history is not sent to
 Feishu/Lark. After you confirm, the plugin starts the bridge, attaches the
 current Codex thread, and waits for Feishu/Lark messages.
 
+Handoff is strict about the current Codex window. The plugin uses the exact
+thread id or session path supplied by Codex when the tool is called. If Codex
+does not provide that per-window metadata, handoff fails instead of guessing by
+workspace path. This prevents another Codex window in the same directory from
+receiving the Feishu/Lark stream.
+
 When startup succeeds, send any normal message to the Feishu/Lark bot. Codex
 will continue the same conversation and reply in Feishu/Lark.
 
@@ -119,6 +125,9 @@ Useful Feishu/Lark commands:
 ```text
 /codex whoami
 /codex status
+/codex observe
+/codex observe <number|thread-prefix>
+/codex observe off
 /codex commands on
 /codex commands off
 /codex handoff off
@@ -126,6 +135,14 @@ Useful Feishu/Lark commands:
 
 The bot also recognizes natural requests such as asking to stop or disconnect
 the handoff.
+
+## Observe another Codex session
+
+Observation is read-only and separate from handoff. Use `/codex observe` to list
+observable Codex sessions, then `/codex observe <number>` or
+`/codex observe <thread-prefix>` to stream progress from the selected session
+into Feishu/Lark. Messages you send in Feishu/Lark are not routed into the
+observed session. Use `/codex observe off` to stop that stream.
 
 ## Output behavior
 

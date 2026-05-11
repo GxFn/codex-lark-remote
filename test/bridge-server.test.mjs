@@ -166,6 +166,98 @@ test("processLarkEvent turns mid-run handoff messages into queued guidance", asy
   assert.match(replies[0].text, /已收到补充引导/);
 });
 
+test("processLarkEvent disables handoff and cancels active handoff tasks", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-disable-"));
+  await activateHandoff({
+    dataDir,
+    threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
+    cwd: "/workspace",
+    activatedBy: "test",
+  });
+  const replies = [];
+  const cancelled = [];
+  const commands = [
+    {
+      id: "rcmd_running",
+      mode: "thread_handoff",
+      status: "running",
+      codexSessionId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
+    },
+    {
+      id: "rcmd_other",
+      mode: "thread_handoff",
+      status: "running",
+      codexSessionId: "other-thread",
+    },
+  ];
+
+  await processLarkEvent(
+    {
+      config: {
+        dataDir,
+        lark: { allowedUsers: ["ou_allowed"] },
+      },
+      queue: {
+        findByMessageId: async () => null,
+        list: async () => commands,
+        cancel: async (id, reason) => {
+          cancelled.push({ id, reason });
+          return { id, status: "cancelled", error: reason };
+        },
+      },
+      notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+      keepAwake: { stop: () => ({ running: false }) },
+    },
+    textEvent({ text: "关闭接管", userId: "ou_allowed" }),
+  );
+
+  assert.deepEqual(cancelled, [{ id: "rcmd_running", reason: "handoff disabled by user" }]);
+  assert.match(replies[0].text, /handoff: off/);
+});
+
+test("processLarkEvent lists and starts explicit read-only observation", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-observe-"));
+  const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-home-observe-"));
+  const sessions = path.join(codexHome, "sessions", "2026", "05", "11");
+  await fs.mkdir(sessions, { recursive: true });
+  await writeSession({
+    file: path.join(sessions, "rollout-2026-05-11T10-00-00-019e0000-0000-7000-8000-000000000001.jsonl"),
+    id: "019e0000-0000-7000-8000-000000000001",
+    cwd: "/workspace",
+    name: "Target chat",
+    mtime: new Date("2026-05-11T10:00:00Z"),
+  });
+  const originalCodexHome = process.env.CODEX_HOME;
+  process.env.CODEX_HOME = codexHome;
+  const replies = [];
+  const started = [];
+  const ctx = {
+    config: {
+      dataDir,
+      lark: { allowedUsers: ["ou_allowed"] },
+    },
+    queue: {
+      findByMessageId: async () => null,
+    },
+    notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+    observer: { start: async (state) => started.push(state) },
+  };
+
+  try {
+    await processLarkEvent(ctx, textEvent({ text: "/codex observe", userId: "ou_allowed" }));
+    await processLarkEvent(ctx, textEvent({ text: "/codex observe 1", userId: "ou_allowed", messageId: "om_2" }));
+  } finally {
+    if (originalCodexHome === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = originalCodexHome;
+  }
+
+  assert.match(replies[0].text, /Observable Codex sessions/);
+  assert.match(replies[0].text, /Target chat/);
+  assert.equal(started[0].threadId, "019e0000-0000-7000-8000-000000000001");
+  assert.equal(started[0].messageId, "om_2");
+  assert.match(replies[1].text, /observation: active/);
+});
+
 test("processLarkEvent updates command display preference", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-commands-"));
   const replies = [];
@@ -223,11 +315,20 @@ test("processLarkEvent treats shell-looking text as chat input during handoff", 
   assert.deepEqual(replies, []);
 });
 
-function textEvent({ text, userId }) {
+async function writeSession({ file, id, cwd, name = "", source = "vscode", mtime }) {
+  const line = JSON.stringify({
+    type: "session_meta",
+    payload: { id, cwd, name, source },
+  });
+  await fs.writeFile(file, `${line}\n`);
+  await fs.utimes(file, mtime, mtime);
+}
+
+function textEvent({ text, userId, messageId = "om_1" }) {
   return {
     event: {
       message: {
-        message_id: "om_1",
+        message_id: messageId,
         chat_id: "oc_chat",
         message_type: "text",
         content: JSON.stringify({ text }),

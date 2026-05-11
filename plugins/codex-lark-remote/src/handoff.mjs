@@ -8,7 +8,10 @@ const SESSION_FILE_RE = /rollout-.+-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 export async function activateHandoff(options = {}) {
   const dataDir = resolveDataDir(options.dataDir);
   await ensureDir(dataDir);
-  const thread = await resolveCodexThread(options);
+  const thread = await resolveCodexThread({
+    ...options,
+    requireExplicitThread: options.requireExplicitThread !== false,
+  });
   const state = {
     active: true,
     mode: "resume",
@@ -47,13 +50,21 @@ export async function clearHandoff(options = {}) {
 
 export async function resolveCodexThread(options = {}) {
   if (options.threadId) {
-    return {
+    const resolved = {
       threadId: options.threadId,
       threadPath: options.threadPath || "",
       cwd: options.cwd || "",
       name: options.name || "",
       source: "explicit",
     };
+    if (!resolved.threadPath) {
+      const match = await findCodexThreadById(options.threadId, options);
+      if (match) return { ...match, cwd: resolved.cwd || match.cwd, name: resolved.name || match.name };
+    }
+    return resolved;
+  }
+  if (options.requireExplicitThread) {
+    throw new Error("Current Codex thread id is required for handoff. Refusing to guess from workspace path.");
   }
 
   const codexHome = path.resolve(options.codexHome || process.env.CODEX_HOME || path.join(os.homedir(), ".codex"));
@@ -63,6 +74,51 @@ export async function resolveCodexThread(options = {}) {
   const exact = await findSession(candidates, requestedCwd);
   if (exact) return exact;
   throw new Error("No Codex session found for handoff. Pass threadId explicitly.");
+}
+
+export async function listCodexThreads(options = {}) {
+  const codexHome = path.resolve(options.codexHome || process.env.CODEX_HOME || path.join(os.homedir(), ".codex"));
+  const sessionsRoot = path.join(codexHome, "sessions");
+  const requestedCwd = options.cwd ? path.resolve(options.cwd) : "";
+  const limit = Number(options.limit || 10);
+  const candidates = [];
+  for (const file of await listSessionFiles(sessionsRoot)) {
+    if (candidates.length >= limit) break;
+    const meta = await readSessionMeta(file.path);
+    if (!meta?.id || isHiddenSession(meta)) continue;
+    const candidate = {
+      threadId: meta.id,
+      threadPath: file.path,
+      cwd: meta.cwd || "",
+      name: meta.name || "",
+      source: meta.source || "",
+      updatedAtMs: file.mtimeMs,
+    };
+    if (requestedCwd && !cwdMatches(candidate.cwd, requestedCwd)) continue;
+    candidates.push(candidate);
+  }
+  return candidates;
+}
+
+export async function findCodexThreadById(threadId, options = {}) {
+  const target = String(threadId || "").trim().toLowerCase();
+  if (!target) return null;
+  const codexHome = path.resolve(options.codexHome || process.env.CODEX_HOME || path.join(os.homedir(), ".codex"));
+  const sessionsRoot = path.join(codexHome, "sessions");
+  for (const file of await listSessionFiles(sessionsRoot)) {
+    const meta = await readSessionMeta(file.path);
+    if (!meta?.id || isHiddenSession(meta)) continue;
+    if (String(meta.id).toLowerCase() !== target) continue;
+    return {
+      threadId: meta.id,
+      threadPath: file.path,
+      cwd: meta.cwd || "",
+      name: meta.name || "",
+      source: meta.source || "",
+      updatedAtMs: file.mtimeMs,
+    };
+  }
+  return null;
 }
 
 async function findSession(files, requestedCwd) {

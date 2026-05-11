@@ -23,6 +23,24 @@ test("activateHandoff stores an explicit thread id", async () => {
   assert.equal(await readHandoff({ dataDir }), null);
 });
 
+test("activateHandoff refuses to guess a thread when strict binding is required", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-handoff-strict-"));
+
+  await assert.rejects(
+    activateHandoff({ dataDir, requireExplicitThread: true, cwd: "/workspace" }),
+    /Current Codex thread id is required/,
+  );
+});
+
+test("activateHandoff refuses to guess a thread by default", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-handoff-default-strict-"));
+
+  await assert.rejects(
+    activateHandoff({ dataDir, cwd: "/workspace" }),
+    /Current Codex thread id is required/,
+  );
+});
+
 test("resolveCodexThread prefers the newest session matching cwd", async () => {
   const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-home-"));
   const sessions = path.join(codexHome, "sessions", "2026", "05", "10");

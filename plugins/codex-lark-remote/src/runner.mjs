@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { nowIso, safeFileName, worktreeRoot } from "./config.mjs";
+import { readHandoff } from "./handoff.mjs";
 import { formatFinal, formatProgress } from "./presenter.mjs";
 import { buildRunnerPrompt } from "./prompt.mjs";
 
@@ -121,8 +122,9 @@ export class CodexCliRunner {
 
   async #runHandoffOne(command) {
     try {
+      if (await this.#isCancelled(command.id)) return;
       if (command.notifyStarted || this.config.handoff?.notifyStarted === true) {
-        await this.#notify(command, `Codex started: ${command.id}`);
+        await this.#notify(command, "Started working on the Feishu/Lark message.");
       }
       const progressNotifier = createProgressNotifier({
         command,
@@ -131,6 +133,7 @@ export class CodexCliRunner {
       });
       const prompt = buildHandoffPrompt(command, { promptStyle: this.config.handoff?.promptStyle || "direct" });
       const result = await this.#runCodexResume(command, prompt, { onEvent: progressNotifier });
+      if (await this.#isCancelled(command.id)) return;
       const diffSummary = command.projectRoot ? await gitMaybe(["-C", command.projectRoot, "diff", "--stat"]) : "";
 
       const updated = await this.queue.update(
@@ -148,6 +151,7 @@ export class CodexCliRunner {
       );
       await this.#notify(updated, formatFinal(updated));
     } catch (error) {
+      if (await this.#isCancelled(command.id)) return;
       const failed = await this.queue.update(
         command.id,
         {
@@ -204,6 +208,7 @@ export class CodexCliRunner {
 
   async #notify(command, text) {
     if (!this.notifier) return;
+    if (!(await this.#shouldNotify(command))) return;
     try {
       const delivery = normalizeDelivery(await this.notifier.reply(command.messageId, text));
       if (!delivery.ok) throw new Error(delivery.error || "Lark reply failed");
@@ -220,6 +225,26 @@ export class CodexCliRunner {
       await this.queue
         .update(command.id, { lastNotifyError: error.message, lastNotifyAt: nowIso() }, "notify_failed")
         .catch(() => {});
+    }
+  }
+
+  async #shouldNotify(command) {
+    if (command.mode !== "thread_handoff") return true;
+    if (!this.config.dataDir) return false;
+    try {
+      const handoff = await readHandoff({ dataDir: this.config.dataDir });
+      return Boolean(handoff?.active && handoff.threadId === command.codexSessionId);
+    } catch {
+      return false;
+    }
+  }
+
+  async #isCancelled(commandId) {
+    try {
+      const latest = await this.queue.get(commandId);
+      return latest?.status === "cancelled";
+    } catch {
+      return false;
     }
   }
 }

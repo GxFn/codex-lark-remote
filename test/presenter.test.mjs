@@ -1,9 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatBridgeStatus, formatFinal, formatGuidanceQueued, formatHelp, formatProgress, formatTask, formatWhoami } from "../plugins/codex-lark-remote/src/presenter.mjs";
+import {
+  formatBridgeStatus,
+  formatFinal,
+  formatGuidanceQueued,
+  formatHelp,
+  formatObservationList,
+  formatObservationStatus,
+  formatProgress,
+  formatTask,
+  formatWhoami,
+} from "../plugins/codex-lark-remote/src/presenter.mjs";
 
 test("formatHelp includes whoami command", () => {
   assert.match(formatHelp(), /\/codex whoami/);
+  assert.match(formatHelp(), /\/codex observe/);
   assert.match(formatHelp(), /\/codex commands on\|off/);
 });
 
@@ -31,11 +42,34 @@ test("formatBridgeStatus includes Mac keep-awake state", () => {
     url: "http://127.0.0.1:1234",
     larkWs: { enabled: true, connected: true },
     handoff: { active: true, threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2" },
+    observation: { active: true, threadId: "019e0f92-2b48-7320-95b3-8ea1cc8189dd", name: "Migration" },
     keepAwake: { enabled: true, active: true, pid: 1234, platform: "darwin" },
   });
 
   assert.match(text, /Mac keep-awake: active pid=1234/);
+  assert.match(text, /Observation: streaming 019e0f92 Migration/);
   assert.match(text, /Command display: off \(risky only\)/);
+});
+
+test("formatObservationList and status describe read-only session streaming", () => {
+  const list = formatObservationList([
+    {
+      threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
+      name: "Current migration",
+      cwd: "/workspace",
+      updatedAtMs: Date.UTC(2026, 4, 11, 5, 0, 0),
+    },
+  ]);
+  const active = formatObservationStatus({
+    active: true,
+    threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
+    name: "Current migration",
+    cwd: "/workspace",
+  });
+
+  assert.match(list, /Observable Codex sessions/);
+  assert.match(list, /\/codex observe <number or thread prefix>/);
+  assert.match(active, /read-only progress streaming/);
 });
 
 

@@ -44,7 +44,7 @@ main
 ```
 
 添加市场后，在插件列表里启用 `codex-lark-remote`。如果要安装固定版本，可以把
-“Git 引用”改成具体 release tag，例如 `v0.1.19`。
+“Git 引用”改成具体 release tag，例如 `v0.1.20`。
 
 ## 配置飞书/Lark
 
@@ -99,6 +99,10 @@ Codex 会先要求你明确同意，然后只把当前线程的本地路由状�
 已有聊天历史不会发送到飞书/Lark。确认后，插件会启动 bridge、挂载当前 Codex 线程，
 并等待飞书/Lark 消息。
 
+接管会严格绑定当前 Codex 窗口。插件只使用 Codex 工具调用里提供的精确 thread id
+或 session path；如果 Codex 没有提供这些按窗口区分的元数据，接管会直接失败，
+不会再按工作目录猜测最近窗口。这样同一个目录下的其他 Codex 窗口不会串流到飞书。
+
 启动成功后，直接给飞书/Lark 机器人发送普通消息即可。Codex 会继续同一个对话，
 并把回答发回飞书/Lark。
 
@@ -110,12 +114,22 @@ Mac 睡眠。关闭接管或停止 bridge 时，这个 keep-awake 进程会一�
 ```text
 /codex whoami
 /codex status
+/codex observe
+/codex observe <序号|thread 前缀>
+/codex observe off
 /codex commands on
 /codex commands off
 /codex handoff off
 ```
 
 机器人也会识别“停止接管”“断开连接”等自然语言请求。
+
+## 观察其他 Codex 会话
+
+观察是只读串流，和接管分开。发送 `/codex observe` 可以列出可观察的 Codex 会话；
+发送 `/codex observe <序号>` 或 `/codex observe <thread 前缀>` 可以把选中的会话
+进度串流到飞书/Lark。飞书/Lark 里的消息不会发送进被观察的会话。发送
+`/codex observe off` 可停止观察。
 
 ## 输出策略
 
