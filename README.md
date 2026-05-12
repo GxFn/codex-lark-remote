@@ -1,4 +1,4 @@
-# Codex Lark Remote
+# Lark Remote
 
 Continue the current Codex conversation from Feishu/Lark.
 
@@ -18,7 +18,7 @@ Bundled plugin docs:
 
 ## Overview
 
-Codex Lark Remote lets you start a handoff from an active Codex chat, leave your
+Lark Remote lets you start a handoff from an active Codex chat, leave your
 Mac, and keep talking to the same Codex thread from Feishu/Lark.
 
 The default experience is intentionally narrow:
@@ -224,7 +224,7 @@ attention.
 
 ## Permission boundaries
 
-Codex Lark Remote takes over the conversation stream, not the native Codex
+Lark Remote takes over the conversation stream, not the native Codex
 Desktop UI. Feishu/Lark cannot click permission dialogs, MCP approvals,
 sandbox-escalation prompts, network/install approvals, or other native Codex UI
 popups.

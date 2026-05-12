@@ -1,4 +1,4 @@
-# Codex Lark Remote
+# Lark Remote
 
 从飞书/Lark 继续当前 Codex 对话。
 
@@ -17,7 +17,7 @@ Marketplace 页面：[codex-lark-remote](https://www.codex-marketplace.com/plugi
 
 ## 概览
 
-Codex Lark Remote 可以把一个正在进行的 Codex 对话交给飞书/Lark 接管。你可以在
+Lark Remote 可以把一个正在进行的 Codex 对话交给飞书/Lark 接管。你可以在
 Mac 上启动接管，然后离开电脑，继续从飞书/Lark 给同一个 Codex 线程发消息。
 
 默认体验刻意收窄：
@@ -207,7 +207,7 @@ Mac 睡眠。关闭接管或停止 bridge 时，这个 keep-awake 进程会一�
 
 ## 权限边界
 
-Codex Lark Remote 接管的是对话输入输出链路，不是 Codex Desktop 的原生 UI。
+Lark Remote 接管的是对话输入输出链路，不是 Codex Desktop 的原生 UI。
 飞书/Lark 不能点击权限弹窗、MCP 审批、沙箱提权、联网/安装依赖审批，或其他
 Codex 原生 UI 弹窗。
 

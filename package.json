@@ -2,7 +2,7 @@
   "name": "codex-lark-remote-repo",
   "version": "0.0.0",
   "private": true,
-  "description": "Development workspace for the Codex Lark Remote plugin.",
+  "description": "Development workspace for the Lark Remote plugin.",
   "workspaces": [
     "plugins/codex-lark-remote"
   ],
