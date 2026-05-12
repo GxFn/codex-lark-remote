@@ -95,6 +95,16 @@ leave empty
 Use `main` instead of a tag only if you intentionally want the latest unreleased
 changes.
 
+## Sync To GxFn Marketplace
+
+After publishing or refreshing the plugin, sync its installable plugin root into the aggregate `GxFn/GxFnCodexMarketplace` repository:
+
+```bash
+npm run sync:gxfn-marketplace
+```
+
+Use `npm run sync:gxfn-marketplace:push` to copy, commit, and push the marketplace snapshot. Set `GXFN_CODEX_MARKETPLACE_DIR=/path/to/GxFnCodexMarketplace` if the marketplace repository is not checked out next to this repository.
+
 ## Configure Feishu/Lark
 
 Create a Feishu/Lark bot app first:

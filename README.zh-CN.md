@@ -92,6 +92,16 @@ v0.1.24
 
 只有在明确想使用未发布的最新改动时，才把 Git 引用改成 `main`。
 
+## 同步到 GxFn 市场
+
+发布或刷新插件后，把可安装插件根目录同步到聚合 `GxFn/GxFnCodexMarketplace` 仓库：
+
+```bash
+npm run sync:gxfn-marketplace
+```
+
+如果要让脚本同时复制、提交并推送市场快照，运行 `npm run sync:gxfn-marketplace:push`。如果 `GxFnCodexMarketplace` 没有和本仓库放在同一层目录，用 `GXFN_CODEX_MARKETPLACE_DIR=/path/to/GxFnCodexMarketplace` 指定路径。
+
 ## 配置飞书/Lark
 
 先创建飞书/Lark 机器人应用：

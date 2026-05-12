@@ -8,7 +8,10 @@
   ],
   "scripts": {
     "test": "node --test",
-    "fixture": "node ./scripts/lark-event-fixture.mjs"
+    "fixture": "node ./scripts/lark-event-fixture.mjs",
+    "sync:gxfn-marketplace": "node ./scripts/sync-gxfn-marketplace.mjs",
+    "sync:gxfn-marketplace:commit": "node ./scripts/sync-gxfn-marketplace.mjs --commit",
+    "sync:gxfn-marketplace:push": "node ./scripts/sync-gxfn-marketplace.mjs --commit --push"
   },
   "overrides": {
     "axios": "^1.16.0"
