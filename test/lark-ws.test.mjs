@@ -31,6 +31,11 @@ test("LarkWebSocketReceiver starts SDK client and forwards message events", asyn
   assert.equal(received[0].event.message.message_id, "om_1");
   assert.equal(received[1].header.event_type, "card.action.trigger");
   assert.match(receiver.status().lastEventAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.match(receiver.status().lastMessageEventAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.match(receiver.status().lastCardActionAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(receiver.status().eventCounts["im.message.receive_v1"], 1);
+  assert.equal(receiver.status().eventCounts["card.action.trigger"], 1);
+  assert.deepEqual(receiver.status().registeredEvents, ["im.message.receive_v1", "card.action.trigger"]);
 
   receiver.stop();
   assert.equal(receiver.status().connected, false);

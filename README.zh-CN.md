@@ -1,6 +1,6 @@
 # Lark Remote
 
-从飞书/Lark 继续当前 Codex 对话。
+从飞书/Lark 控制、观察并接管本机 Codex 会话。
 
 English version: [README.md](README.md)
 
@@ -20,46 +20,56 @@ Marketplace 页面：[codex-lark-remote](https://www.codex-marketplace.com/plugi
 
 ## 概览
 
-Lark Remote 可以把一个正在进行的 Codex 对话交给飞书/Lark 接管。你可以在
-Mac 上启动接管，然后离开电脑，继续从飞书/Lark 给同一个 Codex 线程发消息。
+Lark Remote 会把飞书/Lark 连接到本机 Codex 会话记录。你可以先从 Codex 启动
+本地 bridge，然后在飞书/Lark 里用控制台选择项目、查看会话、观察进度或接管
+某个会话。
 
 默认体验刻意收窄：
 
-- 从你想继续的 Codex 对话里启动。
-- 明确同意把当前对话交给本地 bridge。
-- 直接给飞书/Lark 机器人发送普通消息。
-- 在飞书/Lark 收到 Codex 的最终回答和关键进度。
+- 从可信的 Codex 对话里启动本地 bridge。
+- 把飞书/Lark 控制台作为主要入口。
+- 在飞书/Lark 里选择本机 Codex 项目和会话。
+- 可以只读观察，也可以确认后接管。
+- 接管后，普通消息会直通被选中的 Codex 会话。
 
-飞书/Lark 消息会作为普通用户消息进入同一个 Codex 对话。插件默认 WebSocket
-优先，正常使用时不要求用户理解或选择多种模式。
+启动 bridge 的 Codex 对话可以作为初始目标，但插件不再只服务于这一个会话；
+bridge 连上后，目标选择由飞书/Lark 控制台完成。
 
 ## 先从控制台开始
 
 飞书/Lark 侧最重要的入口是自然语言控制台。bridge 连上后，发送 `控制台`，
 或点击启动卡片里的“控制台”。
 
-在控制台里直接说短口令即可：
+<p>
+  <img src="plugins/codex-lark-remote/assets/console-zh.png" alt="飞书/Lark 中文自然语言控制台卡片" width="760">
+</p>
+
+控制台会按飞书/Lark 会话绑定展示语言：用中文进入就持续展示中文卡片；用英文进入
+就展示英文卡片。之后发送另一种语言的控制口令，会切换该会话后续展示语言。
+
+在控制台里直接说短口令即可，中文和英文会走同一套语义：
 
 ```text
-控制台
-项目列表
-会话列表
-进入项目 1
-观察会话 2
-接管 1
+控制台 / console
+项目列表 / project list
+会话列表 / session list
+进入项目 1 / enter project 1
+观察会话 2 / observe session 2
+接管 1 / takeover 1
 ```
 
 接管某个 Codex 会话后，飞书会话会进入任务直通模式。后续普通消息会直接发送给
 目标 Codex 会话，作为新任务或补充指令处理，不再判断项目/会话操作。
 
-需要临时回到外层控制台时，说“控制台”或“跳出接管”。需要结束当前接管但保持
-飞书连接时，说“退出接管”。需要真正停止本机 bridge 并断开飞书连接时，说
-“关闭飞书连接”，机器人会先发确认卡片。
+需要临时回到外层控制台时，说“控制台”或“跳出接管”，英文可说 `console`
+或 `jump out of handoff`。需要结束当前接管但保持飞书连接时，说“退出接管”
+或 `exit handoff`。需要真正停止本机 bridge 并断开飞书连接时，说
+“关闭飞书连接”或 `close Lark connection`，机器人会先发确认卡片。
 
 ## 日常使用流程
 
 1. 安装插件，并完成一次飞书/Lark 应用配置。
-2. 在想远程继续的 Codex 对话里启动 Lark Remote。
+2. 在 Codex 里启动 Lark Remote，让本地 bridge 连上飞书。
 3. 在飞书/Lark 进入控制台，选择项目和会话。
 4. 接管会话，然后直接发送普通开发需求。
 5. 需要切换项目或会话时，再发送“控制台”。
@@ -79,7 +89,7 @@ npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plu
 如果要固定到当前审核版本：
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.1/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.2/plugins/codex-lark-remote --plugin
 ```
 
 安装后如果 Codex 插件列表没有立刻刷新，重启或刷新 Codex。
@@ -90,7 +100,7 @@ npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.1/
 不要填写仓库根目录：
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.2.1/plugins/codex-lark-remote
+https://github.com/GxFn/codex-lark-remote/tree/v0.2.2/plugins/codex-lark-remote
 ```
 
 如果 Codex 弹窗把来源、Git 引用、稀疏路径拆开填写，请这样填：
@@ -100,7 +110,7 @@ https://github.com/GxFn/codex-lark-remote/tree/v0.2.1/plugins/codex-lark-remote
 https://github.com/GxFn/codex-lark-remote.git
 
 Git 引用：
-v0.2.1
+v0.2.2
 
 稀疏路径：
 plugins/codex-lark-remote
@@ -118,7 +128,7 @@ marketplace，而不是单独添加这个插件，可以填写：
 https://github.com/GxFn/codex-lark-remote.git
 
 Git 引用：
-v0.2.1
+v0.2.2
 
 稀疏路径：
 留空
@@ -128,42 +138,57 @@ v0.2.1
 
 ## 配置飞书/Lark
 
-先创建飞书/Lark 机器人应用：
+首次配置建议按这个顺序走：
+
+1. 创建飞书/Lark 机器人应用。
+2. 把 App ID 和 App Secret 复制到剪贴板。
+3. 回到 Codex，自然语言告诉它“已复制”。
+4. Codex 读取剪贴板，保存配置并运行 `codex_lark_check_auth`。
+5. Codex 运行 `codex_lark_verify_setup`，启动/复用 bridge 并确认 WebSocket 已连接。
+6. 在飞书后台的事件配置和回调配置页面点击验证/保存。
+7. 回到 Codex，明确同意连接当前 Codex 会话到 Lark Remote。
+8. Codex 确认连接生效后，再在飞书/Lark 里向机器人发送 `whoami`。
+9. 把返回的 `senderId` 加到 `lark.allowedUsers`，再进入控制台。
+
+创建飞书/Lark 机器人应用：
 
 1. 打开 [飞书开放平台](https://open.feishu.cn/) 或
    [Lark Open Platform](https://open.larksuite.com/)。
 2. 创建企业自建应用/内部应用。
 3. 启用机器人能力。
 4. 在“凭证与基础信息”里复制 **App ID** 和 **App Secret**。
-5. 在“事件订阅”里选择长连接/WebSocket，并订阅 `im.message.receive_v1`
-   和 `card.action.trigger`。
-6. 在“回调配置”里保持“使用长连接接收回调”。如果改用 webhook，再配置
+5. 在“事件配置”里选择长连接/WebSocket，并订阅 `im.message.receive_v1`。
+6. 在“回调配置”里选择长连接/WebSocket，并订阅 `card.action.trigger`。
+   点击飞书后台的验证/保存时，需要 Codex Lark Remote bridge 正在运行。
+7. 如果改用 webhook，再配置
    `/bridge/lark/event` 作为回调地址，并同步 verification token / encrypt key。
-7. 按平台提示开通消息接收、发送/回复消息、卡片交互回调相关权限，然后发布或启用应用。
+8. 按平台提示开通消息接收、发送/回复消息、卡片交互回调相关权限，然后发布或启用应用。
 
-卡片按钮依赖 `card.action.trigger`。如果能收到文本消息但点击卡片没有反应，优先检查：
-应用是否已发布、事件订阅是否包含 `card.action.trigger`、回调配置是否仍是长连接、以及权限变更后是否重新发布。
+`codex_lark_verify_setup` 主要用于初始配置、重配和排障。它会告诉你 App 凭证是否可用、
+bridge 是否运行、WebSocket 是否连接，以及插件是否已经实际收到
+`im.message.receive_v1` 消息事件和 `card.action.trigger` 卡片回调。日常使用不需要反复验证。
 
-然后把配置粘贴到可信的本地 Codex 对话里：
+然后把 App ID 和 App Secret 复制到剪贴板。如果还不知道自己的 sender id，
+首次私有配置可以先让 `allowedUsers` 为空。剪贴板里可以是这个形状：
 
 ```text
-请配置 codex-lark-remote。
-
 飞书应用：
 - appId: cli_xxx
 - appSecret: xxx
 
 允许使用者：
-- allowedUsers: ["ou_xxx"]
+- allowedUsers: []
 
 可选接管参数：
 - takeover: { projectLimit: 20, selectionTtlMs: 600000 }
 
 可选启动介绍：
 - startup: { receiveId: "oc_xxx", receiveIdType: "chat_id", once: true }
-
-请用这些值调用 codex_lark_configure，然后运行 codex_lark_check_auth。
 ```
+
+复制后回到 Codex，说“已复制”。Codex 会读取剪贴板、调用 `codex_lark_configure`，
+然后运行 `codex_lark_check_auth` 和 `codex_lark_verify_setup`。不要把 App Secret 发到飞书群聊里。
+当飞书后台的事件配置和回调配置都验证通过并发布后，再回到 Codex 明确同意连接当前会话。
 
 插件默认把私密运行配置写到：
 
@@ -173,8 +198,10 @@ v0.2.1
 
 不要提交这个文件。
 
-如果还不知道自己的飞书/Lark sender id，可以首次配置时先让 `allowedUsers` 为空，
-从飞书向机器人发送 `whoami`，再把返回的 `senderId` 加进去。
+Codex 确认当前会话已经连接到 Lark Remote 后，再从飞书/Lark 向机器人发送 `whoami`，
+然后把返回的 `senderId` 粘回 Codex，让 Codex 更新 `lark.allowedUsers`。在 `allowedUsers` 非空之前，
+项目/会话接管会保持阻断。
+`whoami` 回复里会直接带一行 `allowedUsers: ["..."]`，可以原样粘回 Codex。
 
 `startup.receiveId` 是可选的主动推送目标。配置后，bridge 首次连上飞书或激活
 handoff 时会向这个会话推送一张启动介绍卡片；未配置时，第一条已授权飞书消息
@@ -183,24 +210,24 @@ handoff 时会向这个会话推送一张启动介绍卡片；未配置时，第
 `~/.codex-lark-remote/startup-notice.json`，调试时可把 `startup.once` 设为
 `false` 来每次启动都发送。
 
-缺少 `appId` 或 `appSecret` 时，插件不会启动 bridge，也不会接管当前 Codex 对话；
+缺少 `appId` 或 `appSecret` 时，插件不会启动 bridge，也不会连接飞书控制台；
 它只会返回配置指引。
 
 ## 从 Codex 启动
 
-在你想远程继续的 Codex 对话里说：
+在可信的 Codex 对话里说：
 
 ```text
 启动 codex-lark-remote。
 ```
 
-Codex 会先要求你明确同意，然后只把当前线程的本地路由状态写入本地 bridge；
-已有聊天历史不会发送到飞书/Lark。确认后，插件会启动 bridge、挂载当前 Codex 线程，
-并等待飞书/Lark 消息。
+Codex 会先要求你明确同意，然后把这个线程的本地路由状态写入本地 bridge；
+已有聊天历史不会发送到飞书/Lark。确认后，插件会启动 bridge，并打开飞书/Lark
+控制台。
 
-接管会严格绑定当前 Codex 会话/窗口。插件只使用 Codex 工具调用里提供的精确 thread id
-或 session path；如果 Codex 没有提供这些按会话区分的元数据，接管会直接失败，
-不会再按工作目录猜测最近会话。这样同一个目录下的其他 Codex 会话不会串流到飞书。
+当某个 Codex 线程被挂载或接管时，插件会严格使用 Codex 工具调用里提供的精确
+thread id 或 session path，不会再按工作目录猜测最近会话。bridge 连上后，你也
+可以从飞书/Lark 控制台切换到其他允许的项目和会话。
 
 在 macOS 上，bridge 会在接管期间自动启动 `caffeinate -dimsu`，允许屏幕熄灭但防止
 Mac 睡眠。关闭接管或停止 bridge 时，这个 keep-awake 进程会一起停止。

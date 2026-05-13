@@ -4,7 +4,14 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { intentConsoleFilePath } from "../plugins/codex-lark-remote/src/config.mjs";
-import { readIntentSession, resolveIntentSessionMode, setIntentSessionMode } from "../plugins/codex-lark-remote/src/intent-state.mjs";
+import {
+  detectIntentLanguage,
+  readIntentSession,
+  resolveIntentSessionLanguage,
+  resolveIntentSessionMode,
+  setIntentSessionLanguage,
+  setIntentSessionMode,
+} from "../plugins/codex-lark-remote/src/intent-state.mjs";
 
 test("intent session state stores console and handoff modes by chat", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-intent-state-"));
@@ -22,6 +29,20 @@ test("intent session state stores console and handoff modes by chat", async () =
 
   const stored = JSON.parse(await fs.readFile(intentConsoleFilePath(dataDir), "utf8"));
   assert.equal(stored.sessions.c_chat.mode, "handoff");
+});
+
+test("intent session state binds display language by chat", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-intent-language-"));
+  const event = { chatId: "oc_chat", chatIdHash: "c_chat", userIdHash: "u_user" };
+
+  assert.equal(detectIntentLanguage("看看有哪些项目"), "zh");
+  assert.equal(detectIntentLanguage("project list"), "en");
+  assert.equal(await resolveIntentSessionLanguage({ dataDir, event, config: {} }), "zh");
+
+  await setIntentSessionLanguage({ dataDir, event, language: "en", reason: "test" });
+  assert.equal((await readIntentSession({ dataDir, event, config: {} })).language, "en");
+  assert.equal(await resolveIntentSessionLanguage({ dataDir, event, config: {} }), "en");
+  assert.equal(await resolveIntentSessionLanguage({ dataDir, event: { ...event, text: "控制台" }, config: {} }), "zh");
 });
 
 test("configured console chats default to console mode until local state overrides them", async () => {

@@ -43,6 +43,14 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
     id: "rcmd_1",
   });
 
+  assert.deepEqual(classifyChatText("/codex verify", config), {
+    kind: "setup_verify",
+  });
+
+  assert.deepEqual(classifyChatText("验证配置", config), {
+    kind: "setup_verify",
+  });
+
   assert.deepEqual(classifyChatText("status rcmd_1", config), {
     kind: "task_status",
     id: "rcmd_1",
@@ -208,7 +216,20 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
     kind: "takeover_list",
   });
 
+  assert.deepEqual(classifyChatText("project list", config), {
+    kind: "takeover_list",
+  });
+
+  assert.deepEqual(classifyChatText("show projects", config), {
+    kind: "takeover_list",
+  });
+
   assert.deepEqual(classifyChatText("进入第一个项目", config), {
+    kind: "takeover_project_select",
+    selector: "1",
+  });
+
+  assert.deepEqual(classifyChatText("enter first project", config), {
     kind: "takeover_project_select",
     selector: "1",
   });
@@ -228,6 +249,11 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
     selector: "3",
   });
 
+  assert.deepEqual(classifyChatText("select session 3", config), {
+    kind: "takeover_select",
+    selector: "3",
+  });
+
   assert.deepEqual(classifyChatText("执行接管", config), {
     kind: "takeover_execute",
   });
@@ -242,7 +268,17 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
     selector: "1",
   });
 
+  assert.deepEqual(classifyChatText("takeover 1", config), {
+    kind: "takeover_execute",
+    selector: "1",
+  });
+
   assert.deepEqual(classifyChatText("观察第 2 个窗口", config), {
+    kind: "observe_enable",
+    selector: "2",
+  });
+
+  assert.deepEqual(classifyChatText("observe session 2", config), {
     kind: "observe_enable",
     selector: "2",
   });

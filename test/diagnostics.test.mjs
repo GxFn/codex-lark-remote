@@ -49,7 +49,8 @@ test("diagnoseLarkRemote reports sanitized websocket-first readiness", async () 
   assert.equal(diagnostics.repos[0].pathExists, true);
   assert.match(formatDiagnostics(diagnostics), /Feishu\/Lark: websocket/);
   assert.doesNotMatch(formatHandoff(diagnostics), /\[repo\]|approve|worktree|isolated/i);
-  assert.match(formatHandoff(diagnostics), /Send any message to continue this Codex conversation/);
+  assert.match(formatHandoff(diagnostics), /Send 控制台 or console/);
+  assert.match(formatHandoff(diagnostics), /project list, session list/);
   assert.doesNotMatch(formatDiagnostics(diagnostics), /secret_value|token_value|0123456789abcdef/);
 });
 
@@ -63,6 +64,13 @@ test("formatHandoff gives first-run setup guidance when app credentials are miss
   assert.match(text, /Bridge: not started/);
   assert.match(text, /open\.feishu\.cn/);
   assert.match(text, /open\.larksuite\.com/);
+  assert.match(text, /card\.action\.trigger/);
+  assert.match(text, /allowedUsers: \[\]/);
+  assert.match(text, /whoami/);
+  assert.match(text, /explicit consent|明确同意/);
+  assert.match(text, /clipboard/);
+  assert.match(text, /已复制/);
+  assert.match(text, /codex_lark_verify_setup/);
   assert.doesNotMatch(text, /Current thread: [0-9a-f-]{36}/);
   assert.match(text, /codex_lark_configure/);
   assert.doesNotMatch(formatDiagnostics(diagnostics), /Run codex_lark_start/);

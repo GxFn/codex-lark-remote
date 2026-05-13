@@ -45,8 +45,18 @@ test("formatStartupIntro explains conversational Feishu controls", () => {
   assert.match(text, /任务直通模式/);
   assert.match(text, /不再解析项目\/会话操作/);
   assert.match(text, /退出接管/);
-  assert.match(text, /\bwindows\b/);
+  assert.doesNotMatch(text, /project list|enter project|takeover 2|exit handoff|\bwindows\b/);
   assert.doesNotMatch(text, /\/codex/);
+});
+
+test("formatStartupIntro can render English without Chinese command text", () => {
+  const text = formatStartupIntro({ language: "en" });
+  assert.match(text, /Codex is connected to Lark/);
+  assert.match(text, /project list/);
+  assert.match(text, /enter project 1/);
+  assert.match(text, /takeover 2/);
+  assert.match(text, /exit handoff/);
+  assert.doesNotMatch(text, /[\u3400-\u9fff]/);
 });
 
 test("buildStartupIntroCard exposes clickable startup actions", () => {
@@ -55,6 +65,7 @@ test("buildStartupIntroCard exposes clickable startup actions", () => {
   assert.match(rendered, /Codex 已连接飞书/);
   assert.match(rendered, /外层是自然语言控制台/);
   assert.match(rendered, /任务直通模式/);
+  assert.doesNotMatch(rendered, /project list|close Lark connection|exit handoff/);
   assert.match(rendered, /按钮只是快捷入口/);
   assert.match(rendered, /状态/);
   assert.match(rendered, /进入控制台/);
@@ -70,6 +81,15 @@ test("buildStartupIntroCard exposes clickable startup actions", () => {
   assert.doesNotMatch(rendered, /\/codex/);
 });
 
+test("buildStartupIntroCard renders English actions when requested", () => {
+  const rendered = JSON.stringify(buildStartupIntroCard({ language: "en" }));
+  assert.match(rendered, /Codex Connected To Lark/);
+  assert.match(rendered, /project list/);
+  assert.match(rendered, /Close Connection/);
+  assert.match(rendered, /startup_console/);
+  assert.doesNotMatch(rendered, /[\u3400-\u9fff]/);
+});
+
 test("console mode intro is a natural-language control card", () => {
   const text = formatConsoleModeIntro();
   const rendered = JSON.stringify(buildConsoleModeCard());
@@ -77,13 +97,27 @@ test("console mode intro is a natural-language control card", () => {
   assert.match(text, /已进入外层自然语言控制台/);
   assert.match(text, /任务直通模式/);
   assert.match(text, /直接发送给目标 Codex 会话/);
+  assert.match(text, /进入项目 1/);
   assert.match(rendered, /自然语言控制台/);
   assert.match(rendered, /直接发送给目标 Codex 会话/);
+  assert.match(rendered, /接管 1/);
   assert.match(rendered, /关闭飞书连接/);
   assert.match(rendered, /startup_windows/);
   assert.match(rendered, /bridge_stop_prompt/);
   assert.doesNotMatch(rendered, /我的身份/);
   assert.doesNotMatch(rendered, /进入控制台/);
+  assert.doesNotMatch(rendered, /enter project|takeover 1|close Lark connection/);
+});
+
+test("console mode card can render English only", () => {
+  const text = formatConsoleModeIntro({ language: "en" });
+  const rendered = JSON.stringify(buildConsoleModeCard({ language: "en" }));
+
+  assert.match(text, /Entered the natural-language console/);
+  assert.match(text, /enter project 1/);
+  assert.match(rendered, /Natural-Language Console/);
+  assert.match(rendered, /Close Connection/);
+  assert.doesNotMatch(rendered, /[\u3400-\u9fff]/);
 });
 
 test("handoff disabled message distinguishes takeover exit from bridge disconnect", () => {
@@ -94,7 +128,10 @@ test("handoff disabled message distinguishes takeover exit from bridge disconnec
   assert.match(text, /飞书连接仍然保持/);
   assert.match(rendered, /已退出当前接管/);
   assert.match(rendered, /不会再直通刚才的 Codex 会话/);
+  assert.match(rendered, /项目列表/);
+  assert.match(rendered, /接管 2/);
   assert.match(rendered, /startup_windows/);
+  assert.doesNotMatch(rendered, /project list|takeover 2|jump out of handoff/);
 });
 
 test("bridge stop confirmation explains it closes the connection", () => {
@@ -123,7 +160,9 @@ test("formatWhoami returns the sender id needed for allowlist setup", () => {
   assert.match(text, /senderId: ou_user_123/);
   assert.match(text, /openId: ou_open_123/);
   assert.match(text, /unionId: on_union_123/);
-  assert.match(text, /Add senderId to lark\.allowedUsers/);
+  assert.match(text, /add one of these IDs to lark\.allowedUsers/);
+  assert.match(text, /allowedUsers: \["ou_user_123"\]/);
+  assert.match(text, /粘回 Codex/);
 });
 
 test("formatBridgeStatus includes Mac keep-awake state", () => {

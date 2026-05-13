@@ -268,6 +268,30 @@ test("formatPermissionBoundaryNotice explains approval UI boundaries", () => {
   assert.match(text, /Permission needed/);
   assert.match(text, /cannot click Codex Desktop permission dialogs/);
   assert.match(text, /Codex security review blocked the action/);
+
+  const zh = formatPermissionBoundaryNotice("tool call rejected: requires approval in Codex Desktop", { language: "zh" });
+  assert.match(zh, /需要权限确认/);
+  assert.match(zh, /需要 Codex 权限批准/);
+  assert.match(zh, /回到 Codex Desktop 批准/);
+});
+
+test("formatPermissionBoundaryNotice ignores source text that only discusses permissions", () => {
+  assert.equal(
+    formatPermissionBoundaryNotice("Alembic-legacy/templates/recipes-setup/seed-error-handling.md [1495 lines, 79897 chars]"),
+    "",
+  );
+  assert.equal(
+    formatPermissionBoundaryNotice("| ④ **\"Save this error handling pattern as a project convention\"** | One-time capture — every team member's AI learns this pattern | [260 lines, 14341 chars]"),
+    "",
+  );
+  assert.equal(
+    formatPermissionBoundaryNotice('import { execFileSync } from "node:child_process"; [260 lines, 9729 chars]'),
+    "",
+  );
+  assert.equal(
+    formatPermissionBoundaryNotice("A team member may request approval before saving a project convention."),
+    "",
+  );
 });
 
 test("extractFinalMessage reads Codex JSONL agent messages", () => {

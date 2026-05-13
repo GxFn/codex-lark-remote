@@ -14,7 +14,7 @@ test("startBridge refuses to run before Feishu app credentials are configured", 
 
   await assert.rejects(
     startBridge({ dataDir }),
-    /missing Feishu\/Lark appId and appSecret/,
+    /Codex Lark Remote setup required[\s\S]*clipboard[\s\S]*已复制[\s\S]*card\.action\.trigger[\s\S]*allowedUsers: \[\]/,
   );
   await assert.rejects(fs.stat(stateFilePath(dataDir)), { code: "ENOENT" });
 });
@@ -108,7 +108,7 @@ test("processLarkEvent sends startup intro to the first allowed Feishu chat once
     assert.equal(sent.length, 1);
     assert.equal(sent[0].receiveId, "oc_chat");
     assert.equal(sent[0].options.receiveIdType, "chat_id");
-    assert.match(sent[0].text, /Codex 已经连上飞书/);
+    assert.match(sent[0].text, /Codex is connected to Lark/);
     assert.equal(replies.length, 2);
   } finally {
     if (previousReceiveId === undefined) delete process.env.CODEX_LARK_STARTUP_RECEIVE_ID;
@@ -211,6 +211,68 @@ test("processLarkEvent enables console mode and routes unknown text through inte
   assert.equal(cards.length, 1);
   assert.match(JSON.stringify(cards[0].card), /自然语言控制台/);
   assert.match(replies[0].text, /Codex Lark Remote status/);
+});
+
+test("processLarkEvent does not send a duplicate startup intro when opening console first", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-console-no-startup-"));
+  const cards = [];
+  const sent = [];
+  const ctx = {
+    config: {
+      dataDir,
+      lark: { appId: "cli_test", allowedUsers: ["ou_allowed"], transport: "websocket" },
+    },
+    queue: { findByMessageId: async () => null },
+    notifier: {
+      send: async (receiveId, text, options) => {
+        sent.push({ receiveId, text, options });
+        return { ok: true };
+      },
+      sendCard: async (receiveId, card, options) => {
+        sent.push({ receiveId, card, options });
+        return { ok: true };
+      },
+      replyCard: async (messageId, card) => {
+        cards.push({ messageId, card });
+        return { ok: true };
+      },
+      reply: async () => {},
+    },
+  };
+
+  await processLarkEvent(ctx, textEvent({ text: "控制台", userId: "ou_allowed", messageId: "om_console" }));
+  await processLarkEvent(ctx, textEvent({ text: "项目列表", userId: "ou_allowed", messageId: "om_projects" }));
+
+  assert.equal(sent.length, 0);
+  assert.equal(cards.length, 2);
+  assert.match(JSON.stringify(cards[0].card), /自然语言控制台/);
+});
+
+test("processLarkEvent binds console card language from English input", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-console-en-"));
+  const cards = [];
+  const ctx = {
+    config: {
+      dataDir,
+      lark: { allowedUsers: ["ou_allowed"], transport: "websocket" },
+    },
+    queue: { findByMessageId: async () => null },
+    notifier: {
+      replyCard: async (messageId, card) => {
+        cards.push({ messageId, card });
+        return { ok: true };
+      },
+      reply: async () => {},
+    },
+  };
+
+  await processLarkEvent(ctx, textEvent({ text: "console", userId: "ou_allowed", messageId: "om_console" }));
+
+  const rendered = JSON.stringify(cards[0].card);
+  assert.match(rendered, /Natural-Language Console/);
+  assert.match(rendered, /Close Connection/);
+  assert.doesNotMatch(rendered, /自然语言控制台|关闭连接/);
+  assert.equal((await readIntentSession({ dataDir, event: { chatId: "oc_chat" }, config: ctx.config })).language, "en");
 });
 
 test("processLarkEvent only includes the remote note on the first handoff message", async () => {
@@ -378,11 +440,11 @@ test("processLarkEvent lists and starts explicit read-only observation", async (
     else process.env.CODEX_HOME = originalCodexHome;
   }
 
-  assert.match(replies[0].text, /可观察的 Codex 会话/);
+  assert.match(replies[0].text, /Observable Codex sessions/);
   assert.match(replies[0].text, /Target chat/);
   assert.equal(started[0].threadId, "019e0000-0000-7000-8000-000000000001");
   assert.equal(started[0].messageId, "om_2");
-  assert.match(replies[1].text, /观察：已开启/);
+  assert.match(replies[1].text, /observation: active/);
 });
 
 test("processLarkEvent updates command display preference", async () => {
@@ -460,7 +522,7 @@ test("processLarkEvent lets Feishu inspect takeover windows before attaching", a
   }
 
   assert.equal(cards.length, 3);
-  assert.match(JSON.stringify(cards[0].card), /可接管项目/);
+  assert.match(JSON.stringify(cards[0].card), /Takeover-Ready Projects/);
   assert.match(JSON.stringify(cards[1].card), /Target A/);
   assert.equal((await readTakeover({ dataDir })).state, "selected");
   assert.deepEqual(replies, []);
@@ -590,6 +652,46 @@ test("processLarkEvent requires allowedUsers before full-project takeover", asyn
   assert.match(replies[0].text, /lark\.allowedUsers/);
 });
 
+test("processLarkEvent reloads allowedUsers written after bridge startup", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-takeover-reload-"));
+  const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-home-takeover-reload-"));
+  await fs.writeFile(
+    configFilePath(dataDir),
+    `${JSON.stringify({ lark: { allowedUsers: ["ou_allowed"] } }, null, 2)}\n`,
+  );
+  const originalCodexHome = process.env.CODEX_HOME;
+  process.env.CODEX_HOME = codexHome;
+  const replies = [];
+  const cards = [];
+
+  try {
+    await processLarkEvent(
+      {
+        config: {
+          dataDir,
+          lark: { allowedUsers: [] },
+        },
+        queue: { findByMessageId: async () => null },
+        notifier: {
+          reply: async (messageId, text) => replies.push({ messageId, text }),
+          replyCard: async (messageId, card) => {
+            cards.push({ messageId, card });
+            return { ok: true };
+          },
+        },
+      },
+      textEvent({ text: "/codex windows", userId: "ou_allowed" }),
+    );
+  } finally {
+    if (originalCodexHome === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = originalCodexHome;
+  }
+
+  assert.equal(replies.find((reply) => /lark\.allowedUsers/.test(reply.text)), undefined);
+  assert.equal(cards.length, 1);
+  assert.match(JSON.stringify(cards[0].card), /可接管项目|Takeover-Ready Projects/);
+});
+
 test("processLarkEvent executes takeover from a card action", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-takeover-card-"));
   const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-home-takeover-card-"));
@@ -656,6 +758,49 @@ test("processLarkEvent routes startup card buttons to normal actions", async () 
 
   assert.equal(replies.length, 1);
   assert.match(replies[0].text, /Codex Lark Remote status/);
+});
+
+test("processLarkEvent returns setup verification card on demand", async () => {
+  const cards = [];
+  await processLarkEvent(
+    {
+      config: {
+        lark: {
+          appId: "cli_test",
+          appSecret: "secret",
+          allowedUsers: ["ou_allowed"],
+          transport: "websocket",
+        },
+      },
+      queue: { findByMessageId: async () => null },
+      runner: { busy: false },
+      larkWs: {
+        status: () => ({
+          enabled: true,
+          connected: true,
+          message: "Connected via WebSocket",
+          lastMessageEventAt: "2026-05-13T12:00:00Z",
+          lastCardActionAt: "2026-05-13T12:01:00Z",
+        }),
+      },
+      notifier: {
+        checkAuth: async () => ({ ok: true, hasCredentials: true, appIdPrefix: "cli_test...", message: "Tenant access token acquired" }),
+        replyCard: async (messageId, card) => {
+          cards.push({ messageId, card });
+          return { ok: true };
+        },
+        reply: async () => {},
+      },
+    },
+    cardActionEvent({ action: "setup_verify", userId: "ou_allowed" }),
+  );
+
+  assert.equal(cards.length, 1);
+  const rendered = JSON.stringify(cards[0].card);
+  assert.match(rendered, /飞书配置验证/);
+  assert.match(rendered, /im\.message\.receive_v1/);
+  assert.match(rendered, /card\.action\.trigger/);
+  assert.match(rendered, /刷新验证/);
 });
 
 test("processLarkEvent shows console card from startup card", async () => {
