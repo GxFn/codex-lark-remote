@@ -6,6 +6,7 @@ import path from "node:path";
 import { processLarkEvent, startBridge } from "../plugins/codex-lark-remote/src/bridge-server.mjs";
 import { configFilePath, stateFilePath } from "../plugins/codex-lark-remote/src/config.mjs";
 import { activateHandoff } from "../plugins/codex-lark-remote/src/handoff.mjs";
+import { prepareTakeoverScope, readTakeover } from "../plugins/codex-lark-remote/src/takeover.mjs";
 
 test("startBridge refuses to run before Feishu app credentials are configured", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-no-creds-"));
@@ -314,6 +315,111 @@ test("processLarkEvent updates command display preference", async () => {
   assert.equal(JSON.parse(await fs.readFile(configFilePath(dataDir), "utf8")).handoff.showCommands, true);
 });
 
+test("processLarkEvent lets Feishu inspect takeover windows before attaching", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-takeover-list-"));
+  const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-home-takeover-list-"));
+  const sessions = path.join(codexHome, "sessions", "2026", "05", "13");
+  await fs.mkdir(sessions, { recursive: true });
+  await writeSession({
+    file: path.join(sessions, "rollout-2026-05-13T10-00-00-019e0000-0000-7000-8000-000000000010.jsonl"),
+    id: "019e0000-0000-7000-8000-000000000010",
+    cwd: "/workspace",
+    name: "Starter B",
+    mtime: new Date("2026-05-13T10:00:00Z"),
+  });
+  await writeSession({
+    file: path.join(sessions, "rollout-2026-05-13T10-01-00-019e0000-0000-7000-8000-000000000011.jsonl"),
+    id: "019e0000-0000-7000-8000-000000000011",
+    cwd: "/workspace",
+    name: "Target A",
+    mtime: new Date("2026-05-13T10:01:00Z"),
+  });
+  await prepareTakeoverScope({
+    dataDir,
+    codexHome,
+    cwd: "/workspace",
+    threadId: "019e0000-0000-7000-8000-000000000010",
+  });
+  const originalCodexHome = process.env.CODEX_HOME;
+  process.env.CODEX_HOME = codexHome;
+  const replies = [];
+  const cards = [];
+  const ctx = {
+    config: {
+      dataDir,
+      lark: { allowedUsers: ["ou_allowed"] },
+      takeover: { idleDebounceMs: 1 },
+    },
+    queue: { findByMessageId: async () => null },
+    notifier: {
+      reply: async (messageId, text) => replies.push({ messageId, text }),
+      replyCard: async (messageId, card) => {
+        cards.push({ messageId, card });
+        return { ok: true };
+      },
+    },
+  };
+
+  try {
+    await processLarkEvent(ctx, textEvent({ text: "/codex takeover", userId: "ou_allowed" }));
+    await processLarkEvent(ctx, textEvent({ text: "1", userId: "ou_allowed", messageId: "om_2" }));
+  } finally {
+    if (originalCodexHome === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = originalCodexHome;
+  }
+
+  assert.equal(cards.length, 2);
+  assert.match(JSON.stringify(cards[0].card), /Target A/);
+  assert.equal((await readTakeover({ dataDir })).state, "selected");
+  assert.deepEqual(replies, []);
+});
+
+test("processLarkEvent executes takeover from a card action", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-takeover-card-"));
+  const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-home-takeover-card-"));
+  const sessions = path.join(codexHome, "sessions", "2026", "05", "13");
+  await fs.mkdir(sessions, { recursive: true });
+  await writeSession({
+    file: path.join(sessions, "rollout-2026-05-13T10-01-00-019e0000-0000-7000-8000-000000000012.jsonl"),
+    id: "019e0000-0000-7000-8000-000000000012",
+    cwd: "/workspace",
+    name: "Target A",
+    events: [{ type: "turn.completed", payload: {} }],
+    mtime: new Date("2026-05-13T10:01:00Z"),
+  });
+  await prepareTakeoverScope({ dataDir, codexHome, cwd: "/workspace" });
+  const originalCodexHome = process.env.CODEX_HOME;
+  process.env.CODEX_HOME = codexHome;
+  const replies = [];
+  let keepAwakeStarted = 0;
+  const ctx = {
+    config: {
+      dataDir,
+      lark: { allowedUsers: ["ou_allowed"] },
+      takeover: { idleDebounceMs: 1 },
+    },
+    notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+    keepAwake: { start: () => { keepAwakeStarted += 1; } },
+    queue: { enqueue: async (input) => ({ id: "rcmd_1", ...input }) },
+    runner: { processAll: () => {} },
+  };
+
+  try {
+    await processLarkEvent(ctx, cardActionEvent({
+      action: "takeover_execute",
+      optionIndex: 1,
+      threadId: "019e0000-0000-7000-8000-000000000012",
+      userId: "ou_allowed",
+    }));
+  } finally {
+    if (originalCodexHome === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = originalCodexHome;
+  }
+
+  assert.equal(keepAwakeStarted, 1);
+  assert.match(replies[0].text, /Takeover active/);
+});
+
 test("processLarkEvent treats shell-looking text as chat input during handoff", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-bridge-"));
   await activateHandoff({
@@ -351,12 +457,15 @@ test("processLarkEvent treats shell-looking text as chat input during handoff", 
   assert.deepEqual(replies, []);
 });
 
-async function writeSession({ file, id, cwd, name = "", source = "vscode", mtime }) {
-  const line = JSON.stringify({
-    type: "session_meta",
-    payload: { id, cwd, name, source },
-  });
-  await fs.writeFile(file, `${line}\n`);
+async function writeSession({ file, id, cwd, name = "", source = "vscode", events = [], mtime }) {
+  const lines = [
+    JSON.stringify({
+      type: "session_meta",
+      payload: { id, cwd, name, source },
+    }),
+    ...events.map((event) => JSON.stringify(event)),
+  ];
+  await fs.writeFile(file, `${lines.join("\n")}\n`);
   await fs.utimes(file, mtime, mtime);
 }
 
@@ -371,6 +480,24 @@ function textEvent({ text, userId, messageId = "om_1" }) {
       },
       sender: {
         sender_id: { user_id: userId },
+      },
+    },
+  };
+}
+
+function cardActionEvent({ action, optionIndex, threadId, userId = "ou_allowed", messageId = "om_card" }) {
+  return {
+    header: { event_type: "card.action.trigger" },
+    event: {
+      action: {
+        value: { action, optionIndex, threadId },
+      },
+      context: {
+        open_message_id: messageId,
+        open_chat_id: "oc_card",
+      },
+      operator: {
+        operator_id: { user_id: userId },
       },
     },
   };

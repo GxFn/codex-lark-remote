@@ -33,6 +33,10 @@ export function observationFilePath(dataDir) {
   return path.join(dataDir, "observation.json");
 }
 
+export function takeoverFilePath(dataDir) {
+  return path.join(dataDir, "takeover.json");
+}
+
 export function configFilePath(dataDir) {
   return path.resolve(process.env.CODEX_LARK_CONFIG || path.join(dataDir, "config.json"));
 }
@@ -116,6 +120,14 @@ export function defaultConfig(dataDir = resolveDataDir()) {
       keepAwakeCommand: "caffeinate",
       keepAwakeArgs: ["-dimsu"],
     },
+    takeover: {
+      enabled: true,
+      idleDebounceMs: 3000,
+      pollIntervalMs: 1000,
+      pendingTimeoutMs: 30 * 60 * 1000,
+      maxPendingInputs: 20,
+      selectionTtlMs: 10 * 60 * 1000,
+    },
     policy: {
       requireReviewForCommit: true,
       requireReviewForPush: true,
@@ -134,6 +146,7 @@ function mergeConfig(base, override) {
     repos: { ...(base.repos || {}), ...(override.repos || {}) },
     runner: { ...(base.runner || {}), ...(override.runner || {}) },
     handoff: { ...(base.handoff || {}), ...(override.handoff || {}) },
+    takeover: { ...(base.takeover || {}), ...(override.takeover || {}) },
     policy: { ...(base.policy || {}), ...(override.policy || {}) },
   };
 }

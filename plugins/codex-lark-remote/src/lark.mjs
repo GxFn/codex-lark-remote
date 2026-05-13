@@ -6,6 +6,8 @@ export function parseLarkEvent(body) {
   if (body?.type === "url_verification" || body?.challenge) {
     return { kind: "url_verification", challenge: body.challenge };
   }
+  const cardAction = parseLarkCardAction(body);
+  if (cardAction) return cardAction;
 
   const event = body?.event || body;
   const message = event?.message || body?.message || {};
@@ -41,6 +43,39 @@ export function parseLarkEvent(body) {
     text,
     chatIdHash: chatId ? `c_${shortHash(chatId)}` : "",
     userIdHash: senderId ? `u_${shortHash(senderId)}` : "",
+  };
+}
+
+export function parseLarkCardAction(body) {
+  const eventType = body?.header?.event_type || body?.event_type || body?.type || "";
+  const event = body?.event || body;
+  const rawAction = event?.action || body?.action || {};
+  const value = normalizeCardActionValue(rawAction.value || rawAction);
+  const actionName = String(value.action || value.kind || rawAction.name || rawAction.tag || "").trim();
+  const looksLikeCardAction = eventType === "card.action.trigger" || Boolean(actionName && (event?.action || body?.action));
+  if (!looksLikeCardAction) return null;
+
+  const operatorIds = event?.operator?.operator_id || event?.operator_id || event?.sender?.sender_id || {};
+  const senderId = operatorIds.user_id || operatorIds.open_id || event?.user_id || "";
+  const context = event?.context || body?.context || {};
+  const messageId = context.open_message_id || context.message_id || event?.message_id || body?.message_id || "";
+  const chatId = context.open_chat_id || context.chat_id || event?.chat_id || "";
+
+  return {
+    kind: "card_action",
+    action: actionName,
+    value,
+    messageId,
+    actionMessageId: event?.action_id || value.actionId || "",
+    chatId,
+    senderId,
+    senderIdType: operatorIds.user_id || event?.user_id ? "user_id" : operatorIds.open_id ? "open_id" : "",
+    openId: operatorIds.open_id || "",
+    unionId: operatorIds.union_id || "",
+    senderName: senderId || "lark_user",
+    chatIdHash: chatId ? `c_${shortHash(chatId)}` : "",
+    userIdHash: senderId ? `u_${shortHash(senderId)}` : "",
+    token: event?.token || body?.token || "",
   };
 }
 
@@ -115,6 +150,21 @@ function parseManagementCommand(text) {
     if (["off", "stop", "disable", "end", "close", "关闭", "停止", "结束"].includes(id)) return { kind: "observe_disable" };
     return { kind: "observe_enable", selector: id };
   }
+  if (["takeover", "windows", "window", "窗口", "接管"].includes(action)) {
+    if (!id || ["list", "status", "列表", "窗口", "windows"].includes(id)) {
+      return id === "status" ? { kind: "takeover_status" } : { kind: "takeover_list" };
+    }
+    if (["off", "stop", "disable", "end", "close", "关闭", "停止", "结束", "cancel"].includes(id)) {
+      return { kind: "takeover_disable" };
+    }
+    if (["now", "execute", "confirm", "接管", "确认", "执行"].includes(id)) {
+      return { kind: "takeover_execute" };
+    }
+    if (["now", "execute", "confirm"].includes(subAction)) {
+      return { kind: "takeover_execute", selector: id };
+    }
+    return { kind: "takeover_select", selector: id };
+  }
   if (action === "diff" && id) return { kind: "task_diff", id };
   if (action === "cancel" && id) return { kind: "cancel", id };
   if (action === "approve" && id && subAction) return { kind: "approve", id, action: subAction };
@@ -139,6 +189,17 @@ function parseNaturalManagementCommand(text) {
   if (/^(观察列表|查看观察|可观察窗口|可观察会话|有哪些窗口|看看有哪些窗口|列出窗口|列出会话|观察哪些窗口|可以观察哪些|observe|observe list|watch list)[。.?？!！]?$/.test(normalized)) {
     return { kind: "observe_list" };
   }
+  if (/^(接管|接管列表|窗口列表|查看窗口|列出窗口|有哪些窗口|看看窗口|可接管窗口|可接管会话|takeover|takeover list|windows)[。.?？!！]?$/.test(normalized)) {
+    return { kind: "takeover_list" };
+  }
+  if (/^(接管状态|查看接管准备|接管准备状态|takeover status)[。.?？!！]?$/.test(normalized)) {
+    return { kind: "takeover_status" };
+  }
+  if (/^(执行接管|确认接管|现在接管|立即接管|takeover now|confirm takeover)[。.!！]?$/.test(normalized)) {
+    return { kind: "takeover_execute" };
+  }
+  const takeoverSelector = parseNaturalTakeoverSelector(normalized);
+  if (takeoverSelector) return takeoverSelector;
   const observeSelector = parseNaturalObserveSelector(normalized);
   if (observeSelector) return { kind: "observe_enable", selector: observeSelector };
   if (/^(关闭|关掉|停止|结束|退出)(观察|观察模式|串流|串流观察|观察串流|watch|observe)吧?[。.!！]?$/.test(normalized)
@@ -162,6 +223,10 @@ function parseNaturalManagementCommand(text) {
   }
 
   if (/^断开(连接|接管|远程|飞书)?吧?[。.!！]?$/.test(normalized)) return { kind: "handoff_disable" };
+  if (/^(关闭|关掉|停止|结束|退出)(接管准备|跨对话接管|takeover)吧?[。.!！]?$/.test(normalized)
+    || /^(不要|别)(继续|再)?(准备接管|跨对话接管|takeover)了?[。.!！]?$/.test(normalized)) {
+    return { kind: "takeover_disable" };
+  }
   if (/^(关闭|关掉|停止|暂停|结束|退出)(连接|接管|远程|远程接管|飞书|飞书接管|插件|机器人|lark remote|codex lark remote)吧?[。.!！]?$/.test(normalized)) {
     return { kind: "handoff_disable" };
   }
@@ -182,6 +247,17 @@ function parseNaturalObserveSelector(normalized) {
   const match = normalized.match(/^(?:开始|打开|开启|启用|切到|看|看看|观察|串流|跟踪|盯一下)?(?:第\s*)?([0-9一二两三四五六七八九十]+)\s*(?:个)?(?:窗口|会话|session|chat)?(?:的)?(?:观察|串流|进度)?吧?[。.!！]?$/);
   if (!match) return "";
   return chineseNumberToAscii(match[1]);
+}
+
+function parseNaturalTakeoverSelector(normalized) {
+  const viewMatch = normalized.match(/^(?:查看|看|看看|选择|选|打开)?(?:第\s*)?([0-9一二两三四五六七八九十]+)\s*(?:个)?(?:窗口|会话|session|chat)?(?:详情)?吧?[。.!！]?$/);
+  if (viewMatch) return { kind: "takeover_select", selector: chineseNumberToAscii(viewMatch[1]) };
+  const executeMatch = normalized.match(/^(?:接管|确认接管|执行接管|现在接管|立即接管)(?:第\s*)?([0-9一二两三四五六七八九十]+)?\s*(?:个)?(?:窗口|会话|session|chat)?吧?[。.!！]?$/);
+  if (executeMatch) {
+    const selector = executeMatch[1] ? chineseNumberToAscii(executeMatch[1]) : "";
+    return selector ? { kind: "takeover_execute", selector } : { kind: "takeover_execute" };
+  }
+  return null;
 }
 
 function chineseNumberToAscii(value) {
@@ -216,4 +292,17 @@ function parseRepoPrefix(text, config) {
     return { repoKey: match[1].trim(), taskText: match[2].trim() };
   }
   return { repoKey: config.defaultRepo || Object.keys(config.repos || {})[0] || "", taskText: text };
+}
+
+function normalizeCardActionValue(value) {
+  if (!value) return {};
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return { action: value };
+    }
+  }
+  if (typeof value === "object") return value;
+  return { action: String(value) };
 }

@@ -29,13 +29,13 @@ npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plu
 For the pinned reviewed release:
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.1.24/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.1.25/plugins/codex-lark-remote --plugin
 ```
 
 If Codex asks for a GitHub target or direct artifact path, use:
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.1.24/plugins/codex-lark-remote
+https://github.com/GxFn/codex-lark-remote/tree/v0.1.25/plugins/codex-lark-remote
 ```
 
 If the Codex dialog separates source, ref, and sparse path, fill it like this:
@@ -45,7 +45,7 @@ Source:
 https://github.com/GxFn/codex-lark-remote.git
 
 Git ref:
-v0.1.24
+v0.1.25
 
 Sparse path:
 plugins/codex-lark-remote
@@ -67,7 +67,7 @@ Create a Feishu/Lark app:
 3. Enable the bot capability.
 4. Copy **App ID** and **App Secret** from **Credentials & Basic Info**.
 5. In **Event Subscriptions**, choose long connection/WebSocket and subscribe to
-   `im.message.receive_v1`.
+   `im.message.receive_v1` and `card.action.trigger`.
 6. Enable the message receive/reply permissions requested by the platform, then
    publish or enable the app for your tenant.
 
@@ -126,6 +126,10 @@ Useful commands:
 ```text
 /codex whoami
 /codex status
+/codex takeover
+/codex windows
+/codex takeover status
+/codex takeover off
 /codex observe
 /codex observe <number|thread-prefix>
 /codex observe off
@@ -135,6 +139,16 @@ Useful commands:
 ```
 
 Plain language requests such as "disconnect" or "stop handoff" are also handled.
+
+## Take over another Codex window
+
+From a second Codex chat in the same project, prepare takeover scope with
+`codex_lark_prepare_takeover`. Feishu/Lark then controls target selection with
+`/codex takeover`. The bot replies with an interactive card of Codex windows:
+**View** inspects, **Observe** streams read-only progress, and **Takeover**
+opens confirmation before handoff. If cards are unavailable, reply `1`, `2`,
+`3`, etc. to inspect, then send `takeover now`. Running windows attach after
+their current turn finishes.
 
 ## Observe another Codex session
 

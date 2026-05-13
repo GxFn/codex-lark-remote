@@ -83,3 +83,11 @@ list observable Codex sessions, `/codex observe <number or thread prefix>` to
 stream read-only progress from a selected session, and `/codex observe off` to
 stop. Observation must never route Feishu/Lark user messages into the observed
 session.
+
+Cross-thread takeover is controlled from Feishu/Lark. From a second Codex chat
+in the same project, use `codex_lark_prepare_takeover` only after explicit user
+consent; this stores project scope but does not attach that second chat. Then
+the user sends `/codex takeover` or `/codex windows` in Feishu/Lark, inspects a
+window via the interactive card or numeric fallback, and confirms takeover
+there. Do not choose the target in Codex unless the user explicitly asks for
+manual diagnostics.

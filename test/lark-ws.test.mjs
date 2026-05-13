@@ -26,8 +26,10 @@ test("LarkWebSocketReceiver starts SDK client and forwards message events", asyn
   assert.equal(fakeSdk.WSClient.last.options.appId, "cli_test");
 
   await fakeSdk.EventDispatcher.last.handlers["im.message.receive_v1"]({ event: { message: { message_id: "om_1" } } });
-  assert.equal(received.length, 1);
+  await fakeSdk.EventDispatcher.last.handlers["card.action.trigger"]({ event: { action: { value: { action: "takeover_view" } } } });
+  assert.equal(received.length, 2);
   assert.equal(received[0].event.message.message_id, "om_1");
+  assert.equal(received[1].header.event_type, "card.action.trigger");
   assert.match(receiver.status().lastEventAt, /^\d{4}-\d{2}-\d{2}T/);
 
   receiver.stop();

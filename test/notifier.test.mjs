@@ -50,6 +50,53 @@ test("LarkNotifier.reply returns delivered message id when Feishu accepts the re
   assert.equal(result.messageId, "om_reply");
 });
 
+test("LarkNotifier.replyCard sends interactive message content", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const sent = [];
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes("/auth/v3/tenant_access_token/internal")) {
+      return Response.json({ code: 0, tenant_access_token: "token", expire: 3600 });
+    }
+    sent.push(JSON.parse(init.body));
+    return Response.json({ code: 0, data: { message_id: "om_card_reply" } });
+  };
+
+  const notifier = new LarkNotifier({ appId: "cli_test", appSecret: "secret" });
+  const result = await notifier.replyCard("om_test", { elements: [{ tag: "markdown", content: "hello" }] });
+
+  assert.equal(result.ok, true);
+  assert.equal(sent[0].msg_type, "interactive");
+  assert.deepEqual(JSON.parse(sent[0].content), { elements: [{ tag: "markdown", content: "hello" }] });
+});
+
+test("LarkNotifier.patchCard updates interactive message content", async (t) => {
+  const originalFetch = globalThis.fetch;
+  let patchRequest = null;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url).includes("/auth/v3/tenant_access_token/internal")) {
+      return Response.json({ code: 0, tenant_access_token: "token", expire: 3600 });
+    }
+    patchRequest = { url: String(url), method: init.method, body: JSON.parse(init.body) };
+    return Response.json({ code: 0, data: {} });
+  };
+
+  const notifier = new LarkNotifier({ appId: "cli_test", appSecret: "secret" });
+  const result = await notifier.patchCard("om_card", { config: { update_multi: true } });
+
+  assert.equal(result.ok, true);
+  assert.equal(patchRequest.method, "PATCH");
+  assert.match(patchRequest.url, /\/im\/v1\/messages\/om_card$/);
+  assert.equal(patchRequest.body.msg_type, "interactive");
+});
+
 test("LarkNotifier.reply splits long text replies without truncating content", async (t) => {
   const originalFetch = globalThis.fetch;
   const sentTexts = [];

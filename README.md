@@ -15,6 +15,8 @@ Bundled plugin docs:
 
 - [English plugin README](plugins/codex-lark-remote/README.md)
 - [Chinese plugin README](plugins/codex-lark-remote/README.zh-CN.md)
+- [Technical architecture guide (Chinese)](docs/technical_architecture.zh-cn.md)
+- [Cross-thread takeover design (Chinese)](docs/cross_thread_takeover_design.zh-cn.md)
 
 ## Overview
 
@@ -47,7 +49,7 @@ npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plu
 To pin the exact reviewed release:
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.1.24/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.1.25/plugins/codex-lark-remote --plugin
 ```
 
 Then restart or refresh Codex if the plugin list does not update immediately.
@@ -58,7 +60,7 @@ If Codex asks for a GitHub target or direct artifact path, use the plugin bundle
 path, not the repository root:
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.1.24/plugins/codex-lark-remote
+https://github.com/GxFn/codex-lark-remote/tree/v0.1.25/plugins/codex-lark-remote
 ```
 
 If the Codex dialog separates source, ref, and sparse path, fill it like this:
@@ -68,7 +70,7 @@ Source:
 https://github.com/GxFn/codex-lark-remote.git
 
 Git ref:
-v0.1.24
+v0.1.25
 
 Sparse path:
 plugins/codex-lark-remote
@@ -86,7 +88,7 @@ Source:
 https://github.com/GxFn/codex-lark-remote.git
 
 Git ref:
-v0.1.24
+v0.1.25
 
 Sparse path:
 leave empty
@@ -115,7 +117,7 @@ Create a Feishu/Lark bot app first:
 3. Enable the bot capability.
 4. In **Credentials & Basic Info**, copy **App ID** and **App Secret**.
 5. In **Event Subscriptions**, choose long connection/WebSocket and subscribe to
-   `im.message.receive_v1`.
+   `im.message.receive_v1` and `card.action.trigger`.
 6. Add the message receive/reply permissions requested by the platform, then
    publish or enable the app for your tenant.
 
@@ -181,6 +183,10 @@ Useful Feishu/Lark commands:
 ```text
 /codex whoami
 /codex status
+/codex takeover
+/codex windows
+/codex takeover status
+/codex takeover off
 /codex observe
 /codex observe <number|thread-prefix>
 /codex observe off
@@ -191,6 +197,18 @@ Useful Feishu/Lark commands:
 
 The bot also recognizes natural requests such as asking to stop or disconnect
 the handoff.
+
+## Take over another Codex window
+
+From a second Codex chat in the same project, prepare takeover scope with
+`codex_lark_prepare_takeover`. Feishu/Lark then controls target selection with
+`/codex takeover`.
+
+The bot replies with an interactive card of Codex windows. Use **View** to
+inspect a window, **Observe** to stream read-only progress, and **Takeover** to
+confirm handoff. If cards are unavailable, reply with `1`, `2`, `3`, etc. to
+inspect a window, then send `takeover now`. Running windows enter pending
+takeover and attach after the current turn finishes.
 
 ## Observe another Codex session
 

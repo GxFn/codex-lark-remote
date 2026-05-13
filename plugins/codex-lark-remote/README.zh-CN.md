@@ -27,13 +27,13 @@ npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plu
 如果要固定到当前审核版本：
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.1.24/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.1.25/plugins/codex-lark-remote --plugin
 ```
 
 如果 Codex 要求填写 GitHub Target 或直接 artifact path，请填写：
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.1.24/plugins/codex-lark-remote
+https://github.com/GxFn/codex-lark-remote/tree/v0.1.25/plugins/codex-lark-remote
 ```
 
 如果 Codex 弹窗把来源、Git 引用、稀疏路径拆开填写，请这样填：
@@ -43,7 +43,7 @@ https://github.com/GxFn/codex-lark-remote/tree/v0.1.24/plugins/codex-lark-remote
 https://github.com/GxFn/codex-lark-remote.git
 
 Git 引用：
-v0.1.24
+v0.1.25
 
 稀疏路径：
 plugins/codex-lark-remote
@@ -63,7 +63,8 @@ plugins/codex-lark-remote
 2. 创建企业自建应用/内部应用。
 3. 启用机器人能力。
 4. 在“凭证与基础信息”里复制 **App ID** 和 **App Secret**。
-5. 在“事件订阅”里选择长连接/WebSocket，并订阅 `im.message.receive_v1`。
+5. 在“事件订阅”里选择长连接/WebSocket，并订阅 `im.message.receive_v1`
+   和 `card.action.trigger`。
 6. 按平台提示启用消息接收和回复权限，然后发布或启用应用。
 
 把配置粘贴到可信的本地 Codex 对话里：
@@ -117,6 +118,10 @@ Codex 必须先请求你的明确同意，才会启动接管。确认后，插�
 ```text
 /codex whoami
 /codex status
+/codex takeover
+/codex windows
+/codex takeover status
+/codex takeover off
 /codex observe
 /codex observe <序号|thread 前缀>
 /codex observe off
@@ -126,6 +131,14 @@ Codex 必须先请求你的明确同意，才会启动接管。确认后，插�
 ```
 
 “断开连接”“停止接管”这类口语请求也会被处理。
+
+## 接管同项目里的其他 Codex 窗口
+
+在同一个项目的新 Codex 对话 B 中，先用 `codex_lark_prepare_takeover` 准备接管范围。
+之后由飞书/Lark 端通过 `/codex takeover` 自主选择目标。机器人会回复交互卡片：
+“查看”只展开窗口详情，“观察”进入只读串流，“接管”会先确认再执行 handoff。如果卡片
+不可用，可以回复 `1`、`2`、`3` 查看窗口，再发送 `takeover now`。仍在运行的窗口会
+等当前轮结束后自动接管。
 
 ## 观察其他 Codex 会话
 

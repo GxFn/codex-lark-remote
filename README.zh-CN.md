@@ -14,6 +14,8 @@ Marketplace 页面：[codex-lark-remote](https://www.codex-marketplace.com/plugi
 
 - [英文插件 README](plugins/codex-lark-remote/README.md)
 - [中文插件 README](plugins/codex-lark-remote/README.zh-CN.md)
+- [技术架构文档](docs/technical_architecture.zh-cn.md)
+- [跨对话串流接管设计方案](docs/cross_thread_takeover_design.zh-cn.md)
 
 ## 概览
 
@@ -45,7 +47,7 @@ npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plu
 如果要固定到当前审核版本：
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.1.24/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.1.25/plugins/codex-lark-remote --plugin
 ```
 
 安装后如果 Codex 插件列表没有立刻刷新，重启或刷新 Codex。
@@ -56,7 +58,7 @@ npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.1.24
 不要填写仓库根目录：
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.1.24/plugins/codex-lark-remote
+https://github.com/GxFn/codex-lark-remote/tree/v0.1.25/plugins/codex-lark-remote
 ```
 
 如果 Codex 弹窗把来源、Git 引用、稀疏路径拆开填写，请这样填：
@@ -66,7 +68,7 @@ https://github.com/GxFn/codex-lark-remote/tree/v0.1.24/plugins/codex-lark-remote
 https://github.com/GxFn/codex-lark-remote.git
 
 Git 引用：
-v0.1.24
+v0.1.25
 
 稀疏路径：
 plugins/codex-lark-remote
@@ -84,7 +86,7 @@ marketplace，而不是单独添加这个插件，可以填写：
 https://github.com/GxFn/codex-lark-remote.git
 
 Git 引用：
-v0.1.24
+v0.1.25
 
 稀疏路径：
 留空
@@ -111,7 +113,8 @@ npm run sync:gxfn-marketplace
 2. 创建企业自建应用/内部应用。
 3. 启用机器人能力。
 4. 在“凭证与基础信息”里复制 **App ID** 和 **App Secret**。
-5. 在“事件订阅”里选择长连接/WebSocket，并订阅 `im.message.receive_v1`。
+5. 在“事件订阅”里选择长连接/WebSocket，并订阅 `im.message.receive_v1`
+   和 `card.action.trigger`。
 6. 按平台提示开通消息接收和回复相关权限，然后发布或启用应用。
 
 然后把配置粘贴到可信的本地 Codex 对话里：
@@ -170,6 +173,10 @@ Mac 睡眠。关闭接管或停止 bridge 时，这个 keep-awake 进程会一�
 ```text
 /codex whoami
 /codex status
+/codex takeover
+/codex windows
+/codex takeover status
+/codex takeover off
 /codex observe
 /codex observe <序号|thread 前缀>
 /codex observe off
@@ -179,6 +186,16 @@ Mac 睡眠。关闭接管或停止 bridge 时，这个 keep-awake 进程会一�
 ```
 
 机器人也会识别“停止接管”“断开连接”等自然语言请求。
+
+## 接管同项目里的其他 Codex 窗口
+
+在同一个项目的新 Codex 对话 B 中，先用 `codex_lark_prepare_takeover` 准备接管范围。
+之后由飞书/Lark 端通过 `/codex takeover` 自主选择目标。
+
+机器人会回复一张 Codex 窗口交互卡片。点击“查看”只看窗口详情，点击“观察”进入只读
+串流，点击“接管”会先确认再执行 handoff。如果卡片不可用，可以回复 `1`、`2`、`3`
+查看窗口，再发送 `takeover now` 执行接管。仍在运行的窗口会进入 pending，等当前轮
+结束后自动接管。
 
 ## 观察其他 Codex 会话
 

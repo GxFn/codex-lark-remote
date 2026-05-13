@@ -6,6 +6,7 @@ import { configuredAllowedUsers } from "./lark.mjs";
 import { LarkNotifier } from "./notifier.mjs";
 import { formatMissingLarkCredentials, hasLarkAppCredentials } from "./setup-guide.mjs";
 import { bridgeStatus } from "./supervisor.mjs";
+import { readTakeover } from "./takeover.mjs";
 
 export async function diagnoseLarkRemote(options = {}) {
   const config = await loadConfig(options);
@@ -18,6 +19,7 @@ export async function diagnoseLarkRemote(options = {}) {
   const repos = await repoDiagnostics(config);
   const auth = options.checkAuth ? await new LarkNotifier(config.lark || {}).checkAuth() : null;
   const handoff = await readHandoff({ dataDir: config.dataDir });
+  const takeover = await readTakeover({ dataDir: config.dataDir });
 
   const issues = [];
   const warnings = [];
@@ -68,6 +70,7 @@ export async function diagnoseLarkRemote(options = {}) {
       configPath: config.configPath,
     },
     handoff,
+    takeover,
     lark: {
       transport: config.lark?.transport || "websocket",
       appIdPrefix: config.lark?.appId ? `${config.lark.appId.slice(0, 8)}...` : "",
@@ -92,6 +95,7 @@ export function formatDiagnostics(diagnostics) {
     `Config: ${diagnostics.paths?.configPath || "-"}`,
     `Feishu/Lark: ${formatTransport(diagnostics)}`,
     diagnostics.handoff?.active ? `Conversation: attached ${formatThread(diagnostics.handoff.threadId)}` : "Conversation: not attached",
+    diagnostics.takeover ? `Takeover: ${diagnostics.takeover.state}` : "Takeover: off",
     `Mac keep-awake: ${formatKeepAwake(diagnostics.bridge?.keepAwake)}`,
     `Lark app: ${diagnostics.lark.appIdPrefix || "-"}`,
     `Allowed users: ${diagnostics.lark.allowedUsersCount || 0}`,
@@ -124,6 +128,7 @@ export function formatHandoff(diagnostics) {
     diagnostics.ok ? "Status: ready for Feishu/Lark" : "Status: needs attention",
     `Feishu/Lark: ${formatTransport(diagnostics)}`,
     handoff?.active ? `Conversation: attached ${formatThread(handoff.threadId)}` : "Conversation: not attached",
+    diagnostics.takeover ? `Takeover: ${diagnostics.takeover.state}` : "Takeover: off",
     `Mac keep-awake: ${formatKeepAwake(diagnostics.bridge?.keepAwake)}`,
     diagnostics.checks.webSocketEnabled
       ? "Feishu setup: Event Subscriptions -> long connection -> im.message.receive_v1"

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyChatText, configuredAllowedUsers, isUserAllowed, parseLarkEvent } from "../plugins/codex-lark-remote/src/lark.mjs";
+import { classifyChatText, configuredAllowedUsers, isUserAllowed, parseLarkEvent, parseLarkCardAction } from "../plugins/codex-lark-remote/src/lark.mjs";
 
 test("parseLarkEvent extracts text message fields and hashes sensitive ids", () => {
   const parsed = parseLarkEvent({
@@ -82,6 +82,32 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
     kind: "observe_disable",
   });
 
+  assert.deepEqual(classifyChatText("/codex takeover", config), {
+    kind: "takeover_list",
+  });
+
+  assert.deepEqual(classifyChatText("/codex windows", config), {
+    kind: "takeover_list",
+  });
+
+  assert.deepEqual(classifyChatText("/codex takeover 2", config), {
+    kind: "takeover_select",
+    selector: "2",
+  });
+
+  assert.deepEqual(classifyChatText("/codex takeover 2 now", config), {
+    kind: "takeover_execute",
+    selector: "2",
+  });
+
+  assert.deepEqual(classifyChatText("/codex takeover now", config), {
+    kind: "takeover_execute",
+  });
+
+  assert.deepEqual(classifyChatText("/codex takeover off", config), {
+    kind: "takeover_disable",
+  });
+
   assert.deepEqual(classifyChatText("/codex handoff disconnect", config), {
     kind: "handoff_disable",
   });
@@ -124,6 +150,24 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
 
   assert.deepEqual(classifyChatText("观察列表", config), {
     kind: "observe_list",
+  });
+
+  assert.deepEqual(classifyChatText("窗口列表", config), {
+    kind: "takeover_list",
+  });
+
+  assert.deepEqual(classifyChatText("查看第 3 个窗口", config), {
+    kind: "takeover_select",
+    selector: "3",
+  });
+
+  assert.deepEqual(classifyChatText("执行接管", config), {
+    kind: "takeover_execute",
+  });
+
+  assert.deepEqual(classifyChatText("接管第 2 个窗口", config), {
+    kind: "takeover_execute",
+    selector: "2",
   });
 
   assert.deepEqual(classifyChatText("观察第 2 个窗口", config), {
@@ -201,6 +245,35 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
     repoKey: "main",
     taskText: "写一个帮助文档",
   });
+});
+
+test("parseLarkCardAction extracts card action payloads", () => {
+  const parsed = parseLarkCardAction({
+    header: { event_type: "card.action.trigger" },
+    event: {
+      action: {
+        value: {
+          action: "takeover_execute",
+          optionIndex: 1,
+          threadId: "thread-a",
+        },
+      },
+      context: {
+        open_message_id: "om_card",
+        open_chat_id: "oc_card",
+      },
+      operator: {
+        operator_id: { user_id: "ou_user", open_id: "ou_open" },
+      },
+    },
+  });
+
+  assert.equal(parsed.kind, "card_action");
+  assert.equal(parsed.action, "takeover_execute");
+  assert.equal(parsed.value.optionIndex, 1);
+  assert.equal(parsed.messageId, "om_card");
+  assert.equal(parsed.senderId, "ou_user");
+  assert.match(parsed.chatIdHash, /^c_[a-f0-9]{12}$/);
 });
 
 test("classifyChatText rejects shell mode in MVP", () => {
