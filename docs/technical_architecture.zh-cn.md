@@ -13,7 +13,8 @@
 1. 配置和诊断飞书/Lark 应用凭证。
 2. 启动本机 bridge，接收 Lark 消息并回复结果。
 3. 将当前 Codex 对话绑定为 `thread_handoff`，让 Lark 消息通过 `codex exec resume` 进入同一个线程。
-4. 在未绑定当前线程时，以 worktree 任务模式执行远程任务，并在 Lark 中进行状态查询、取消和审批。
+4. 由飞书/Lark 端按“项目 -> 窗口”两级列表选择任意本机 Codex 窗口，观察或确认接管。
+5. 在未绑定当前线程时，以 worktree 任务模式执行远程任务，并在 Lark 中进行状态查询、取消和审批。
 
 ## 仓库结构
 
@@ -109,6 +110,9 @@ MCP 进程偏控制面，bridge 进程偏数据面。这样的拆分可以让 Co
 | `codex_lark_diagnose` | 返回可读诊断清单。 |
 | `codex_lark_start` | 确保 bridge 启动。 |
 | `codex_lark_handoff` | 在用户明确同意后，把当前 Codex 线程挂到 bridge。 |
+| `codex_lark_prepare_takeover` | 在用户明确同意后启动 bridge，并把飞书接管控制权交给 Lark 端。 |
+| `codex_lark_takeover_targets` | 诊断用：列出某个项目 cwd 下的可接管窗口。 |
+| `codex_lark_takeover` | 诊断用：选择或执行某个窗口接管。 |
 | `codex_lark_stop` | 停止 bridge。 |
 | `codex_lark_history` | 查看近期队列任务。 |
 | `codex_lark_task` | 查看单个任务。 |
@@ -130,9 +134,11 @@ MCP 进程偏控制面，bridge 进程偏数据面。这样的拆分可以让 Co
 4. 启动本地 HTTP server，默认监听 `127.0.0.1` 的随机端口。
 5. 写入 `bridge-state.json`，包含 pid、version、url、token 和启动时间。
 6. 启动 Lark WebSocket receiver。
-7. 如果已有 active handoff，启动 keep-awake；否则清理无效的 handoff 任务。
-8. 恢复 observer。
-9. 每 2 秒轮询一次 queue，让 runner 处理 pending 任务。
+7. 尝试发送启动介绍。若配置了 `startup.receiveId` 或曾记录最近已授权 `chat_id`，会立即主动推送；否则等待首条已授权 Lark 消息携带 `chat_id` 后补发并记录。
+8. 如果已有 active handoff，启动 keep-awake；否则清理无效的 handoff 任务。
+9. 恢复 observer。
+10. 启动 takeover watcher，等待 running 窗口结束后激活 pending takeover。
+11. 每 2 秒轮询一次 queue，让 runner 处理 pending 任务。
 
 Bridge HTTP API 主要包括：
 
@@ -150,6 +156,13 @@ Bridge HTTP API 主要包括：
 | `GET /bridge/handoff` | 查看当前 handoff。 |
 | `POST /bridge/handoff` | 激活 handoff。 |
 | `DELETE /bridge/handoff` | 关闭 handoff。 |
+| `GET /bridge/takeover` | 查看当前 takeover 状态。 |
+| `POST /bridge/takeover/scope` | 准备 takeover 控制状态。 |
+| `GET /bridge/takeover/targets` | 列出某个项目下的 Codex 窗口。 |
+| `POST /bridge/takeover/select` | 选择窗口但不执行接管。 |
+| `POST /bridge/takeover/execute` | 执行接管；running 窗口进入 pending。 |
+| `POST /bridge/takeover/input` | pending takeover 期间暂存飞书输入。 |
+| `DELETE /bridge/takeover` | 清理 takeover 状态。 |
 
 除 Lark webhook 入口外，`/bridge/*` 请求需要 `Authorization: Bearer <token>`。token 写在 `bridge-state.json`，由本地 MCP 进程读取并调用。
 
@@ -167,10 +180,12 @@ Bridge HTTP API 主要包括：
 
 | 文件 | 作用 |
 | --- | --- |
-| `config.json` | 用户配置，包含 Lark 凭证、allowedUsers、runner、handoff、policy、repos。不要提交。 |
+| `config.json` | 用户配置，包含 Lark 凭证、allowedUsers、runner、handoff、takeover、startup、policy、repos。不要提交。 |
 | `bridge-state.json` | 当前 bridge 进程状态，供 MCP 进程寻找 bridge。 |
 | `queue.json` | 任务队列和事件日志。 |
 | `handoff.json` | 当前接管的 Codex thread id、session path、cwd、激活时间等。 |
+| `takeover.json` | 飞书端项目/窗口选择、pending takeover、待发送消息等状态。 |
+| `startup-notice.json` | 启动介绍的本地已发送标记和最近已授权 Lark 会话，避免 bridge 重启后重复刷屏，也支持后续启动主动推送。 |
 | `observation.json` | 当前只读观察状态。 |
 | `bridge.log` | bridge 子进程日志。 |
 | `results/*.txt` | `codex exec resume -o` 写出的最终回答。 |
@@ -204,6 +219,21 @@ Bridge HTTP API 主要包括：
     keepAwake: true,
     keepAwakeCommand: "caffeinate",
     keepAwakeArgs: ["-dimsu"]
+  },
+  takeover: {
+    enabled: true,
+    projectLimit: 20,
+    idleDebounceMs: 3000,
+    pollIntervalMs: 1000,
+    maxPendingInputs: 20,
+    selectionTtlMs: 10 * 60 * 1000
+  },
+  startup: {
+    enabled: true,
+    once: true,
+    rememberLastChat: true,
+    receiveId: "",
+    receiveIdType: "chat_id"
   },
   policy: {
     requireReviewForCommit: true,
@@ -288,7 +318,7 @@ Lark 事件处理在 `src/bridge-server.mjs` 的 `processLarkEvent` 和 `handleC
 3. 只接受文本消息，非文本消息会回复提示。
 4. 再查 `queue.findByMessageId`，避免重启或并发时重复入队。
 5. 用 `classifyChatText` 识别命令。
-6. 除 `/codex whoami` 外都必须通过 `allowedUsers` 检查。
+6. 除 `whoami` 外都必须通过 `allowedUsers` 检查。
 7. 有 active handoff 时，普通消息进入 `enqueueHandoffTask`。
 8. 无 active handoff 时，普通任务进入 worktree 模式。
 
@@ -393,9 +423,9 @@ Lark 回复由 `src/notifier.mjs` 处理。它负责获取 token、调用回复�
 观察模式由 `src/observer.mjs` 实现，和 handoff 分开。用户可以在 Lark 使用：
 
 ```text
-/codex observe
-/codex observe <序号|thread 前缀>
-/codex observe off
+observe
+observe <序号|thread 前缀>
+observe off
 ```
 
 观察是只读的：它读取 Codex session JSONL 的新增事件，发送进度摘要到 Lark，但不会把 Lark 消息注入被观察的 Codex 线程。这样可以在不接管的情况下远程查看某个 Codex 会话进度。
@@ -404,16 +434,17 @@ Lark 回复由 `src/notifier.mjs` 处理。它负责获取 token、调用回复�
 
 关键安全设计：
 
-1. `allowedUsers`：除 `/codex whoami` 外，Lark sender 必须在白名单中。
+1. `allowedUsers`：除 `whoami` 外，Lark sender 必须在白名单中；全项目 takeover 还要求 allowlist 非空。
 2. 本地 token：bridge HTTP API 默认绑定 `127.0.0.1`，并要求 bearer token。
 3. 脱敏：配置摘要、状态和命令输出通过 `sanitize` 系列逻辑避免泄露 token、secret、password。
 4. 显式 handoff：启动接管要求用户明确同意。
 5. 精确线程绑定：当前 handoff 要求来自 Codex 上下文的 thread id，不按 cwd 猜测窗口。
-6. Handoff 关闭会取消 pending/running 的同线程任务，避免关闭后继续向旧线程注入。
-7. Lark webhook 支持 verification token、encryptKey 和签名校验。
-8. Worktree 模式默认用独立分支，commit 和 push 可由 policy 强制审批。
-9. Runner 默认使用 `--ignore-user-config`，减少本机用户配置带来的不可控差异。
-10. Lark 无法代替 Codex Desktop UI 审批，必须把审批边界向用户说明清楚。
+6. Takeover 必须由 Lark 端显式选择项目和窗口；数字或按钮只改变状态，不会绕过确认。
+7. Handoff 关闭会取消 pending/running 的同线程任务，避免关闭后继续向旧线程注入。
+8. Lark webhook 支持 verification token、encryptKey 和签名校验。
+9. Worktree 模式默认用独立分支，commit 和 push 可由 policy 强制审批。
+10. Runner 默认使用 `--ignore-user-config`，减少本机用户配置带来的不可控差异。
+11. Lark 无法代替 Codex Desktop UI 审批，必须把审批边界向用户说明清楚。
 
 ## 主要模块职责
 
@@ -427,11 +458,13 @@ Lark 回复由 `src/notifier.mjs` 处理。它负责获取 token、调用回复�
 | `src/config-writer.mjs` | 写入用户配置，返回脱敏摘要。 |
 | `src/codex-context.mjs` | 从 MCP 请求元数据提取当前 Codex thread/cwd。 |
 | `src/handoff.mjs` | 激活/读取/关闭 handoff，解析 Codex session 元数据。 |
+| `src/takeover.mjs` | 项目列表、窗口列表、目标选择、pending takeover 和自动激活。 |
+| `src/startup-notice.mjs` | 在 bridge 首次连接、handoff 或首条已授权 Lark 消息后推送命令介绍，并记录去重状态。 |
 | `src/queue.mjs` | JSON 队列和事件日志。 |
 | `src/runner.mjs` | 串行执行 queue 任务，调用 `codex exec` 或 `codex exec resume`。 |
 | `src/lark.mjs` | Lark 事件解析、用户白名单、文本命令分类。 |
 | `src/lark-ws.mjs` | Lark WebSocket 长连接。 |
-| `src/notifier.mjs` | Lark token 和消息回复。 |
+| `src/notifier.mjs` | Lark token、消息回复和主动发送。 |
 | `src/observer.mjs` | 只读观察 Codex session JSONL。 |
 | `src/presenter.mjs` | 面向 Lark 的状态、任务、队列、最终结果文本。 |
 | `src/diagnostics.mjs` | 诊断 bridge、配置、handoff 和 Lark 连接状态。 |
@@ -510,7 +543,7 @@ Handoff 参数在 `buildCodexResumeArgs`，worktree 参数在 `buildCodexExecArg
 
 ### 支持新的接管能力
 
-跨对话串流接管的设计见 [cross_thread_takeover_design.zh-cn.md](cross_thread_takeover_design.zh-cn.md)。该方案的核心是把当前 observer 的会话发现能力扩展成可接管目标列表，并为 bridge 增加 takeover 状态机和 Lark 路由。
+跨对话串流接管的设计见 [cross_thread_takeover_design.zh-cn.md](cross_thread_takeover_design.zh-cn.md)。当前实现已经升级为飞书端全项目接管：`windows` 先列出本机 Codex 项目，进入项目后列出项目内所有窗口，再由用户观察或确认接管。核心模块是 `src/takeover.mjs`、`src/bridge-server.mjs`、`src/presenter.mjs` 和 `src/lark.mjs`。
 
 ## 已知约束
 

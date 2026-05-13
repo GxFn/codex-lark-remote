@@ -41,7 +41,7 @@ const readmePairs = [
       /## Start handoff/,
       /https:\/\/github\.com\/GxFn\/codex-lark-remote\.git/,
       /codex_lark_configure/,
-      /\/codex status/,
+      /\bstatus\b/,
     ],
   },
   {
@@ -54,7 +54,7 @@ const readmePairs = [
       /## 启动接管/,
       /https:\/\/github\.com\/GxFn\/codex-lark-remote\.git/,
       /codex_lark_configure/,
-      /\/codex status/,
+      /\bstatus\b/,
     ],
   },
 ];
@@ -150,6 +150,8 @@ test("requires explicit consent for conversation handoff", async () => {
   assert.match(server, /confirmedLocalBridgeHandoff/);
   assert.doesNotMatch(server, /confirmedExternalHandoff/);
   assert.match(server, /handoff requires explicit consent/);
+  assert.match(server, /allowed Feishu\/Lark users choose the project and window/);
+  assert.match(server, /queryParams\.set\("cwd", args\.cwd\)/);
   assert.match(server, /Existing chat history is not sent to Feishu\/Lark/);
   assert.doesNotMatch(server, /exports the current conversation/);
   assert.doesNotMatch(server, /sending this Codex conversation/);

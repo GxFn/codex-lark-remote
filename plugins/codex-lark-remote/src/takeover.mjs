@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import path from "node:path";
 import { activateHandoff } from "./handoff.mjs";
 import { ensureDir, nowIso, resolveDataDir, takeoverFilePath } from "./config.mjs";
 import { listCodexThreads, findCodexThreadById } from "./handoff.mjs";
@@ -62,7 +63,7 @@ export async function listTakeoverTargets(options = {}) {
   const state = await readTakeover(options);
   const scope = state?.scope || {};
   const cwd = options.cwd || scope.cwd || "";
-  const excludeThreadId = options.excludeThreadId || scope.startedByThreadId || "";
+  const excludeThreadId = options.excludeThreadId || "";
   const limit = Number(options.limit || 10);
   const candidates = await listCodexThreads({
     ...options,
@@ -86,6 +87,92 @@ export async function listTakeoverTargets(options = {}) {
   return filtered;
 }
 
+export async function listTakeoverProjects(options = {}) {
+  const limit = Number(options.limit || 20);
+  const threadLimit = Number(options.threadLimit || Math.max(limit * 20, 200));
+  const threads = await listCodexThreads({
+    ...options,
+    cwd: "",
+    limit: threadLimit,
+  });
+  const projects = new Map();
+  for (const thread of threads) {
+    const cwd = String(thread.cwd || "").trim();
+    if (!cwd) continue;
+    const existing = projects.get(cwd) || {
+      cwd,
+      name: projectNameFromCwd(cwd),
+      windowCount: 0,
+      updatedAtMs: 0,
+      latestThreadId: "",
+      latestWindowName: "",
+    };
+    existing.windowCount += 1;
+    if (Number(thread.updatedAtMs || 0) > existing.updatedAtMs) {
+      existing.updatedAtMs = Number(thread.updatedAtMs || 0);
+      existing.latestThreadId = thread.threadId || "";
+      existing.latestWindowName = thread.name || "";
+    }
+    projects.set(cwd, existing);
+  }
+  return Array.from(projects.values())
+    .sort((a, b) => Number(b.updatedAtMs || 0) - Number(a.updatedAtMs || 0))
+    .slice(0, limit)
+    .map((project, index) => ({ ...project, index: index + 1 }));
+}
+
+export async function refreshTakeoverProjectSelection(options = {}) {
+  const dataDir = resolveDataDir(options.dataDir);
+  const state = await readTakeover({ dataDir }) || await prepareTakeoverScope(options);
+  const projects = await listTakeoverProjects(options);
+  const now = Date.now();
+  const updated = {
+    ...state,
+    state: "selecting_project",
+    projectSelection: {
+      listedAt: nowIso(),
+      expiresAt: new Date(now + Number(options.selectionTtlMs || 10 * 60 * 1000)).toISOString(),
+      options: projects.map((project, index) => optionForProject(project, index + 1)),
+    },
+    selection: emptySelection(),
+    target: null,
+    lastSeenAt: nowIso(),
+  };
+  await writeTakeover({ dataDir }, updated);
+  return { state: updated, projects };
+}
+
+export async function selectTakeoverProject(options = {}) {
+  const dataDir = resolveDataDir(options.dataDir);
+  const state = await ensureTakeoverState(options);
+  const project = await resolveTakeoverProject({ ...options, dataDir, state });
+  const updated = {
+    ...state,
+    state: "selecting",
+    scope: {
+      ...(state.scope || {}),
+      cwd: project.cwd,
+    },
+    project,
+    selection: emptySelection(),
+    target: null,
+    lastSeenAt: nowIso(),
+  };
+  await writeTakeover({ dataDir }, updated);
+  const refreshed = await refreshTakeoverSelection({
+    ...options,
+    dataDir,
+    cwd: project.cwd,
+  });
+  const refreshedProject = refreshProjectFromTargets(project, refreshed.targets);
+  const refreshedState = {
+    ...refreshed.state,
+    project: refreshedProject,
+  };
+  await writeTakeover({ dataDir }, refreshedState);
+  return { ...refreshed, state: refreshedState, project: refreshedProject };
+}
+
 export async function refreshTakeoverSelection(options = {}) {
   const dataDir = resolveDataDir(options.dataDir);
   const state = await readTakeover({ dataDir }) || await prepareTakeoverScope(options);
@@ -93,7 +180,7 @@ export async function refreshTakeoverSelection(options = {}) {
     ...options,
     dataDir,
     cwd: options.cwd || state.scope?.cwd || "",
-    excludeThreadId: state.scope?.startedByThreadId || options.excludeThreadId || "",
+    excludeThreadId: options.excludeThreadId || "",
     idleDebounceMs: options.idleDebounceMs,
   });
   const now = Date.now();
@@ -153,9 +240,11 @@ export async function executeTakeoverTarget(options = {}) {
   const updatedTarget = { ...target, ...fresh };
 
   if (updatedTarget.status === "running" || updatedTarget.status === "unknown") {
+    const pendingAt = state.pendingAt || nowIso();
     const pending = {
       ...state,
       state: "pending",
+      pendingAt,
       target: {
         ...updatedTarget,
         selectedAt: state.target?.selectedAt || nowIso(),
@@ -184,6 +273,7 @@ export async function executeTakeoverTarget(options = {}) {
     target: updatedTarget,
     lark: mergeLarkState(state.lark, options),
     activatedAt: nowIso(),
+    pendingAt: "",
     lastSeenStatus: "idle",
     lastSeenAt: nowIso(),
   };
@@ -219,6 +309,19 @@ export async function activatePendingTakeoverIfIdle(options = {}) {
   const dataDir = resolveDataDir(options.dataDir);
   const state = await readTakeover({ dataDir });
   if (!state || state.state !== "pending" || !state.target?.threadId) return null;
+  const timeoutMs = Number(options.pendingTimeoutMs || 0);
+  const pendingAtMs = Date.parse(state.pendingAt || state.lastSeenAt || "");
+  if (timeoutMs > 0 && Number.isFinite(pendingAtMs) && Date.now() - pendingAtMs > timeoutMs) {
+    const timedOut = {
+      ...state,
+      state: "cancelled",
+      deactivatedAt: nowIso(),
+      lastSeenStatus: "timeout",
+      lastSeenAt: nowIso(),
+    };
+    await writeTakeover({ dataDir }, timedOut);
+    return { activated: false, timedOut: true, state: timedOut, target: state.target };
+  }
   const target = await refreshTargetStatus(state.target, options);
   if (target.status !== "idle") {
     const updated = {
@@ -237,6 +340,19 @@ export async function activatePendingTakeoverIfIdle(options = {}) {
     activatedBy: "takeover-watcher",
   });
   return { activated: true, ...result };
+}
+
+export async function clearPendingTakeoverInputs(options = {}) {
+  const dataDir = resolveDataDir(options.dataDir);
+  const state = await readTakeover({ dataDir });
+  if (!state) return null;
+  const updated = {
+    ...state,
+    pendingInputs: [],
+    lastSeenAt: nowIso(),
+  };
+  await writeTakeover({ dataDir }, updated);
+  return updated;
 }
 
 export function buildPendingTakeoverPrompt(inputs = []) {
@@ -300,7 +416,7 @@ async function resolveTakeoverTarget(options = {}) {
     : await listTakeoverTargets({
         ...options,
         cwd: options.cwd || state?.scope?.cwd || "",
-        excludeThreadId: state?.scope?.startedByThreadId || "",
+        excludeThreadId: options.excludeThreadId || "",
       });
 
   if (!selector && candidates.length === 1) return refreshTargetStatus(candidates[0], options);
@@ -318,6 +434,42 @@ async function resolveTakeoverTarget(options = {}) {
   const byId = await findCodexThreadById(selector, options);
   if (byId) return refreshTargetStatus(byId, options);
   throw new Error(`No Codex window matched: ${selector}`);
+}
+
+async function resolveTakeoverProject(options = {}) {
+  const state = options.state || await readTakeover(options);
+  const selector = String(options.selector || options.cwd || options.projectIndex || "").trim();
+  const projectOptions = Array.isArray(state?.projectSelection?.options) ? state.projectSelection.options : [];
+  if (options.cwd) {
+    const exact = projectOptions.find((item) => item.cwd === options.cwd);
+    if (exact) return exact;
+    return {
+      index: 0,
+      cwd: options.cwd,
+      name: projectNameFromCwd(options.cwd),
+      windowCount: 0,
+      updatedAtMs: 0,
+      latestThreadId: "",
+      latestWindowName: "",
+    };
+  }
+  if (selector && /^\d+$/.test(selector)) {
+    const option = projectOptions.find((item) => Number(item.index) === Number(selector));
+    if (option) return option;
+  }
+  const candidates = projectOptions.length ? projectOptions : await listTakeoverProjects(options);
+  if (!selector && candidates.length === 1) return candidates[0];
+  if (!selector) throw new Error("请先选择一个项目。");
+
+  const lower = selector.toLowerCase();
+  const matches = candidates.filter((project) =>
+    String(project.cwd || "").toLowerCase() === lower
+    || String(project.cwd || "").toLowerCase().includes(lower)
+    || String(project.name || "").toLowerCase().includes(lower)
+  );
+  if (matches.length === 1) return matches[0];
+  if (matches.length > 1) throw new Error(`项目选择不明确: ${selector}`);
+  throw new Error(`没有匹配的 Codex 项目: ${selector}`);
 }
 
 async function refreshTargetStatus(target, options = {}) {
@@ -352,6 +504,34 @@ function optionForTarget(target, index) {
     updatedAtMs: target.updatedAtMs || 0,
     lastEventAtMs: target.lastEventAtMs || 0,
   };
+}
+
+function optionForProject(project, index) {
+  return {
+    index,
+    cwd: project.cwd || "",
+    name: project.name || projectNameFromCwd(project.cwd),
+    windowCount: project.windowCount || 0,
+    updatedAtMs: project.updatedAtMs || 0,
+    latestThreadId: project.latestThreadId || "",
+    latestWindowName: project.latestWindowName || "",
+  };
+}
+
+function refreshProjectFromTargets(project, targets = []) {
+  const latest = targets[0] || null;
+  return {
+    ...project,
+    windowCount: targets.length,
+    updatedAtMs: latest?.updatedAtMs || project.updatedAtMs || 0,
+    latestThreadId: latest?.threadId || project.latestThreadId || "",
+    latestWindowName: latest?.name || project.latestWindowName || "",
+  };
+}
+
+function projectNameFromCwd(cwd) {
+  const normalized = String(cwd || "").trim();
+  return normalized ? path.basename(normalized) || normalized : "未知项目";
 }
 
 function mergeLarkState(previous = {}, options = {}) {

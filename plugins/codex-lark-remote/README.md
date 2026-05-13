@@ -29,13 +29,13 @@ npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plu
 For the pinned reviewed release:
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.1.25/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.0/plugins/codex-lark-remote --plugin
 ```
 
 If Codex asks for a GitHub target or direct artifact path, use:
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.1.25/plugins/codex-lark-remote
+https://github.com/GxFn/codex-lark-remote/tree/v0.2.0/plugins/codex-lark-remote
 ```
 
 If the Codex dialog separates source, ref, and sparse path, fill it like this:
@@ -45,7 +45,7 @@ Source:
 https://github.com/GxFn/codex-lark-remote.git
 
 Git ref:
-v0.1.25
+v0.2.0
 
 Sparse path:
 plugins/codex-lark-remote
@@ -68,8 +68,18 @@ Create a Feishu/Lark app:
 4. Copy **App ID** and **App Secret** from **Credentials & Basic Info**.
 5. In **Event Subscriptions**, choose long connection/WebSocket and subscribe to
    `im.message.receive_v1` and `card.action.trigger`.
-6. Enable the message receive/reply permissions requested by the platform, then
-   publish or enable the app for your tenant.
+6. In **Callback Configuration**, keep **receive callbacks through long
+   connection** selected. If you switch to webhook mode, configure
+   `/bridge/lark/event` as the callback URL and keep verification token /
+   encrypt key in sync.
+7. Enable the message receive, send/reply, and card interaction callback
+   permissions requested by the platform, then publish or enable the app for
+   your tenant.
+
+Startup intro cards and takeover buttons require `card.action.trigger`. If text
+messages work but card buttons do nothing, verify that the app is published,
+`card.action.trigger` is subscribed, callback mode is still long connection, and
+the app was republished after permission changes.
 
 Paste the values into a trusted local Codex chat:
 
@@ -83,6 +93,12 @@ Feishu/Lark app:
 Allowed users:
 - allowedUsers: ["ou_xxx"]
 
+Optional takeover tuning:
+- takeover: { projectLimit: 20, selectionTtlMs: 600000 }
+
+Optional startup intro:
+- startup: { receiveId: "oc_xxx", receiveIdType: "chat_id", once: true }
+
 Please call codex_lark_configure with these values, then run
 codex_lark_check_auth.
 ```
@@ -94,7 +110,16 @@ Private config is stored outside the repository:
 ```
 
 If you do not know your sender id, leave `allowedUsers` empty at first, send
-`/codex whoami` to the bot, then add the returned `senderId`.
+`whoami` to the bot, then add the returned `senderId`.
+
+`startup.receiveId` is an optional proactive target. When configured, the bridge
+sends a startup intro card after the first successful Feishu/Lark
+connection or handoff activation. When it is not configured, the first allowed
+Feishu/Lark message supplies the current `chat_id`, receives the intro once,
+and becomes the default target for later bridge starts. If card delivery fails,
+the bridge falls back to a text intro. The sent marker and last remembered chat
+are stored in `~/.codex-lark-remote/startup-notice.json`; set `startup.once` to
+`false` while debugging.
 
 The bridge will not start until `appId` and `appSecret` are configured.
 
@@ -110,8 +135,8 @@ Codex must ask for explicit consent before starting handoff. After consent, the
 plugin stores local routing state for the current Codex thread in the local
 bridge. Existing chat history is not sent to Feishu/Lark.
 
-Handoff is strict about the current Codex window. It uses the exact thread id or
-session path provided by Codex for this tool call. If that per-window metadata is
+Handoff is strict about the current Codex session/window. It uses the exact thread id or
+session path provided by Codex for this tool call. If that per-session metadata is
 not available, handoff is blocked instead of guessing by workspace path.
 
 Then send normal messages to the Feishu/Lark bot. They will continue the same
@@ -124,39 +149,56 @@ bridge stops.
 Useful commands:
 
 ```text
-/codex whoami
-/codex status
-/codex takeover
-/codex windows
-/codex takeover status
-/codex takeover off
-/codex observe
-/codex observe <number|thread-prefix>
-/codex observe off
-/codex commands on
-/codex commands off
-/codex handoff off
+whoami
+console
+status
+takeover
+windows
+takeover status
+takeover off
+observe
+observe <number|thread-prefix>
+observe off
+commands on
+commands off
+handoff off
 ```
 
-Plain language requests such as "disconnect" or "stop handoff" are also handled.
+Plain language requests such as "console", "disconnect", or "stop handoff" are
+also handled.
 
-## Take over another Codex window
+## Console And Direct Task Mode
 
-From a second Codex chat in the same project, prepare takeover scope with
-`codex_lark_prepare_takeover`. Feishu/Lark then controls target selection with
-`/codex takeover`. The bot replies with an interactive card of Codex windows:
-**View** inspects, **Observe** streams read-only progress, and **Takeover**
-opens confirmation before handoff. If cards are unavailable, reply `1`, `2`,
-`3`, etc. to inspect, then send `takeover now`. Running windows attach after
-their current turn finishes.
+Send `console` or click **Console** on the startup card to enter the natural
+language control console. There you can say things like "show takeover
+projects", "open project 2", "observe session 1", or "take over the active
+session".
+
+After a Codex session is taken over, that Feishu/Lark chat automatically switches
+to direct task mode: normal messages are sent unchanged to the taken-over Codex
+thread and no longer go through intent translation. Send `console` to return to
+project/session control, or `handoff off` to disconnect the current handoff.
+
+## Take over Codex sessions from Feishu/Lark
+
+Feishu/Lark controls target selection with `takeover` or `windows`.
+Full-project takeover requires `lark.allowedUsers`; if the
+allowlist is empty, the bot refuses to list projects or execute takeover. The
+bot first shows local Codex projects, then the sessions/windows inside the chosen
+project, including the session that started takeover. This is based on local
+Codex session records, not macOS window handles. Use **Observe** for
+read-only progress streaming, or **Takeover** to open confirmation before
+handoff. If cards are unavailable, reply `1`, `2`, `3`, etc. to choose a
+project, then a session, then send `takeover now`.
+Active sessions attach after they become idle.
 
 ## Observe another Codex session
 
-Observation is read-only and separate from handoff. `/codex observe` lists
-observable Codex sessions. `/codex observe <number>` or
-`/codex observe <thread-prefix>` streams progress from the selected session into
+Observation is read-only and separate from handoff. `observe` lists
+observable Codex sessions. `observe <number>` or
+`observe <thread-prefix>` streams progress from the selected session into
 Feishu/Lark. Feishu/Lark messages are not sent to the observed session. Use
-`/codex observe off` to stop observing.
+`observe off` to stop observing.
 
 ## Feishu/Lark output
 
@@ -166,8 +208,8 @@ Remote replies are optimized for coding on a phone or in chat:
 - Internal task ids are not shown in normal progress replies.
 - Long replies are split into multiple Feishu/Lark messages.
 - Normal shell commands and `Output:` are hidden by default.
-- Use `/codex commands on` or say "show commands" to enable command display.
-  Use `/codex commands off` to hide them again.
+- Use `commands on` or say "show commands" to enable command display.
+  Use `commands off` to hide them again.
 - Potentially risky commands are always shown with a `Warning:` line, even when
   normal command display is off.
 - When command display is on, command `Output:` is still limited to one
@@ -221,7 +263,7 @@ The plugin MCP server is not loaded in this Codex conversation. Refresh or
 re-enable the plugin, then start a new Codex conversation. Normal startup should
 not fall back to local scripts.
 
-`/codex status` says `websocket disabled`:
+`status` says `websocket disabled`:
 
 Check `~/.codex-lark-remote/config.json` and confirm that `appId` and
 `appSecret` are present.

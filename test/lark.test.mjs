@@ -43,7 +43,17 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
     id: "rcmd_1",
   });
 
+  assert.deepEqual(classifyChatText("status rcmd_1", config), {
+    kind: "task_status",
+    id: "rcmd_1",
+  });
+
   assert.deepEqual(classifyChatText("/codex commands on", config), {
+    kind: "command_visibility",
+    enabled: true,
+  });
+
+  assert.deepEqual(classifyChatText("commands on", config), {
     kind: "command_visibility",
     enabled: true,
   });
@@ -57,6 +67,10 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
     kind: "whoami",
   });
 
+  assert.deepEqual(classifyChatText("whoami", config), {
+    kind: "whoami",
+  });
+
   assert.deepEqual(classifyChatText("/codex handoff", config), {
     kind: "handoff_status",
   });
@@ -66,6 +80,10 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
   });
 
   assert.deepEqual(classifyChatText("/codex observe", config), {
+    kind: "observe_list",
+  });
+
+  assert.deepEqual(classifyChatText("observe", config), {
     kind: "observe_list",
   });
 
@@ -90,12 +108,26 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
     kind: "takeover_list",
   });
 
+  assert.deepEqual(classifyChatText("windows", config), {
+    kind: "takeover_list",
+  });
+
+  assert.deepEqual(classifyChatText("/codex projects 2", config), {
+    kind: "takeover_project_select",
+    selector: "2",
+  });
+
   assert.deepEqual(classifyChatText("/codex takeover 2", config), {
     kind: "takeover_select",
     selector: "2",
   });
 
   assert.deepEqual(classifyChatText("/codex takeover 2 now", config), {
+    kind: "takeover_execute",
+    selector: "2",
+  });
+
+  assert.deepEqual(classifyChatText("takeover 2 now", config), {
     kind: "takeover_execute",
     selector: "2",
   });
@@ -154,6 +186,20 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
 
   assert.deepEqual(classifyChatText("窗口列表", config), {
     kind: "takeover_list",
+  });
+
+  assert.deepEqual(classifyChatText("项目列表", config), {
+    kind: "takeover_list",
+  });
+
+  assert.deepEqual(classifyChatText("进入第一个项目", config), {
+    kind: "takeover_project_select",
+    selector: "1",
+  });
+
+  assert.deepEqual(classifyChatText("选择第 2 个项目", config), {
+    kind: "takeover_project_select",
+    selector: "2",
   });
 
   assert.deepEqual(classifyChatText("查看第 3 个窗口", config), {
@@ -276,6 +322,48 @@ test("parseLarkCardAction extracts card action payloads", () => {
   assert.match(parsed.chatIdHash, /^c_[a-f0-9]{12}$/);
 });
 
+test("parseLarkCardAction accepts flattened SDK card callback identity", () => {
+  const parsed = parseLarkCardAction({
+    header: { event_type: "card.action.trigger" },
+    context: {
+      open_message_id: "om_card",
+      open_chat_id: "oc_card",
+    },
+    operator: {
+      open_id: "ou_open_user",
+      user_id: "user_123",
+      union_id: "on_union",
+    },
+    action: {
+      value: { action: "takeover_view", optionIndex: 1 },
+      tag: "button",
+    },
+  });
+
+  assert.equal(parsed.kind, "card_action");
+  assert.equal(parsed.senderId, "user_123");
+  assert.equal(parsed.openId, "ou_open_user");
+  assert.equal(parsed.unionId, "on_union");
+  assert.equal(parsed.messageId, "om_card");
+  assert.equal(parsed.chatId, "oc_card");
+});
+
+test("parseLarkCardAction accepts legacy card callback open_id identity", () => {
+  const parsed = parseLarkCardAction({
+    type: "card.action.trigger",
+    open_id: "ou_open_user",
+    open_message_id: "om_card",
+    action: {
+      value: { action: "takeover_view" },
+      tag: "button",
+    },
+  });
+
+  assert.equal(parsed.senderId, "ou_open_user");
+  assert.equal(parsed.senderIdType, "open_id");
+  assert.equal(parsed.openId, "ou_open_user");
+});
+
 test("classifyChatText rejects shell mode in MVP", () => {
   const result = classifyChatText("$ rm -rf .", { defaultRepo: "main", repos: { main: {} } });
   assert.equal(result.kind, "rejected");
@@ -287,4 +375,19 @@ test("isUserAllowed accepts config based allowlists", () => {
   assert.deepEqual(configuredAllowedUsers(config), ["ou_allowed"]);
   assert.equal(isUserAllowed("ou_allowed", config), true);
   assert.equal(isUserAllowed("ou_blocked", config), false);
+});
+
+test("isUserAllowed accepts any parsed Feishu identity on an event", () => {
+  const config = { lark: { allowedUsers: ["ou_open_allowed"] } };
+
+  assert.equal(isUserAllowed({
+    senderId: "user_id_not_allowed",
+    openId: "ou_open_allowed",
+    unionId: "on_union",
+  }, config), true);
+  assert.equal(isUserAllowed({
+    senderId: "user_id_not_allowed",
+    openId: "ou_open_blocked",
+    unionId: "on_union",
+  }, config), false);
 });

@@ -73,6 +73,58 @@ test("LarkNotifier.replyCard sends interactive message content", async (t) => {
   assert.deepEqual(JSON.parse(sent[0].content), { elements: [{ tag: "markdown", content: "hello" }] });
 });
 
+test("LarkNotifier.send proactively sends text to a Feishu chat", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url).includes("/auth/v3/tenant_access_token/internal")) {
+      return Response.json({ code: 0, tenant_access_token: "token", expire: 3600 });
+    }
+    requests.push({ url: String(url), body: JSON.parse(init.body) });
+    return Response.json({ code: 0, data: { message_id: "om_startup" } });
+  };
+
+  const notifier = new LarkNotifier({ appId: "cli_test", appSecret: "secret" });
+  const result = await notifier.send("oc_test", "hello", { receiveIdType: "chat_id" });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.messageId, "om_startup");
+  assert.match(requests[0].url, /\/im\/v1\/messages\?receive_id_type=chat_id$/);
+  assert.equal(requests[0].body.receive_id, "oc_test");
+  assert.equal(requests[0].body.msg_type, "text");
+  assert.deepEqual(JSON.parse(requests[0].body.content), { text: "hello" });
+});
+
+test("LarkNotifier.sendCard proactively sends an interactive card", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url).includes("/auth/v3/tenant_access_token/internal")) {
+      return Response.json({ code: 0, tenant_access_token: "token", expire: 3600 });
+    }
+    requests.push({ url: String(url), body: JSON.parse(init.body) });
+    return Response.json({ code: 0, data: { message_id: "om_card_startup" } });
+  };
+
+  const card = { elements: [{ tag: "markdown", content: "hello" }] };
+  const notifier = new LarkNotifier({ appId: "cli_test", appSecret: "secret" });
+  const result = await notifier.sendCard("oc_test", card);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.messageId, "om_card_startup");
+  assert.equal(requests[0].body.receive_id, "oc_test");
+  assert.equal(requests[0].body.msg_type, "interactive");
+  assert.deepEqual(JSON.parse(requests[0].body.content), card);
+});
+
 test("LarkNotifier.patchCard updates interactive message content", async (t) => {
   const originalFetch = globalThis.fetch;
   let patchRequest = null;

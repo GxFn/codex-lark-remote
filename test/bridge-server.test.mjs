@@ -6,6 +6,7 @@ import path from "node:path";
 import { processLarkEvent, startBridge } from "../plugins/codex-lark-remote/src/bridge-server.mjs";
 import { configFilePath, stateFilePath } from "../plugins/codex-lark-remote/src/config.mjs";
 import { activateHandoff } from "../plugins/codex-lark-remote/src/handoff.mjs";
+import { readIntentSession } from "../plugins/codex-lark-remote/src/intent-state.mjs";
 import { prepareTakeoverScope, readTakeover } from "../plugins/codex-lark-remote/src/takeover.mjs";
 
 test("startBridge refuses to run before Feishu app credentials are configured", async () => {
@@ -72,6 +73,51 @@ test("processLarkEvent deduplicates direct command replies and reports websocket
   assert.match(replies[0].text, /Feishu\/Lark: websocket connected/);
 });
 
+test("processLarkEvent sends startup intro to the first allowed Feishu chat once", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-startup-"));
+  const previousReceiveId = process.env.CODEX_LARK_STARTUP_RECEIVE_ID;
+  const previousChatId = process.env.CODEX_LARK_STARTUP_CHAT_ID;
+  const replies = [];
+  const sent = [];
+  const ctx = {
+    config: {
+      dataDir,
+      lark: { appId: "cli_test", allowedUsers: ["ou_allowed"], transport: "websocket" },
+    },
+    queue: {
+      findByMessageId: async () => null,
+      counts: async () => ({}),
+    },
+    notifier: {
+      reply: async (messageId, text) => replies.push({ messageId, text }),
+      send: async (receiveId, text, options) => {
+        sent.push({ receiveId, text, options });
+        return { ok: true, messageId: "om_startup" };
+      },
+    },
+    runner: { busy: false },
+    larkWs: { status: () => ({ enabled: true, connected: true }) },
+  };
+
+  try {
+    delete process.env.CODEX_LARK_STARTUP_RECEIVE_ID;
+    delete process.env.CODEX_LARK_STARTUP_CHAT_ID;
+    await processLarkEvent(ctx, textEvent({ text: "/codex status", userId: "ou_allowed", messageId: "om_1" }));
+    await processLarkEvent(ctx, textEvent({ text: "/codex status", userId: "ou_allowed", messageId: "om_2" }));
+
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].receiveId, "oc_chat");
+    assert.equal(sent[0].options.receiveIdType, "chat_id");
+    assert.match(sent[0].text, /Codex 已经连上飞书/);
+    assert.equal(replies.length, 2);
+  } finally {
+    if (previousReceiveId === undefined) delete process.env.CODEX_LARK_STARTUP_RECEIVE_ID;
+    else process.env.CODEX_LARK_STARTUP_RECEIVE_ID = previousReceiveId;
+    if (previousChatId === undefined) delete process.env.CODEX_LARK_STARTUP_CHAT_ID;
+    else process.env.CODEX_LARK_STARTUP_CHAT_ID = previousChatId;
+  }
+});
+
 test("processLarkEvent routes normal messages to current-thread handoff when active", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-bridge-"));
   await activateHandoff({
@@ -122,6 +168,49 @@ test("processLarkEvent routes normal messages to current-thread handoff when act
   assert.equal(enqueued[0].includeRemoteNote, true);
   assert.equal(enqueued[0].codexSessionId, "019e0ffb-52e9-7ee3-bb87-42019b58eaa2");
   assert.deepEqual(replies, []);
+});
+
+test("processLarkEvent enables console mode and routes unknown text through intent translator", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-intent-console-"));
+  const replies = [];
+  const cards = [];
+  let translated = 0;
+  const ctx = {
+    config: {
+      dataDir,
+      lark: { allowedUsers: ["ou_allowed"], transport: "websocket" },
+      intent: { mode: "hybrid", translator: { minConfidence: 0.75 } },
+      handoff: { showCommands: false },
+    },
+    queue: {
+      findByMessageId: async () => null,
+      counts: async () => ({}),
+    },
+    notifier: {
+      reply: async (messageId, text) => replies.push({ messageId, text }),
+      replyCard: async (messageId, card) => {
+        cards.push({ messageId, card });
+        return { ok: true };
+      },
+    },
+    runner: { busy: false },
+    keepAwake: { status: () => ({ enabled: false }) },
+    larkWs: { status: () => ({ enabled: true, connected: true }) },
+    intentTranslator: async () => {
+      translated += 1;
+      return { intent: "system.status", args: {}, confidence: 0.95 };
+    },
+  };
+
+  await processLarkEvent(ctx, textEvent({ text: "控制台", userId: "ou_allowed", messageId: "om_console" }));
+  await processLarkEvent(ctx, textEvent({ text: "看看桥现在怎么样", userId: "ou_allowed", messageId: "om_status" }));
+
+  const stored = await readIntentSession({ dataDir, event: { chatId: "oc_chat" }, config: ctx.config });
+  assert.equal(stored.mode, "console");
+  assert.equal(translated, 1);
+  assert.equal(cards.length, 1);
+  assert.match(JSON.stringify(cards[0].card), /自然语言控制台/);
+  assert.match(replies[0].text, /Codex Lark Remote status/);
 });
 
 test("processLarkEvent only includes the remote note on the first handoff message", async () => {
@@ -288,11 +377,11 @@ test("processLarkEvent lists and starts explicit read-only observation", async (
     else process.env.CODEX_HOME = originalCodexHome;
   }
 
-  assert.match(replies[0].text, /Observable Codex sessions/);
+  assert.match(replies[0].text, /可观察的 Codex 会话/);
   assert.match(replies[0].text, /Target chat/);
   assert.equal(started[0].threadId, "019e0000-0000-7000-8000-000000000001");
   assert.equal(started[0].messageId, "om_2");
-  assert.match(replies[1].text, /observation: active/);
+  assert.match(replies[1].text, /观察：已开启/);
 });
 
 test("processLarkEvent updates command display preference", async () => {
@@ -363,15 +452,141 @@ test("processLarkEvent lets Feishu inspect takeover windows before attaching", a
   try {
     await processLarkEvent(ctx, textEvent({ text: "/codex takeover", userId: "ou_allowed" }));
     await processLarkEvent(ctx, textEvent({ text: "1", userId: "ou_allowed", messageId: "om_2" }));
+    await processLarkEvent(ctx, textEvent({ text: "1", userId: "ou_allowed", messageId: "om_3" }));
+  } finally {
+    if (originalCodexHome === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = originalCodexHome;
+  }
+
+  assert.equal(cards.length, 3);
+  assert.match(JSON.stringify(cards[0].card), /可接管项目/);
+  assert.match(JSON.stringify(cards[1].card), /Target A/);
+  assert.equal((await readTakeover({ dataDir })).state, "selected");
+  assert.deepEqual(replies, []);
+});
+
+test("processLarkEvent lists projects first, then scopes windows to the chosen project", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-takeover-handoff-scope-"));
+  const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-home-takeover-handoff-scope-"));
+  const sessions = path.join(codexHome, "sessions", "2026", "05", "13");
+  await fs.mkdir(sessions, { recursive: true });
+  await writeSession({
+    file: path.join(sessions, "rollout-2026-05-13T10-00-00-019e0000-0000-7000-8000-000000000020.jsonl"),
+    id: "019e0000-0000-7000-8000-000000000020",
+    cwd: "/workspace/project",
+    name: "Current handoff",
+    mtime: new Date("2026-05-13T10:00:00Z"),
+  });
+  await writeSession({
+    file: path.join(sessions, "rollout-2026-05-13T10-01-00-019e0000-0000-7000-8000-000000000021.jsonl"),
+    id: "019e0000-0000-7000-8000-000000000021",
+    cwd: "/workspace/project",
+    name: "Target in project",
+    mtime: new Date("2026-05-13T10:03:00Z"),
+  });
+  await writeSession({
+    file: path.join(sessions, "rollout-2026-05-13T10-02-00-019e0000-0000-7000-8000-000000000022.jsonl"),
+    id: "019e0000-0000-7000-8000-000000000022",
+    cwd: "/workspace/other",
+    name: "Other project",
+    mtime: new Date("2026-05-13T10:02:00Z"),
+  });
+  await activateHandoff({
+    dataDir,
+    threadId: "019e0000-0000-7000-8000-000000000020",
+    cwd: "/workspace/project",
+    activatedBy: "test",
+  });
+
+  const originalCodexHome = process.env.CODEX_HOME;
+  process.env.CODEX_HOME = codexHome;
+  const cards = [];
+  const ctx = {
+    config: {
+      dataDir,
+      lark: { allowedUsers: ["ou_allowed"] },
+      takeover: { idleDebounceMs: 1 },
+    },
+    queue: { findByMessageId: async () => null },
+    notifier: {
+      reply: async () => {},
+      replyCard: async (messageId, card) => {
+        cards.push({ messageId, card });
+        return { ok: true };
+      },
+    },
+  };
+
+  try {
+    await processLarkEvent(ctx, textEvent({ text: "/codex windows", userId: "ou_allowed" }));
+    await processLarkEvent(ctx, textEvent({ text: "/codex takeover 1", userId: "ou_allowed", messageId: "om_2" }));
   } finally {
     if (originalCodexHome === undefined) delete process.env.CODEX_HOME;
     else process.env.CODEX_HOME = originalCodexHome;
   }
 
   assert.equal(cards.length, 2);
-  assert.match(JSON.stringify(cards[0].card), /Target A/);
-  assert.equal((await readTakeover({ dataDir })).state, "selected");
-  assert.deepEqual(replies, []);
+  const projects = JSON.stringify(cards[0].card);
+  assert.match(projects, /\/workspace\/project/);
+  assert.match(projects, /\/workspace\/other/);
+  const windows = JSON.stringify(cards[1].card);
+  assert.match(windows, /Current handoff/);
+  assert.match(windows, /Target in project/);
+  assert.doesNotMatch(windows, /Other project/);
+});
+
+test("processLarkEvent status reports active takeover selection", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-status-takeover-"));
+  await prepareTakeoverScope({ dataDir, cwd: "/workspace/project" });
+  const replies = [];
+
+  await processLarkEvent(
+    {
+      config: {
+        dataDir,
+        lark: { allowedUsers: ["ou_allowed"] },
+        handoff: { showCommands: false },
+      },
+      queue: {
+        findByMessageId: async () => null,
+        counts: async () => ({}),
+      },
+      runner: { busy: false },
+      keepAwake: { status: () => ({ enabled: false }) },
+      larkWs: { status: () => ({ enabled: true, connected: true }) },
+      notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+    },
+    textEvent({ text: "/codex status", userId: "ou_allowed" }),
+  );
+
+  assert.match(replies[0].text, /Takeover: selecting/);
+});
+
+test("processLarkEvent requires allowedUsers before full-project takeover", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-takeover-allowlist-"));
+  const replies = [];
+  const cards = [];
+
+  await processLarkEvent(
+    {
+      config: {
+        dataDir,
+        lark: { allowedUsers: [] },
+      },
+      queue: { findByMessageId: async () => null },
+      notifier: {
+        reply: async (messageId, text) => replies.push({ messageId, text }),
+        replyCard: async (messageId, card) => {
+          cards.push({ messageId, card });
+          return { ok: true };
+        },
+      },
+    },
+    textEvent({ text: "/codex windows", userId: "ou_allowed" }),
+  );
+
+  assert.equal(cards.length, 0);
+  assert.match(replies[0].text, /lark\.allowedUsers/);
 });
 
 test("processLarkEvent executes takeover from a card action", async () => {
@@ -417,7 +632,123 @@ test("processLarkEvent executes takeover from a card action", async () => {
   }
 
   assert.equal(keepAwakeStarted, 1);
-  assert.match(replies[0].text, /Takeover active/);
+  assert.match(replies[0].text, /接管已生效/);
+  assert.equal((await readIntentSession({ dataDir, event: { chatId: "oc_card" }, config: ctx.config })).mode, "handoff");
+});
+
+test("processLarkEvent routes startup card buttons to normal actions", async () => {
+  const replies = [];
+  await processLarkEvent(
+    {
+      config: {
+        lark: { allowedUsers: ["ou_allowed"], transport: "websocket" },
+        handoff: { showCommands: false },
+      },
+      queue: { counts: async () => ({}) },
+      runner: { busy: false },
+      keepAwake: { status: () => ({ enabled: false }) },
+      larkWs: { status: () => ({ enabled: true, connected: true }) },
+      notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+    },
+    cardActionEvent({ action: "startup_status", userId: "ou_allowed" }),
+  );
+
+  assert.equal(replies.length, 1);
+  assert.match(replies[0].text, /Codex Lark Remote status/);
+});
+
+test("processLarkEvent shows console card from startup card", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-startup-console-"));
+  const replies = [];
+  const cards = [];
+
+  await processLarkEvent(
+    {
+      config: {
+        dataDir,
+        lark: { allowedUsers: ["ou_allowed"] },
+      },
+      notifier: {
+        reply: async (messageId, text) => replies.push({ messageId, text }),
+        replyCard: async (messageId, card) => {
+          cards.push({ messageId, card });
+          return { ok: true };
+        },
+      },
+      queue: { findByMessageId: async () => null },
+    },
+    cardActionEvent({ action: "startup_console", userId: "ou_allowed" }),
+  );
+
+  assert.deepEqual(replies, []);
+  assert.equal(cards.length, 1);
+  assert.match(JSON.stringify(cards[0].card), /自然语言控制台/);
+  assert.equal((await readIntentSession({ dataDir, event: { chatId: "oc_card" }, config: {} })).mode, "console");
+});
+
+test("processLarkEvent queues normal messages for pending takeover before old handoff", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-pending-before-handoff-"));
+  const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-home-pending-before-handoff-"));
+  const sessions = path.join(codexHome, "sessions", "2026", "05", "13");
+  await fs.mkdir(sessions, { recursive: true });
+  await writeSession({
+    file: path.join(sessions, "rollout-2026-05-13T10-01-00-019e0000-0000-7000-8000-000000000030.jsonl"),
+    id: "019e0000-0000-7000-8000-000000000030",
+    cwd: "/workspace",
+    name: "Running new target",
+    events: [{ type: "event_msg", payload: { type: "agent_reasoning", message: "working" } }],
+    mtime: new Date(),
+  });
+  await activateHandoff({
+    dataDir,
+    threadId: "019e0000-0000-7000-8000-000000000031",
+    cwd: "/workspace",
+    activatedBy: "test",
+  });
+  await prepareTakeoverScope({ dataDir, codexHome, cwd: "/workspace" });
+  const originalCodexHome = process.env.CODEX_HOME;
+  process.env.CODEX_HOME = codexHome;
+  const replies = [];
+  const enqueued = [];
+  const ctx = {
+    config: {
+      dataDir,
+      lark: { allowedUsers: ["ou_allowed"] },
+      takeover: { idleDebounceMs: 60_000 },
+    },
+    queue: {
+      findByMessageId: async () => null,
+      enqueue: async (input) => {
+        enqueued.push(input);
+        return { id: "rcmd_old", status: "pending", ...input };
+      },
+    },
+    notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+    runner: { processAll: () => {} },
+  };
+
+  try {
+    await processLarkEvent(ctx, cardActionEvent({
+      action: "takeover_execute",
+      threadId: "019e0000-0000-7000-8000-000000000030",
+      userId: "ou_allowed",
+    }));
+    await processLarkEvent(ctx, textEvent({
+      text: "这是给新目标的 pending 输入",
+      userId: "ou_allowed",
+      messageId: "om_pending_input",
+    }));
+  } finally {
+    if (originalCodexHome === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = originalCodexHome;
+  }
+
+  const takeover = await readTakeover({ dataDir });
+  assert.equal(takeover.state, "pending");
+  assert.equal(takeover.pendingInputs.length, 1);
+  assert.equal(takeover.pendingInputs[0].text, "这是给新目标的 pending 输入");
+  assert.equal(enqueued.length, 0);
+  assert.match(replies.at(-1).text, /已暂存这条消息/);
 });
 
 test("processLarkEvent treats shell-looking text as chat input during handoff", async () => {
@@ -457,6 +788,42 @@ test("processLarkEvent treats shell-looking text as chat input during handoff", 
   assert.deepEqual(replies, []);
 });
 
+test("processLarkEvent keeps natural control-looking text as task input during handoff", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-handoff-direct-"));
+  await activateHandoff({
+    dataDir,
+    threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
+    cwd: "/workspace",
+    activatedBy: "test",
+  });
+  const enqueued = [];
+
+  await processLarkEvent(
+    {
+      config: {
+        dataDir,
+        lark: { allowedUsers: ["ou_allowed"] },
+        defaultRepo: "demo",
+        repos: { demo: { path: "/repo" } },
+      },
+      queue: {
+        findByMessageId: async () => null,
+        enqueue: async (input) => {
+          enqueued.push(input);
+          return { id: "rcmd_3", status: "pending", ...input };
+        },
+      },
+      notifier: { reply: async () => {} },
+      runner: { processAll: () => {} },
+    },
+    textEvent({ text: "窗口列表", userId: "ou_allowed" }),
+  );
+
+  assert.equal(enqueued.length, 1);
+  assert.equal(enqueued[0].mode, "thread_handoff");
+  assert.equal(enqueued[0].prompt, "窗口列表");
+});
+
 async function writeSession({ file, id, cwd, name = "", source = "vscode", events = [], mtime }) {
   const lines = [
     JSON.stringify({
@@ -485,12 +852,12 @@ function textEvent({ text, userId, messageId = "om_1" }) {
   };
 }
 
-function cardActionEvent({ action, optionIndex, threadId, userId = "ou_allowed", messageId = "om_card" }) {
+function cardActionEvent({ action, optionIndex, projectIndex, cwd, threadId, userId = "ou_allowed", messageId = "om_card" }) {
   return {
     header: { event_type: "card.action.trigger" },
     event: {
       action: {
-        value: { action, optionIndex, threadId },
+        value: { action, optionIndex, projectIndex, cwd, threadId },
       },
       context: {
         open_message_id: messageId,

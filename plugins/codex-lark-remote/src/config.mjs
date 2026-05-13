@@ -37,6 +37,14 @@ export function takeoverFilePath(dataDir) {
   return path.join(dataDir, "takeover.json");
 }
 
+export function startupNoticeFilePath(dataDir) {
+  return path.join(dataDir, "startup-notice.json");
+}
+
+export function intentConsoleFilePath(dataDir) {
+  return path.join(dataDir, "intent-console.json");
+}
+
 export function configFilePath(dataDir) {
   return path.resolve(process.env.CODEX_LARK_CONFIG || path.join(dataDir, "config.json"));
 }
@@ -122,11 +130,30 @@ export function defaultConfig(dataDir = resolveDataDir()) {
     },
     takeover: {
       enabled: true,
+      projectLimit: 20,
       idleDebounceMs: 3000,
       pollIntervalMs: 1000,
       pendingTimeoutMs: 30 * 60 * 1000,
       maxPendingInputs: 20,
       selectionTtlMs: 10 * 60 * 1000,
+    },
+    startup: {
+      enabled: true,
+      once: true,
+      rememberLastChat: true,
+      receiveId: "",
+      receiveIdType: "chat_id",
+    },
+    intent: {
+      enabled: true,
+      mode: "hybrid",
+      consoleChatIds: [],
+      translator: {
+        provider: "codex-thread",
+        timeoutMs: 15000,
+        minConfidence: 0.75,
+      },
+      fallbackToHandoff: true,
     },
     policy: {
       requireReviewForCommit: true,
@@ -147,6 +174,15 @@ function mergeConfig(base, override) {
     runner: { ...(base.runner || {}), ...(override.runner || {}) },
     handoff: { ...(base.handoff || {}), ...(override.handoff || {}) },
     takeover: { ...(base.takeover || {}), ...(override.takeover || {}) },
+    startup: { ...(base.startup || {}), ...(override.startup || {}) },
+    intent: {
+      ...(base.intent || {}),
+      ...(override.intent || {}),
+      translator: {
+        ...(base.intent?.translator || {}),
+        ...(override.intent?.translator || {}),
+      },
+    },
     policy: { ...(base.policy || {}), ...(override.policy || {}) },
   };
 }

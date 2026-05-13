@@ -2,6 +2,21 @@
 
 日期：2026-05-13
 
+## 当前实现状态
+
+这份文档最初设计的是“从同项目 B 对话接管 A 对话”。当前实现已经升级为飞书/Lark
+端全项目接管：
+
+- `takeover` 和 `windows` 先展示本机 Codex 项目列表。
+- 用户进入项目后，再看到该项目下所有 Codex 窗口，包括启动飞书接管的窗口。
+- 全项目接管必须配置非空 `lark.allowedUsers`，且所有项目、窗口、观察和接管动作都
+  会校验飞书用户身份。
+- 卡片按钮采用“进入项目”“观察”“接管”“确认接管”的中文两级流程；文本数字输入是
+  兜底交互。
+
+下文保留早期设计推导，其中“同项目候选”应按当前实现理解为“项目列表 -> 项目内窗口”
+的两级选择。
+
 ## 背景
 
 当前 `codex-lark-remote` 的接管路径要求用户在“要被接管的 Codex 对话 A”里启动 `codex_lark_handoff`。如果 A 正在执行一轮较长任务，用户必须等 A 当前轮结束，才能在 A 的对话框里启动 Lark 插件。这在真实远程编程场景里很不方便：用户往往正是因为 A 在跑长任务，才想打开另一个 Codex 对话 B 来做远程接管准备。
@@ -118,13 +133,13 @@ codex exec \
 
 ## 设计目标
 
-1. 用户可以在同项目新对话 B 中启动接管准备。
-2. bridge 可以列出同项目中可观察、可接管的 Codex 会话。
+1. 用户可以在任意当前 Codex 对话中启动接管准备。
+2. bridge 可以列出本机 Codex 项目，并在用户进入项目后列出该项目中可观察、可接管的 Codex 会话。
 3. 飞书/Lark 端拥有目标选择自主权：用户通过 `1`、`2`、`3`、`4` 等选项查看某个窗口，再明确执行接管。
 4. 如果 A 正在执行，bridge 不并发 `resume` A，而是进入 pending 状态。
 5. A 当前轮结束后，bridge 自动激活 A 的 handoff。
 6. pending 期间收到的 Lark 消息不会丢失，可作为待注入输入排队。
-7. 全程避免把 B 错接成 A，或把同一项目其他无关对话错接进来。
+7. 全程避免把 B 错接成 A；目标必须由飞书/Lark 端显式选择，并受 `allowedUsers` 约束。
 8. 保持现有 handoff、observer、queue、runner 的行为兼容。
 
 ## 非目标
@@ -149,7 +164,7 @@ MCP 工具做三件事：
 
 1. 启动或复用 bridge。
 2. 把 B 的 cwd 写入 takeover scope。
-3. 返回提示：去飞书/Lark 发送 `/codex takeover` 选择目标。
+3. 返回提示：去飞书/Lark 发送 `takeover` 选择目标。
 
 此时不把 B 直接设为 active handoff。B 只负责开启 bridge 和授权“允许从本项目选择目标会话”；查看哪个窗口、接管哪个窗口，都由飞书/Lark 端决定。
 
@@ -171,18 +186,18 @@ MCP 工具做三件事：
 新增命令：
 
 ```text
-/codex takeover
-/codex windows
+takeover
+windows
 1
 2
 3
-/codex takeover now
-/codex takeover <序号|thread 前缀> now
-/codex takeover off
-/codex takeover status
+takeover now
+takeover <序号|thread 前缀> now
+takeover off
+takeover status
 ```
 
-`/codex takeover` 或 `/codex windows` 优先返回同项目候选卡片，并进入短时选择上下文：
+`takeover` 或 `windows` 优先返回同项目候选卡片，并进入短时选择上下文：
 
 ```text
 Codex windows in this project
@@ -247,7 +262,7 @@ Send a normal Feishu/Lark message to continue this Codex thread.
 也允许熟练用户一步执行：
 
 ```text
-/codex takeover 1 now
+takeover 1 now
 ```
 
 但默认交互仍建议“先查看，再执行接管”。
@@ -346,15 +361,15 @@ bridge 的 observer/takeover watcher 检测到 A idle 后：
 ```mermaid
 stateDiagram-v2
   [*] --> none
-  none --> selecting: /codex takeover
+  none --> selecting: takeover
   selecting --> selected: reply 1/2/3/4
   selected --> selecting: list / choose another
   selected --> pending: takeover now on running target
   selected --> active: takeover now on idle target
   pending --> active: target becomes idle
   selected --> cancelled: cancel
-  pending --> cancelled: /codex takeover off
-  active --> cancelled: /codex takeover off or handoff off
+  pending --> cancelled: takeover off
+  active --> cancelled: takeover off or handoff off
   cancelled --> none
 ```
 
@@ -502,7 +517,7 @@ Target thread is still running. This message will be delivered after takeover ac
 
 ### 新增 `codex_lark_prepare_takeover` 的交互约束
 
-MCP 侧只准备 takeover scope，不替用户选择目标，也不默认接管当前 B。工具返回文案应明确告诉用户：接下来去飞书/Lark 输入 `/codex takeover`，再用数字选择窗口并查看，最后用 `takeover now` 执行接管。
+MCP 侧只准备 takeover scope，不替用户选择目标，也不默认接管当前 B。工具返回文案应明确告诉用户：接下来去飞书/Lark 输入 `takeover`，再用数字选择窗口并查看，最后用 `takeover now` 执行接管。
 
 ### 新增或扩展 `codex_lark_handoff`
 
@@ -749,7 +764,7 @@ takeover: {
 
 | 文件 | 新增覆盖 |
 | --- | --- |
-| `test/lark.test.mjs` | `/codex takeover`、纯数字选择、`takeover now` 命令分类。 |
+| `test/lark.test.mjs` | `takeover`、纯数字选择、`takeover now` 命令分类。 |
 | `test/lark-ws.test.mjs` | 同时注册 `im.message.receive_v1` 和 `card.action.trigger`。 |
 | `test/notifier.test.mjs` | 回复交互卡片、更新共享卡片、Lark API 错误处理。 |
 | `test/bridge-server.test.mjs` | takeover route、数字选项路由、卡片回调路由、selected 后执行接管、pending input。 |
@@ -766,7 +781,7 @@ takeover: {
 
 - 新增 `takeover.json`。
 - 新增 MCP 工具声明。
-- 新增 Lark `/codex takeover` 命令。
+- 新增 Lark `takeover` 命令。
 - 能列候选，优先返回交互卡片；卡片不可用时返回文本列表。
 - 输入 `1`、`2`、`3`、`4` 能查看某个窗口。
 - 点击 `查看` 只展开窗口，不激活 handoff。
@@ -778,8 +793,8 @@ takeover: {
 
 - running 目标进入 pending。
 - pending 期间普通 Lark 消息保存为 pending input。
-- `/codex takeover status` 展示 target 和 pending input 数量。
-- `/codex takeover off` 清理状态。
+- `takeover status` 展示 target 和 pending input 数量。
+- `takeover off` 清理状态。
 
 ### Phase 3：idle 检测和自动激活
 
@@ -800,7 +815,7 @@ takeover: {
 
 ### 为什么不直接从 B 调 handoff 指向 A
 
-B 的 MCP 请求上下文只能证明 B 是当前窗口，不能证明 A 是用户想接管的窗口。直接从 B 猜 A 会回到之前“按 cwd 猜最近 session”的风险。新方案要求 Lark 中显式选择 A，并且只在同项目候选中选择。
+B 的 MCP 请求上下文只能证明 B 是当前窗口，不能证明 A 是用户想接管的窗口。直接从 B 猜 A 会回到之前“按 cwd 猜最近 session”的风险。新方案要求 Lark 中显式选择项目和窗口，并通过 `allowedUsers` 限定谁可以执行全项目选择与接管。
 
 ### 为什么 A 正在跑时不立即 resume
 

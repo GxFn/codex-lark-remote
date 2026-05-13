@@ -27,13 +27,13 @@ npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plu
 如果要固定到当前审核版本：
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.1.25/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.0/plugins/codex-lark-remote --plugin
 ```
 
 如果 Codex 要求填写 GitHub Target 或直接 artifact path，请填写：
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.1.25/plugins/codex-lark-remote
+https://github.com/GxFn/codex-lark-remote/tree/v0.2.0/plugins/codex-lark-remote
 ```
 
 如果 Codex 弹窗把来源、Git 引用、稀疏路径拆开填写，请这样填：
@@ -43,7 +43,7 @@ https://github.com/GxFn/codex-lark-remote/tree/v0.1.25/plugins/codex-lark-remote
 https://github.com/GxFn/codex-lark-remote.git
 
 Git 引用：
-v0.1.25
+v0.2.0
 
 稀疏路径：
 plugins/codex-lark-remote
@@ -65,7 +65,13 @@ plugins/codex-lark-remote
 4. 在“凭证与基础信息”里复制 **App ID** 和 **App Secret**。
 5. 在“事件订阅”里选择长连接/WebSocket，并订阅 `im.message.receive_v1`
    和 `card.action.trigger`。
-6. 按平台提示启用消息接收和回复权限，然后发布或启用应用。
+6. 在“回调配置”里保持“使用长连接接收回调”。如果改用 webhook，再配置
+   `/bridge/lark/event` 作为回调地址，并同步 verification token / encrypt key。
+7. 按平台提示启用消息接收、发送/回复消息、卡片交互回调权限，然后发布或启用应用。
+
+启动介绍卡片和窗口接管按钮都依赖 `card.action.trigger`。如果文本消息正常但按钮无响应，
+检查应用是否已发布、事件订阅是否包含 `card.action.trigger`、回调配置是否仍为长连接，
+以及权限变更后是否重新发布。
 
 把配置粘贴到可信的本地 Codex 对话里：
 
@@ -79,6 +85,12 @@ plugins/codex-lark-remote
 允许使用者：
 - allowedUsers: ["ou_xxx"]
 
+可选接管参数：
+- takeover: { projectLimit: 20, selectionTtlMs: 600000 }
+
+可选启动介绍：
+- startup: { receiveId: "oc_xxx", receiveIdType: "chat_id", once: true }
+
 请用这些值调用 codex_lark_configure，然后运行 codex_lark_check_auth。
 ```
 
@@ -89,7 +101,14 @@ plugins/codex-lark-remote
 ```
 
 如果还不知道自己的 sender id，可以先让 `allowedUsers` 为空，从飞书/Lark 向机器人
-发送 `/codex whoami`，再把返回的 `senderId` 加入配置。
+发送 `whoami`，再把返回的 `senderId` 加入配置。
+
+`startup.receiveId` 是可选的主动推送目标。配置后，bridge 首次连上飞书或激活
+handoff 时会向这个会话推送一张启动介绍卡片；未配置时，第一条已授权飞书消息
+到达后会用当前 `chat_id` 补发一次，并把这个会话记为后续启动的默认推送目标。
+卡片发送失败时会降级为文本介绍。已发送状态和最近会话记录在
+`~/.codex-lark-remote/startup-notice.json`，调试时可把 `startup.once` 设为
+`false`。
 
 缺少 `appId` 或 `appSecret` 时，bridge 不会启动。
 
@@ -104,9 +123,9 @@ plugins/codex-lark-remote
 Codex 必须先请求你的明确同意，才会启动接管。确认后，插件只会把当前 Codex 线程的
 本地路由状态写入本地 bridge；已有聊天历史不会发送到飞书/Lark。
 
-接管会严格绑定当前 Codex 窗口。插件只使用 Codex 工具调用里提供的精确 thread id
-或 session path；如果没有这些按窗口区分的元数据，接管会直接阻止，不会再按工作
-目录猜测最近窗口。
+接管会严格绑定当前 Codex 会话/窗口。插件只使用 Codex 工具调用里提供的精确 thread id
+或 session path；如果没有这些按会话区分的元数据，接管会直接阻止，不会再按工作
+目录猜测最近会话。
 
 之后直接给飞书/Lark 机器人发送普通消息即可，它会继续同一个 Codex 对话。
 
@@ -116,36 +135,48 @@ Codex 必须先请求你的明确同意，才会启动接管。确认后，插�
 常用命令：
 
 ```text
-/codex whoami
-/codex status
-/codex takeover
-/codex windows
-/codex takeover status
-/codex takeover off
-/codex observe
-/codex observe <序号|thread 前缀>
-/codex observe off
-/codex commands on
-/codex commands off
-/codex handoff off
+whoami
+控制台
+status
+takeover
+windows
+takeover status
+takeover off
+observe
+observe <序号|thread 前缀>
+observe off
+commands on
+commands off
+handoff off
 ```
 
-“断开连接”“停止接管”这类口语请求也会被处理。
+“控制台”“断开连接”“停止接管”这类口语请求也会被处理。
 
-## 接管同项目里的其他 Codex 窗口
+## 控制台和任务直通
 
-在同一个项目的新 Codex 对话 B 中，先用 `codex_lark_prepare_takeover` 准备接管范围。
-之后由飞书/Lark 端通过 `/codex takeover` 自主选择目标。机器人会回复交互卡片：
-“查看”只展开窗口详情，“观察”进入只读串流，“接管”会先确认再执行 handoff。如果卡片
-不可用，可以回复 `1`、`2`、`3` 查看窗口，再发送 `takeover now`。仍在运行的窗口会
-等当前轮结束后自动接管。
+发送 `控制台` 或点击启动卡片里的“控制台”，会进入自然语言控制台模式。这里可以直接说
+“看看有哪些项目可以接管”“进入第 2 个项目”“观察第 1 个会话”“接管活跃会话”。
+
+接管某个 Codex 会话后，同一个飞书会话会自动切到任务直通模式：普通消息会原样发送给
+被接管的 Codex 线程，不再做意图翻译。需要重新选择项目或会话时，发送 `控制台`；需要
+断开当前接管时，发送 `退出接管`。
+
+## 从飞书接管 Codex 项目和会话
+
+飞书/Lark 端通过 `takeover` 或 `windows` 自主选择目标。全项目接管
+要求必须配置 `lark.allowedUsers`；如果 allowlist 为空，机器人会拒绝列出项目或执行
+接管。机器人会先回复本机 Codex 项目列表，进入某个项目后再展示项目内会话/窗口：
+会话列表不会排除启动飞书接管的会话。这里基于本机 Codex session 记录，不是 macOS
+窗口句柄枚举。“观察”进入只读串流，“接管”会先确认再执行 handoff。如果卡片不可用，可以回复
+`1`、`2`、`3` 先选项目、再选会话，最后发送 `takeover now`。仍显示为活跃的会话会等
+空闲后自动接管。
 
 ## 观察其他 Codex 会话
 
-观察是只读串流，和接管分开。`/codex observe` 会列出可观察的 Codex 会话；
-`/codex observe <序号>` 或 `/codex observe <thread 前缀>` 会把选中的会话进度
+观察是只读串流，和接管分开。`observe` 会列出可观察的 Codex 会话；
+`observe <序号>` 或 `observe <thread 前缀>` 会把选中的会话进度
 串流到飞书/Lark。飞书/Lark 消息不会发送进被观察的会话。使用
-`/codex observe off` 停止观察。
+`observe off` 停止观察。
 
 ## 飞书/Lark 输出
 
@@ -155,8 +186,8 @@ Codex 必须先请求你的明确同意，才会启动接管。确认后，插�
 - 普通进度回复不展示内部 task id。
 - 长回复会拆成多条飞书/Lark 消息。
 - 普通命令和 `Output:` 默认不展示。
-- 需要查看命令时，可以发送 `/codex commands on` 或“打开命令显示”。
-  发送 `/codex commands off` 或“关闭命令显示”可再次隐藏。
+- 需要查看命令时，可以发送 `commands on` 或“打开命令显示”。
+  发送 `commands off` 或“关闭命令显示”可再次隐藏。
 - 潜在风险命令始终会显示，并额外带 `Warning:`，即使命令显示处于关闭状态。
 - 打开命令显示后，命令 `Output:` 仍只保留一行高价值摘要，省略时附带行数和字符数。
 - `cat`、`nl`、`sed`、`grep`、普通 `rg` 搜索这类源码查看输出会被摘要化。
@@ -202,7 +233,7 @@ Desktop 批准，还是可以在飞书/Lark 里用文字明确授权后继续。
 说明这个 Codex 对话没有加载插件 MCP server。刷新或重新启用插件后，新开一个 Codex
 对话再启动。正常启动不应该退回到本地脚本。
 
-`/codex status` 显示 `websocket disabled`：
+`status` 显示 `websocket disabled`：
 
 检查 `~/.codex-lark-remote/config.json`，确认已经存在 `appId` 和 `appSecret`。
 

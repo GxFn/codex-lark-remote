@@ -1,6 +1,29 @@
 import { parseCsv, shortHash } from "./config.mjs";
 
 const COMMAND_ID_RE = /\b(rcmd_[a-z0-9]+_[a-z0-9]+)\b/i;
+const MANAGEMENT_ACTIONS = new Set([
+  "help",
+  "whoami",
+  "status",
+  "command",
+  "commands",
+  "show-commands",
+  "handoff",
+  "observe",
+  "observer",
+  "watch",
+  "projects",
+  "project",
+  "项目",
+  "takeover",
+  "windows",
+  "window",
+  "窗口",
+  "接管",
+  "diff",
+  "cancel",
+  "approve",
+]);
 
 export function parseLarkEvent(body) {
   if (body?.type === "url_verification" || body?.challenge) {
@@ -55,11 +78,17 @@ export function parseLarkCardAction(body) {
   const looksLikeCardAction = eventType === "card.action.trigger" || Boolean(actionName && (event?.action || body?.action));
   if (!looksLikeCardAction) return null;
 
-  const operatorIds = event?.operator?.operator_id || event?.operator_id || event?.sender?.sender_id || {};
-  const senderId = operatorIds.user_id || operatorIds.open_id || event?.user_id || "";
+  const operatorIds = event?.operator?.operator_id || event?.operator_id || event?.sender?.sender_id || event?.operator || event?.user_id || {};
+  const operatorUserId = pickId(operatorIds, "user");
+  const operatorOpenId = pickId(operatorIds, "open");
+  const operatorUnionId = pickId(operatorIds, "union");
+  const eventUserId = typeof event?.user_id === "string" ? event.user_id : "";
+  const eventOpenId = typeof event?.open_id === "string" ? event.open_id : "";
+  const eventUnionId = typeof event?.union_id === "string" ? event.union_id : "";
+  const senderId = operatorUserId || operatorOpenId || eventUserId || eventOpenId || "";
   const context = event?.context || body?.context || {};
-  const messageId = context.open_message_id || context.message_id || event?.message_id || body?.message_id || "";
-  const chatId = context.open_chat_id || context.chat_id || event?.chat_id || "";
+  const messageId = context.open_message_id || context.message_id || event?.open_message_id || event?.messageId || event?.message_id || body?.message_id || "";
+  const chatId = context.open_chat_id || context.chat_id || event?.open_chat_id || event?.chatId || event?.chat_id || "";
 
   return {
     kind: "card_action",
@@ -69,9 +98,9 @@ export function parseLarkCardAction(body) {
     actionMessageId: event?.action_id || value.actionId || "",
     chatId,
     senderId,
-    senderIdType: operatorIds.user_id || event?.user_id ? "user_id" : operatorIds.open_id ? "open_id" : "",
-    openId: operatorIds.open_id || "",
-    unionId: operatorIds.union_id || "",
+    senderIdType: operatorUserId || eventUserId ? "user_id" : operatorOpenId || eventOpenId ? "open_id" : operatorUnionId || eventUnionId ? "union_id" : "",
+    openId: operatorOpenId || eventOpenId || "",
+    unionId: operatorUnionId || eventUnionId || "",
     senderName: senderId || "lark_user",
     chatIdHash: chatId ? `c_${shortHash(chatId)}` : "",
     userIdHash: senderId ? `u_${shortHash(senderId)}` : "",
@@ -79,10 +108,50 @@ export function parseLarkCardAction(body) {
   };
 }
 
+function pickId(value, kind) {
+  if (!value || typeof value !== "object") return "";
+  const keys = kind === "user"
+    ? ["user_id", "userId"]
+    : kind === "open"
+      ? ["open_id", "openId"]
+      : ["union_id", "unionId"];
+  for (const key of keys) {
+    const item = value[key];
+    if (typeof item === "string" && item.trim()) return item.trim();
+  }
+  return "";
+}
+
 export function isUserAllowed(senderId, config = {}) {
   const allowed = configuredAllowedUsers(config);
   if (allowed.length === 0) return true;
-  return allowed.includes(senderId);
+  return userIdCandidates(senderId).some((id) => allowed.includes(id));
+}
+
+function userIdCandidates(value) {
+  if (Array.isArray(value)) return value.flatMap((item) => userIdCandidates(item));
+  if (value && typeof value === "object") {
+    return [
+      value.senderId,
+      value.userId,
+      value.openId,
+      value.unionId,
+      value.sender?.sender_id?.user_id,
+      value.sender?.sender_id?.open_id,
+      value.sender?.sender_id?.union_id,
+      value.operator?.operator_id?.user_id,
+      value.operator?.operator_id?.open_id,
+      value.operator?.operator_id?.union_id,
+      value.operator?.user_id,
+      value.operator?.open_id,
+      value.operator?.union_id,
+      value.operator?.userId,
+      value.operator?.openId,
+      value.operator?.unionId,
+    ].map((item) => String(item || "").trim()).filter(Boolean);
+  }
+  const id = String(value || "").trim();
+  return id ? [id] : [];
 }
 
 export function configuredAllowedUsers(config = {}) {
@@ -129,9 +198,11 @@ export function normalizeText(text) {
 }
 
 function parseManagementCommand(text) {
-  const match = text.match(/^\/codex(?:\s+(.+))?$/i);
-  if (!match) return null;
-  const rest = normalizeText(match[1] || "help");
+  const slashMatch = text.match(/^\/codex(?:\s+(.+))?$/i);
+  const candidate = slashMatch ? normalizeText(slashMatch[1] || "help") : normalizeText(text);
+  const firstToken = String(candidate.split(/\s+/)[0] || "").toLowerCase();
+  if (!slashMatch && !MANAGEMENT_ACTIONS.has(firstToken)) return null;
+  const rest = candidate || "help";
   const [action, id, subAction] = rest.split(/\s+/);
   if (!action || action === "help") return { kind: "help" };
   if (action === "whoami") return { kind: "whoami" };
@@ -149,6 +220,10 @@ function parseManagementCommand(text) {
     if (!id || ["list", "status", "列表", "查看", "窗口", "会话"].includes(id)) return { kind: "observe_list" };
     if (["off", "stop", "disable", "end", "close", "关闭", "停止", "结束"].includes(id)) return { kind: "observe_disable" };
     return { kind: "observe_enable", selector: id };
+  }
+  if (["projects", "project", "项目"].includes(action)) {
+    if (!id || ["list", "status", "列表", "项目"].includes(id)) return { kind: "takeover_list" };
+    return { kind: "takeover_project_select", selector: id };
   }
   if (["takeover", "windows", "window", "窗口", "接管"].includes(action)) {
     if (!id || ["list", "status", "列表", "窗口", "windows"].includes(id)) {
@@ -189,9 +264,11 @@ function parseNaturalManagementCommand(text) {
   if (/^(观察列表|查看观察|可观察窗口|可观察会话|有哪些窗口|看看有哪些窗口|列出窗口|列出会话|观察哪些窗口|可以观察哪些|observe|observe list|watch list)[。.?？!！]?$/.test(normalized)) {
     return { kind: "observe_list" };
   }
-  if (/^(接管|接管列表|窗口列表|查看窗口|列出窗口|有哪些窗口|看看窗口|可接管窗口|可接管会话|takeover|takeover list|windows)[。.?？!！]?$/.test(normalized)) {
+  if (/^(接管|接管列表|项目列表|查看项目|列出项目|有哪些项目|看看项目|可接管项目|窗口列表|查看窗口|列出窗口|有哪些窗口|看看窗口|可接管窗口|可接管会话|takeover|takeover list|projects|project list|windows)[。.?？!！]?$/.test(normalized)) {
     return { kind: "takeover_list" };
   }
+  const projectSelector = parseNaturalProjectSelector(normalized);
+  if (projectSelector) return projectSelector;
   if (/^(接管状态|查看接管准备|接管准备状态|takeover status)[。.?？!！]?$/.test(normalized)) {
     return { kind: "takeover_status" };
   }
@@ -258,6 +335,12 @@ function parseNaturalTakeoverSelector(normalized) {
     return selector ? { kind: "takeover_execute", selector } : { kind: "takeover_execute" };
   }
   return null;
+}
+
+function parseNaturalProjectSelector(normalized) {
+  const match = normalized.match(/^(?:进入|打开|开启|选择|选|查看|看|看看)?(?:第\s*)?([0-9一二两三四五六七八九十]+)\s*(?:个)?(?:项目|project)(?:详情)?吧?[。.!！]?$/);
+  if (!match) return null;
+  return { kind: "takeover_project_select", selector: chineseNumberToAscii(match[1]) };
 }
 
 function chineseNumberToAscii(value) {

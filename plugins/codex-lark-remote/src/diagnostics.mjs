@@ -137,8 +137,8 @@ export function formatHandoff(diagnostics) {
     "",
     "From Feishu:",
     "Send any message to continue this Codex conversation.",
-    "/codex status",
-    "/codex handoff off",
+    "status",
+    "handoff off",
     diagnostics.issues.length ? `\nIssues:\n${diagnostics.issues.map((item) => `- ${item}`).join("\n")}` : "",
     diagnostics.warnings.length ? `\nWarnings:\n${diagnostics.warnings.map((item) => `- ${item}`).join("\n")}` : "",
   ]
@@ -178,7 +178,7 @@ function buildNextActions({ config, status, webhookUrl, publicUrl, webSocketEnab
     return actions;
   }
   if (!allowedUsers.length) {
-    actions.push("After the bot can receive messages, send /codex whoami from Feishu/Lark and add the returned senderId to lark.allowedUsers.");
+    actions.push("After the bot can receive messages, send whoami from Feishu/Lark and add the returned senderId to lark.allowedUsers.");
   }
   if (!status.running) actions.push("Run codex_lark_handoff from the Codex conversation you want to continue in Feishu/Lark.");
   if (webSocketEnabled) {

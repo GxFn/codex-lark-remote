@@ -133,16 +133,36 @@ test("listCodexThreads infers title from the first user message", async () => {
   assert.equal(thread.name, "分析说明 BiliDili 项目架构");
 });
 
-async function writeSession({ file, id, cwd, source = "vscode", threadSource = "", userMessage = "", mtime }) {
+test("listCodexThreads skips AGENTS bootstrap messages when inferring title", async () => {
+  const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-home-title-agents-"));
+  const sessions = path.join(codexHome, "sessions", "2026", "05", "11");
+  await fs.mkdir(sessions, { recursive: true });
+  await writeSession({
+    file: path.join(sessions, "rollout-2026-05-11T10-00-00-019e0000-0000-7000-8000-000000000007.jsonl"),
+    id: "019e0000-0000-7000-8000-000000000007",
+    cwd: "/workspace/project",
+    userMessages: [
+      "# AGENTS.md instructions for /workspace/project",
+      "继续实现飞书接管能力",
+    ],
+    mtime: new Date("2026-05-11T10:00:00Z"),
+  });
+
+  const [thread] = await listCodexThreads({ codexHome, cwd: "/workspace/project" });
+
+  assert.equal(thread.name, "继续实现飞书接管能力");
+});
+
+async function writeSession({ file, id, cwd, source = "vscode", threadSource = "", userMessage = "", userMessages = [], mtime }) {
   const line = JSON.stringify({
     type: "session_meta",
     payload: { id, cwd, source, thread_source: threadSource },
   });
   const lines = [line];
-  if (userMessage) {
+  for (const message of [userMessage, ...userMessages].filter(Boolean)) {
     lines.push(JSON.stringify({
       type: "event_msg",
-      payload: { type: "user_message", message: userMessage },
+      payload: { type: "user_message", message },
     }));
   }
   await fs.writeFile(file, `${lines.join("\n")}\n`);

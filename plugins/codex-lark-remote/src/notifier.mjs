@@ -26,6 +26,22 @@ export class LarkNotifier {
     });
   }
 
+  async send(receiveId, text, options = {}) {
+    return this.sendMessage(receiveId, {
+      receiveIdType: options.receiveIdType || "chat_id",
+      msgType: "text",
+      chunks: splitForLarkText(text).map((chunk) => ({ text: chunk })),
+    });
+  }
+
+  async sendCard(receiveId, card, options = {}) {
+    return this.sendMessage(receiveId, {
+      receiveIdType: options.receiveIdType || "chat_id",
+      msgType: "interactive",
+      chunks: [card],
+    });
+  }
+
   async replyCard(messageId, card) {
     return this.replyMessage(messageId, {
       msgType: "interactive",
@@ -77,6 +93,42 @@ export class LarkNotifier {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          msg_type: msgType,
+          content: JSON.stringify(chunk),
+        }),
+      });
+      const result = await larkDeliveryResult(response, { messageIds, totalParts: chunks.length });
+      if (!result.ok) return result;
+      const deliveredId = result.data?.data?.message_id || result.data?.data?.messageId || "";
+      if (deliveredId) messageIds.push(deliveredId);
+    }
+    return {
+      ok: true,
+      status: 200,
+      code: 0,
+      messageId: messageIds[0] || "",
+      messageIds,
+      deliveredParts: chunks.length,
+      totalParts: chunks.length,
+    };
+  }
+
+  async sendMessage(receiveId, { receiveIdType = "chat_id", msgType, chunks }) {
+    if (!receiveId) return { ok: false, error: "Missing Lark receive id" };
+    if (!this.appId || !this.appSecret) return { ok: false, error: "Missing Lark appId/appSecret" };
+    const token = await this.#tenantToken();
+    if (!token) return { ok: false, error: "Missing Lark tenant access token" };
+    const safeReceiveIdType = encodeURIComponent(receiveIdType || "chat_id");
+    const messageIds = [];
+    for (const chunk of chunks) {
+      const response = await fetch(`https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=${safeReceiveIdType}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          receive_id: receiveId,
           msg_type: msgType,
           content: JSON.stringify(chunk),
         }),
