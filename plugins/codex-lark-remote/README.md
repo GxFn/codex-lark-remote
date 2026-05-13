@@ -18,6 +18,41 @@ Feishu/Lark.
 Feishu/Lark messages are passed to Codex as normal user messages. The bot sends
 back the final Codex answer and useful progress while work is running.
 
+## Start With The Console
+
+The Feishu/Lark side has one main entry point: the natural-language console.
+After the bridge is connected, send `console` or click **Console** on the
+startup card.
+
+In the console, use short phrases:
+
+```text
+console
+project list
+session list
+open project 1
+observe session 2
+takeover 1
+```
+
+When you take over a Codex session, the chat switches to direct task mode.
+Ordinary Feishu/Lark messages are then sent straight to that Codex session as
+new tasks or follow-up instructions. They no longer go through project/session
+intent routing.
+
+To temporarily return to the console, say `console` or `jump out of handoff`.
+To end the current takeover but keep the Feishu/Lark bridge connected, say
+`handoff off` or `exit handoff`. To stop the local bridge and disconnect
+Feishu/Lark, say `close Lark connection`; the bot asks for confirmation first.
+
+## Daily Flow
+
+1. Install the plugin and configure the Feishu/Lark app once.
+2. In Codex, start Lark Remote from the conversation you want to continue.
+3. In Feishu/Lark, enter the console and choose a project/session.
+4. Take over the session, then send normal coding requests.
+5. Use `console` when you need to choose another project or session.
+
 ## Install
 
 Install from the approved Codex Marketplace artifact:
@@ -29,13 +64,13 @@ npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plu
 For the pinned reviewed release:
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.0/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.1/plugins/codex-lark-remote --plugin
 ```
 
 If Codex asks for a GitHub target or direct artifact path, use:
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.2.0/plugins/codex-lark-remote
+https://github.com/GxFn/codex-lark-remote/tree/v0.2.1/plugins/codex-lark-remote
 ```
 
 If the Codex dialog separates source, ref, and sparse path, fill it like this:
@@ -45,7 +80,7 @@ Source:
 https://github.com/GxFn/codex-lark-remote.git
 
 Git ref:
-v0.2.0
+v0.2.1
 
 Sparse path:
 plugins/codex-lark-remote
@@ -123,7 +158,7 @@ are stored in `~/.codex-lark-remote/startup-notice.json`; set `startup.once` to
 
 The bridge will not start until `appId` and `appSecret` are configured.
 
-## Start handoff
+## Start From Codex
 
 In the Codex conversation you want to continue from Feishu/Lark, say:
 
@@ -135,49 +170,14 @@ Codex must ask for explicit consent before starting handoff. After consent, the
 plugin stores local routing state for the current Codex thread in the local
 bridge. Existing chat history is not sent to Feishu/Lark.
 
-Handoff is strict about the current Codex session/window. It uses the exact thread id or
-session path provided by Codex for this tool call. If that per-session metadata is
-not available, handoff is blocked instead of guessing by workspace path.
-
-Then send normal messages to the Feishu/Lark bot. They will continue the same
-Codex conversation.
+Handoff is strict about the current Codex session/window. It uses the exact
+thread id or session path provided by Codex for this tool call. If that
+per-session metadata is not available, handoff is blocked instead of guessing by
+workspace path.
 
 On macOS, handoff also starts `caffeinate -dimsu` so the display may turn off
 while the Mac stays awake. The keep-awake process is stopped when handoff or the
 bridge stops.
-
-Useful commands:
-
-```text
-whoami
-console
-status
-takeover
-windows
-takeover status
-takeover off
-observe
-observe <number|thread-prefix>
-observe off
-commands on
-commands off
-handoff off
-```
-
-Plain language requests such as "console", "disconnect", or "stop handoff" are
-also handled.
-
-## Console And Direct Task Mode
-
-Send `console` or click **Console** on the startup card to enter the natural
-language control console. There you can say things like "show takeover
-projects", "open project 2", "observe session 1", or "take over the active
-session".
-
-After a Codex session is taken over, that Feishu/Lark chat automatically switches
-to direct task mode: normal messages are sent unchanged to the taken-over Codex
-thread and no longer go through intent translation. Send `console` to return to
-project/session control, or `handoff off` to disconnect the current handoff.
 
 ## Take over Codex sessions from Feishu/Lark
 

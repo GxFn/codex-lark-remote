@@ -35,6 +35,41 @@ Feishu/Lark messages are treated as ordinary user messages in the same Codex
 conversation. The plugin is WebSocket-first and does not ask users to choose
 between multiple modes during normal use.
 
+## Start With The Console
+
+The Feishu/Lark side has one main entry point: the natural-language console.
+After the bridge is connected, send `console` or click **Console** on the
+startup card.
+
+In the console, use short phrases:
+
+```text
+console
+project list
+session list
+open project 1
+observe session 2
+takeover 1
+```
+
+When you take over a Codex session, the chat switches to direct task mode.
+Ordinary Feishu/Lark messages are then sent straight to that Codex session as
+new tasks or follow-up instructions. They no longer go through project/session
+intent routing.
+
+To temporarily return to the console, say `console` or `jump out of handoff`.
+To end the current takeover but keep the Feishu/Lark bridge connected, say
+`handoff off` or `exit handoff`. To stop the local bridge and disconnect
+Feishu/Lark, say `close Lark connection`; the bot asks for confirmation first.
+
+## Daily Flow
+
+1. Install the plugin and configure the Feishu/Lark app once.
+2. In Codex, start Lark Remote from the conversation you want to continue.
+3. In Feishu/Lark, enter the console and choose a project/session.
+4. Take over the session, then send normal coding requests.
+5. Use `console` when you need to choose another project or session.
+
 ## Install
 
 First-time users do not need to clone this repository.
@@ -50,7 +85,7 @@ npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plu
 To pin the exact reviewed release:
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.0/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.1/plugins/codex-lark-remote --plugin
 ```
 
 Then restart or refresh Codex if the plugin list does not update immediately.
@@ -61,7 +96,7 @@ If Codex asks for a GitHub target or direct artifact path, use the plugin bundle
 path, not the repository root:
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.2.0/plugins/codex-lark-remote
+https://github.com/GxFn/codex-lark-remote/tree/v0.2.1/plugins/codex-lark-remote
 ```
 
 If the Codex dialog separates source, ref, and sparse path, fill it like this:
@@ -71,7 +106,7 @@ Source:
 https://github.com/GxFn/codex-lark-remote.git
 
 Git ref:
-v0.2.0
+v0.2.1
 
 Sparse path:
 plugins/codex-lark-remote
@@ -89,7 +124,7 @@ Source:
 https://github.com/GxFn/codex-lark-remote.git
 
 Git ref:
-v0.2.0
+v0.2.1
 
 Sparse path:
 leave empty
@@ -97,16 +132,6 @@ leave empty
 
 Use `main` instead of a tag only if you intentionally want the latest unreleased
 changes.
-
-## Sync To GxFn Marketplace
-
-After publishing or refreshing the plugin, sync its installable plugin root into the aggregate `GxFn/GxFnCodexMarketplace` repository:
-
-```bash
-npm run sync:gxfn-marketplace
-```
-
-Use `npm run sync:gxfn-marketplace:push` to copy, commit, and push the marketplace snapshot. Set `GXFN_CODEX_MARKETPLACE_DIR=/path/to/GxFnCodexMarketplace` if the marketplace repository is not checked out next to this repository.
 
 ## Configure Feishu/Lark
 
@@ -178,7 +203,7 @@ are stored in `~/.codex-lark-remote/startup-notice.json`; set `startup.once` to
 When `appId` or `appSecret` is missing, the plugin does not start the bridge and
 does not attach the Codex conversation. It returns setup guidance instead.
 
-## Start handoff
+## Start From Codex
 
 From the Codex conversation you want to continue remotely, ask:
 
@@ -186,56 +211,19 @@ From the Codex conversation you want to continue remotely, ask:
 Start codex-lark-remote.
 ```
 
-Codex will ask for explicit consent before storing local routing state for the
+Codex asks for explicit consent before storing local routing state for the
 current thread in the local bridge. Existing chat history is not sent to
 Feishu/Lark. After you confirm, the plugin starts the bridge, attaches the
 current Codex thread, and waits for Feishu/Lark messages.
 
-Handoff is strict about the current Codex session/window. The plugin uses the exact
-thread id or session path supplied by Codex when the tool is called. If Codex
-does not provide that per-window metadata, handoff fails instead of guessing by
-workspace path. This prevents another Codex session in the same directory from
-receiving the Feishu/Lark stream.
-
-When startup succeeds, send any normal message to the Feishu/Lark bot. Codex
-will continue the same conversation and reply in Feishu/Lark.
+Handoff is strict about the current Codex session/window. The plugin uses the
+exact thread id or session path supplied by Codex when the tool is called. If
+Codex does not provide that per-window metadata, handoff fails instead of
+guessing by workspace path.
 
 On macOS, the bridge starts `caffeinate -dimsu` while handoff is active so the
 Mac can turn the display off without going to sleep. It stops that keep-awake
 process when handoff is turned off or the bridge stops.
-
-Useful Feishu/Lark commands:
-
-```text
-whoami
-console
-status
-takeover
-windows
-takeover status
-takeover off
-observe
-observe <number|thread-prefix>
-observe off
-commands on
-commands off
-handoff off
-```
-
-The bot also recognizes natural requests such as entering the console, stopping,
-or disconnecting the handoff.
-
-## Console And Direct Task Mode
-
-Send `console` or click **Console** on the startup card to enter the natural
-language control console. There you can say things like "show takeover
-projects", "open project 2", "observe session 1", or "take over the active
-session".
-
-After a Codex session is taken over, that Feishu/Lark chat automatically switches
-to direct task mode: normal messages are sent unchanged to the taken-over Codex
-thread and no longer go through intent translation. Send `console` to return to
-project/session control, or `handoff off` to disconnect the current handoff.
 
 ## Take over Codex sessions from Feishu/Lark
 
@@ -336,6 +324,20 @@ starting again.
 
 If Codex writes files into the plugin cache, start the handoff from the Codex
 conversation whose working directory is the project you want to edit.
+
+## Sync To GxFn Marketplace
+
+After publishing or refreshing the plugin, sync its installable plugin root into
+the aggregate `GxFn/GxFnCodexMarketplace` repository:
+
+```bash
+npm run sync:gxfn-marketplace
+```
+
+Use `npm run sync:gxfn-marketplace:push` to copy, commit, and push the
+marketplace snapshot. Set
+`GXFN_CODEX_MARKETPLACE_DIR=/path/to/GxFnCodexMarketplace` if the marketplace
+repository is not checked out next to this repository.
 
 ## Local development
 

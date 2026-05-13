@@ -138,7 +138,8 @@ export function formatHandoff(diagnostics) {
     "From Feishu:",
     "Send any message to continue this Codex conversation.",
     "status",
-    "handoff off",
+    "handoff off (exit current handoff only)",
+    "关闭飞书连接 (stop bridge and WebSocket after confirmation)",
     diagnostics.issues.length ? `\nIssues:\n${diagnostics.issues.map((item) => `- ${item}`).join("\n")}` : "",
     diagnostics.warnings.length ? `\nWarnings:\n${diagnostics.warnings.map((item) => `- ${item}`).join("\n")}` : "",
   ]

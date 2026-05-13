@@ -16,6 +16,37 @@ Lark Remote 只围绕一个默认流程设计：从当前 Codex 对话启动，�
 飞书/Lark 消息会作为普通用户消息交给 Codex。机器人会把最终回答和执行过程中的关键
 进度发回飞书/Lark。
 
+## 先从控制台开始
+
+飞书/Lark 侧最重要的入口是自然语言控制台。bridge 连上后，发送 `控制台`，
+或点击启动卡片里的“控制台”。
+
+在控制台里直接说短口令即可：
+
+```text
+控制台
+项目列表
+会话列表
+进入项目 1
+观察会话 2
+接管 1
+```
+
+接管某个 Codex 会话后，飞书会话会进入任务直通模式。后续普通消息会直接发送给
+目标 Codex 会话，作为新任务或补充指令处理，不再判断项目/会话操作。
+
+需要临时回到外层控制台时，说“控制台”或“跳出接管”。需要结束当前接管但保持
+飞书连接时，说“退出接管”。需要真正停止本机 bridge 并断开飞书连接时，说
+“关闭飞书连接”，机器人会先发确认卡片。
+
+## 日常使用流程
+
+1. 安装插件，并完成一次飞书/Lark 应用配置。
+2. 在想远程继续的 Codex 对话里启动 Lark Remote。
+3. 在飞书/Lark 进入控制台，选择项目和会话。
+4. 接管会话，然后直接发送普通开发需求。
+5. 需要切换项目或会话时，再发送“控制台”。
+
 ## 安装
 
 安装已经通过审核的 Codex Marketplace 插件：
@@ -27,13 +58,13 @@ npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plu
 如果要固定到当前审核版本：
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.0/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.1/plugins/codex-lark-remote --plugin
 ```
 
 如果 Codex 要求填写 GitHub Target 或直接 artifact path，请填写：
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.2.0/plugins/codex-lark-remote
+https://github.com/GxFn/codex-lark-remote/tree/v0.2.1/plugins/codex-lark-remote
 ```
 
 如果 Codex 弹窗把来源、Git 引用、稀疏路径拆开填写，请这样填：
@@ -43,7 +74,7 @@ https://github.com/GxFn/codex-lark-remote/tree/v0.2.0/plugins/codex-lark-remote
 https://github.com/GxFn/codex-lark-remote.git
 
 Git 引用：
-v0.2.0
+v0.2.1
 
 稀疏路径：
 plugins/codex-lark-remote
@@ -112,7 +143,7 @@ handoff 时会向这个会话推送一张启动介绍卡片；未配置时，第
 
 缺少 `appId` 或 `appSecret` 时，bridge 不会启动。
 
-## 启动接管
+## 从 Codex 启动
 
 在你想从飞书/Lark 继续的 Codex 对话里说：
 
@@ -127,39 +158,8 @@ Codex 必须先请求你的明确同意，才会启动接管。确认后，插�
 或 session path；如果没有这些按会话区分的元数据，接管会直接阻止，不会再按工作
 目录猜测最近会话。
 
-之后直接给飞书/Lark 机器人发送普通消息即可，它会继续同一个 Codex 对话。
-
 在 macOS 上，接管还会启动 `caffeinate -dimsu`，让屏幕可以熄灭但 Mac 保持唤醒。
 关闭接管或停止 bridge 时，这个 keep-awake 进程会一起停止。
-
-常用命令：
-
-```text
-whoami
-控制台
-status
-takeover
-windows
-takeover status
-takeover off
-observe
-observe <序号|thread 前缀>
-observe off
-commands on
-commands off
-handoff off
-```
-
-“控制台”“断开连接”“停止接管”这类口语请求也会被处理。
-
-## 控制台和任务直通
-
-发送 `控制台` 或点击启动卡片里的“控制台”，会进入自然语言控制台模式。这里可以直接说
-“看看有哪些项目可以接管”“进入第 2 个项目”“观察第 1 个会话”“接管活跃会话”。
-
-接管某个 Codex 会话后，同一个飞书会话会自动切到任务直通模式：普通消息会原样发送给
-被接管的 Codex 线程，不再做意图翻译。需要重新选择项目或会话时，发送 `控制台`；需要
-断开当前接管时，发送 `退出接管`。
 
 ## 从飞书接管 Codex 项目和会话
 

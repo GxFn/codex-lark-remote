@@ -33,6 +33,37 @@ Mac 上启动接管，然后离开电脑，继续从飞书/Lark 给同一个 Cod
 飞书/Lark 消息会作为普通用户消息进入同一个 Codex 对话。插件默认 WebSocket
 优先，正常使用时不要求用户理解或选择多种模式。
 
+## 先从控制台开始
+
+飞书/Lark 侧最重要的入口是自然语言控制台。bridge 连上后，发送 `控制台`，
+或点击启动卡片里的“控制台”。
+
+在控制台里直接说短口令即可：
+
+```text
+控制台
+项目列表
+会话列表
+进入项目 1
+观察会话 2
+接管 1
+```
+
+接管某个 Codex 会话后，飞书会话会进入任务直通模式。后续普通消息会直接发送给
+目标 Codex 会话，作为新任务或补充指令处理，不再判断项目/会话操作。
+
+需要临时回到外层控制台时，说“控制台”或“跳出接管”。需要结束当前接管但保持
+飞书连接时，说“退出接管”。需要真正停止本机 bridge 并断开飞书连接时，说
+“关闭飞书连接”，机器人会先发确认卡片。
+
+## 日常使用流程
+
+1. 安装插件，并完成一次飞书/Lark 应用配置。
+2. 在想远程继续的 Codex 对话里启动 Lark Remote。
+3. 在飞书/Lark 进入控制台，选择项目和会话。
+4. 接管会话，然后直接发送普通开发需求。
+5. 需要切换项目或会话时，再发送“控制台”。
+
 ## 安装
 
 首次安装用户不需要先 clone 这个仓库。
@@ -48,7 +79,7 @@ npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plu
 如果要固定到当前审核版本：
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.0/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.1/plugins/codex-lark-remote --plugin
 ```
 
 安装后如果 Codex 插件列表没有立刻刷新，重启或刷新 Codex。
@@ -59,7 +90,7 @@ npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.0/
 不要填写仓库根目录：
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.2.0/plugins/codex-lark-remote
+https://github.com/GxFn/codex-lark-remote/tree/v0.2.1/plugins/codex-lark-remote
 ```
 
 如果 Codex 弹窗把来源、Git 引用、稀疏路径拆开填写，请这样填：
@@ -69,7 +100,7 @@ https://github.com/GxFn/codex-lark-remote/tree/v0.2.0/plugins/codex-lark-remote
 https://github.com/GxFn/codex-lark-remote.git
 
 Git 引用：
-v0.2.0
+v0.2.1
 
 稀疏路径：
 plugins/codex-lark-remote
@@ -87,23 +118,13 @@ marketplace，而不是单独添加这个插件，可以填写：
 https://github.com/GxFn/codex-lark-remote.git
 
 Git 引用：
-v0.2.0
+v0.2.1
 
 稀疏路径：
 留空
 ```
 
 只有在明确想使用未发布的最新改动时，才把 Git 引用改成 `main`。
-
-## 同步到 GxFn 市场
-
-发布或刷新插件后，把可安装插件根目录同步到聚合 `GxFn/GxFnCodexMarketplace` 仓库：
-
-```bash
-npm run sync:gxfn-marketplace
-```
-
-如果要让脚本同时复制、提交并推送市场快照，运行 `npm run sync:gxfn-marketplace:push`。如果 `GxFnCodexMarketplace` 没有和本仓库放在同一层目录，用 `GXFN_CODEX_MARKETPLACE_DIR=/path/to/GxFnCodexMarketplace` 指定路径。
 
 ## 配置飞书/Lark
 
@@ -165,7 +186,7 @@ handoff 时会向这个会话推送一张启动介绍卡片；未配置时，第
 缺少 `appId` 或 `appSecret` 时，插件不会启动 bridge，也不会接管当前 Codex 对话；
 它只会返回配置指引。
 
-## 启动接管
+## 从 Codex 启动
 
 在你想远程继续的 Codex 对话里说：
 
@@ -181,40 +202,8 @@ Codex 会先要求你明确同意，然后只把当前线程的本地路由状�
 或 session path；如果 Codex 没有提供这些按会话区分的元数据，接管会直接失败，
 不会再按工作目录猜测最近会话。这样同一个目录下的其他 Codex 会话不会串流到飞书。
 
-启动成功后，直接给飞书/Lark 机器人发送普通消息即可。Codex 会继续同一个对话，
-并把回答发回飞书/Lark。
-
 在 macOS 上，bridge 会在接管期间自动启动 `caffeinate -dimsu`，允许屏幕熄灭但防止
 Mac 睡眠。关闭接管或停止 bridge 时，这个 keep-awake 进程会一起停止。
-
-常用飞书/Lark 命令：
-
-```text
-whoami
-控制台
-status
-takeover
-windows
-takeover status
-takeover off
-observe
-observe <序号|thread 前缀>
-observe off
-commands on
-commands off
-handoff off
-```
-
-机器人也会识别“控制台”“停止接管”“断开连接”等自然语言请求。
-
-## 控制台和任务直通
-
-发送 `控制台` 或点击启动卡片里的“控制台”，会进入自然语言控制台模式。这里可以直接说
-“看看有哪些项目可以接管”“进入第 2 个项目”“观察第 1 个会话”“接管活跃会话”。
-
-接管某个 Codex 会话后，同一个飞书会话会自动切到任务直通模式：普通消息会原样发送给
-被接管的 Codex 线程，不再做意图翻译。需要重新选择项目或会话时，发送 `控制台`；需要
-断开当前接管时，发送 `退出接管`。
 
 ## 从飞书接管 Codex 项目和会话
 
@@ -300,6 +289,20 @@ Codex 重新启动接管。
 先停止旧进程或重复插件，再重新启动。
 
 如果 Codex 把文件写进插件缓存目录，请从目标项目所在的 Codex 对话里启动接管。
+
+## 同步到 GxFn 市场
+
+发布或刷新插件后，把可安装插件根目录同步到聚合
+`GxFn/GxFnCodexMarketplace` 仓库：
+
+```bash
+npm run sync:gxfn-marketplace
+```
+
+如果要让脚本同时复制、提交并推送市场快照，运行
+`npm run sync:gxfn-marketplace:push`。如果 `GxFnCodexMarketplace` 没有和本仓库
+放在同一层目录，用 `GXFN_CODEX_MARKETPLACE_DIR=/path/to/GxFnCodexMarketplace`
+指定路径。
 
 ## 本地开发
 

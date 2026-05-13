@@ -8,20 +8,27 @@ import { updateRuntimeConfig } from "./config-writer.mjs";
 import { activateHandoff, clearHandoff, markHandoffRemoteNoteSent, readHandoff } from "./handoff.mjs";
 import { routeChatTextAction } from "./intent-router.mjs";
 import { setIntentSessionMode } from "./intent-state.mjs";
+import { CONSOLE_COMMAND_EXAMPLES } from "./control-semantics.mjs";
 import { KeepAwakeController } from "./keep-awake.mjs";
 import { LarkWebSocketReceiver } from "./lark-ws.mjs";
 import { parseLarkEvent, isUserAllowed, classifyChatText, configuredAllowedUsers } from "./lark.mjs";
 import { LarkNotifier } from "./notifier.mjs";
 import {
   buildConsoleModeCard,
+  buildBridgeStopConfirmCard,
+  buildHandoffDisabledCard,
   buildTakeoverConfirmCard,
   buildTakeoverListCard,
   buildTakeoverProjectListCard,
   buildTakeoverSelectedCard,
   formatBridgeStatus,
+  formatBridgeStopCancelled,
+  formatBridgeStopConfirm,
+  formatBridgeStopping,
   formatConsoleModeIntro,
   formatGuidanceQueued,
   formatHelp,
+  formatHandoffDisabled,
   formatObservationList,
   formatObservationStatus,
   formatPendingTakeoverInputQueued,
@@ -474,6 +481,12 @@ function actionFromStartupCard(event) {
       return { kind: "whoami" };
     case "startup_console":
       return { kind: "intent_console_enable" };
+    case "bridge_stop_prompt":
+      return { kind: "bridge_stop_confirm" };
+    case "bridge_stop_execute":
+      return { kind: "bridge_stop_execute" };
+    case "bridge_stop_cancel":
+      return { kind: "bridge_stop_cancel" };
     default:
       return null;
   }
@@ -491,12 +504,21 @@ async function handleChatAction(ctx, event, action) {
     await setIntentSessionModeForEvent(ctx, event, "handoff", "lark");
     return ctx.notifier.reply(event.messageId, "已回到任务直通模式。普通消息会直接发送给当前接管的 Codex 会话。");
   }
+  if (action.kind === "bridge_stop_confirm") {
+    return replyCardOrText(ctx, event.messageId, buildBridgeStopConfirmCard(), formatBridgeStopConfirm());
+  }
+  if (action.kind === "bridge_stop_cancel") {
+    return ctx.notifier.reply(event.messageId, formatBridgeStopCancelled());
+  }
+  if (action.kind === "bridge_stop_execute") {
+    return handleBridgeStopExecute(ctx, event);
+  }
   if (action.kind === "intent_clarify") {
     return ctx.notifier.reply(
       event.messageId,
       [
         action.reason || "我还不确定你想执行哪个操作。",
-        "你可以说：项目列表、会话列表、观察第 1 个会话、接管第 2 个会话，或“发送给当前线程：...”",
+        `你可以说：${CONSOLE_COMMAND_EXAMPLES}，或“发送给当前线程：...”。`,
       ].join("\n"),
     );
   }
@@ -588,10 +610,7 @@ async function handleChatAction(ctx, event, action) {
     await setIntentSessionModeForEvent(ctx, event, "console", "handoff_disabled");
     await cancelHandoffTasks(ctx, activeHandoff?.threadId || handoffState?.previous?.threadId);
     ctx.keepAwake?.stop();
-    return ctx.notifier.reply(
-      event.messageId,
-      formatHandoffStatus(handoffState),
-    );
+    return replyCardOrText(ctx, event.messageId, buildHandoffDisabledCard(), formatHandoffDisabled());
   }
   if (action.kind === "task_status" || action.kind === "task_diff") {
     return ctx.notifier.reply(event.messageId, formatTask(await ctx.queue.get(action.id)));
@@ -673,6 +692,38 @@ async function handleCommandVisibility(ctx, event, action) {
   });
   ctx.config.handoff = { ...(ctx.config.handoff || {}), showCommands: action.enabled };
   return ctx.notifier.reply(event.messageId, formatCommandVisibility(ctx.config));
+}
+
+async function handleBridgeStopExecute(ctx, event) {
+  await clearHandoff({ dataDir: ctx.config.dataDir });
+  await clearTakeover({ dataDir: ctx.config.dataDir });
+  await clearObservation({ dataDir: ctx.config.dataDir });
+  await setIntentSessionModeForEvent(ctx, event, "console", "bridge_stopping");
+  ctx.observer?.stop();
+  ctx.keepAwake?.stop();
+  const result = await ctx.notifier.reply(event.messageId, formatBridgeStopping());
+  stopBridgeSoon(ctx);
+  return result;
+}
+
+function stopBridgeSoon(ctx) {
+  if (typeof ctx.stopBridge === "function") {
+    ctx.stopBridge("lark");
+    return;
+  }
+  const timer = setTimeout(() => {
+    ctx.larkWs?.stop();
+    ctx.observer?.stop();
+    ctx.keepAwake?.stop();
+    if (ctx.takeoverTimer) clearInterval(ctx.takeoverTimer);
+    if (ctx.server?.close) {
+      ctx.server.close(() => process.exit(0));
+      setTimeout(() => process.exit(0), 1000).unref?.();
+      return;
+    }
+    process.exit(0);
+  }, 100);
+  timer.unref?.();
 }
 
 async function handleTakeoverProjectList(ctx, event) {
@@ -1128,15 +1179,20 @@ function buildHandoffGuidancePrompt(text, runningCommand) {
 }
 
 function formatHandoffStatus(handoff) {
-  if (!handoff?.active) return "Codex Lark Remote handoff: off";
+  if (!handoff?.active) {
+    return [
+      "当前没有接管中的 Codex 会话。",
+      "飞书连接仍然保持；可以发送“控制台”“项目列表”或“会话列表”。",
+    ].join("\n");
+  }
   return [
-    "Codex Lark Remote handoff: active",
-    `Mode: ${handoff.mode || "resume"}`,
-    `Thread: ${handoff.threadId}`,
-    handoff.name ? `Name: ${handoff.name}` : "",
-    handoff.cwd ? `Cwd: ${handoff.cwd}` : "",
-    "Send a normal Feishu message to continue this Codex thread.",
-    "Use handoff off to stop.",
+    "当前正在接管 Codex 会话。",
+    `模式: ${handoff.mode || "resume"}`,
+    `线程: ${handoff.threadId}`,
+    handoff.name ? `名称: ${handoff.name}` : "",
+    handoff.cwd ? `目录: ${handoff.cwd}` : "",
+    "发送普通飞书消息会继续这个 Codex 会话。",
+    "发送“控制台”可临时回到外层自然语言控制台；发送“退出接管”会结束当前接管但保留飞书连接。",
   ]
     .filter(Boolean)
     .join("\n");

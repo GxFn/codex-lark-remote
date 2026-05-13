@@ -239,7 +239,8 @@ flowchart TD
 当前是任务对话模式：普通消息会直接发送给这个 Codex 窗口。
 
 发送「控制台」或「跳出接管」可回到控制台，不会关闭当前接管。
-发送「退出接管」会断开当前接管。
+发送「退出接管」会结束当前 Codex 会话接管，并回到外层自然语言控制台；飞书 WebSocket 和本地 bridge 仍保持连接。
+发送「关闭飞书连接」会先发确认卡片；确认后停止本地 bridge 和飞书 WebSocket。
 ```
 
 直通模式下只做低成本、确定性的逃逸命令识别，不调用 LLM：
@@ -253,6 +254,9 @@ flowchart TD
 
 退出接管 / 断开接管 / handoff off
   -> 关闭 activeHandoff，session.mode = "console"
+
+关闭飞书连接 / 断开连接 / bridge stop
+  -> 发确认卡片；确认后停止本地 bridge 和 WebSocket
 
 状态 / status
   -> 返回当前 handoff 和 bridge 状态
@@ -374,7 +378,7 @@ chat.forward_to_handoff:
 观察这个 -> takeover.observe_window selector=last
 接管这个 -> takeover.execute selector=last
 停止观察 -> observation.stop
-断开连接 -> handoff.disable
+退出接管 -> handoff.disable
 ```
 
 规则命中直接生成 intent，不调用 LLM，降低成本和延迟。
@@ -641,6 +645,9 @@ observation.stop
 
 handoff.disable
   -> { kind: "handoff_off" }
+
+bridge.stop
+  -> { kind: "bridge_stop_confirm" }
 
 chat.forward_to_handoff
   -> { kind: "handoff_message", message }

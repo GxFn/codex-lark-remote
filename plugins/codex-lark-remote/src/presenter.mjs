@@ -1,4 +1,9 @@
 import { truncateForLark } from "./notifier.mjs";
+import {
+  CONSOLE_COMMAND_EXAMPLES,
+  CONTROL_COMMAND_MEANING_DESCRIPTION,
+  HANDOFF_DIRECT_MODE_DESCRIPTION,
+} from "./control-semantics.mjs";
 
 export function formatHelp() {
   return [
@@ -6,13 +11,14 @@ export function formatHelp() {
     "",
     "可以直接发送普通需求继续当前 Codex 对话。",
     "控制台: 发送“控制台”进入项目/会话控制；接管后普通消息会直通目标会话。",
-    "口语控制: 状态, 我是谁, 项目列表, 会话列表, 观察列表, 断开连接吧.",
+    "口语控制: 状态, 我是谁, 项目列表, 会话列表, 观察列表, 退出接管.",
     "任务控制: status rcmd_..., diff rcmd_..., cancel rcmd_..., approve rcmd_... test.",
     "whoami",
     "status",
     "windows",
     "takeover status",
     "takeover off",
+    "关闭飞书连接",
     "observe",
     "observe <number|thread-prefix>",
     "observe off",
@@ -35,7 +41,7 @@ export function formatStartupIntro() {
     "- 接管第 2 个会话",
     "",
     "接管后会切到任务直通模式，普通消息只会作为对话任务发给被接管的 Codex 会话，不再解析项目/会话操作。",
-    "要回到外层自然语言控制台，发送“控制台”或“跳出接管”；要结束接管，发送“退出接管”或“断开连接”。",
+    "要临时回到外层自然语言控制台，发送“控制台”或“跳出接管”；要结束当前接管并留在控制台，发送“退出接管”。",
     "",
     "兜底命令：",
     "status",
@@ -43,6 +49,7 @@ export function formatStartupIntro() {
     "observe",
     "whoami",
     "handoff off",
+    "关闭飞书连接",
   ].join("\n");
 }
 
@@ -50,14 +57,9 @@ export function formatConsoleModeIntro() {
   return [
     "已进入外层自然语言控制台。",
     "",
-    "这里会先理解项目/会话操作意图。可以直接说：",
-    "- 看看有哪些项目",
-    "- 进入第 1 个项目",
-    "- 观察第 2 个会话",
-    "- 接管第 2 个会话",
-    "",
-    "接管后会切到任务直通模式，普通消息只会作为对话任务发给被接管的 Codex 会话，不再解析项目/会话操作。",
-    "要回到这里，发送“控制台”或“跳出接管”；要结束接管，发送“退出接管”或“断开连接”。",
+    `可以直接说：${CONSOLE_COMMAND_EXAMPLES}。`,
+    HANDOFF_DIRECT_MODE_DESCRIPTION,
+    CONTROL_COMMAND_MEANING_DESCRIPTION,
   ].join("\n");
 }
 
@@ -73,8 +75,9 @@ export function buildStartupIntroCard() {
           "这里管理的是本机 Codex 会话记录；`窗口` 只是会话的口语叫法。",
           "没有接管时，可以直接说 `看看有哪些项目`、`进入第 1 个项目`、`观察第 2 个会话`、`接管第 2 个会话`。",
           "接管后会切到任务直通模式：普通消息只作为对话任务发给目标 Codex 会话，不再解析项目/会话操作。",
-          "要回到外层自然语言控制台，发送 `控制台` 或 `跳出接管`；要结束接管，发送 `退出接管` 或 `断开连接`。",
-          "按钮只是快捷入口。兜底命令: `status`、`windows`、`observe`、`whoami`、`handoff off`。",
+          "要临时回到外层自然语言控制台，发送 `控制台` 或 `跳出接管`；要结束当前接管并留在控制台，发送 `退出接管`。",
+          "要真正断开飞书连接并停止本机 bridge，发送 `关闭飞书连接`；会先出现确认卡。",
+          "按钮只是快捷入口。兜底命令: `status`、`windows`、`observe`、`whoami`、`handoff off`、`关闭飞书连接`。",
         ].join("\n"),
       },
       {
@@ -85,6 +88,7 @@ export function buildStartupIntroCard() {
           startupButton("项目/会话", "startup_windows", "default"),
           startupButton("观察列表", "startup_observe", "default"),
           startupButton("我的身份", "startup_whoami", "default"),
+          startupButton("关闭连接", "bridge_stop_prompt", "danger"),
         ],
       },
     ],
@@ -100,10 +104,9 @@ export function buildConsoleModeCard() {
         content: [
           "**已进入外层自然语言控制台。**",
           "",
-          "这里管理的是本机 Codex 会话记录；`窗口` 只是会话的口语叫法。",
-          "这里会先理解项目/会话操作意图。可以直接说 `看看有哪些项目`、`进入第 1 个项目`、`观察第 2 个会话`、`接管第 2 个会话`。",
-          "接管后会切到任务直通模式：普通消息只作为对话任务发给目标 Codex 会话，不再解析项目/会话操作。",
-          "回到这里: `控制台` 或 `跳出接管`。结束接管: `退出接管` 或 `断开连接`。",
+          `直接说：${CONSOLE_COMMAND_EXAMPLES}。`,
+          HANDOFF_DIRECT_MODE_DESCRIPTION,
+          CONTROL_COMMAND_MEANING_DESCRIPTION,
         ].join("\n"),
       },
       {
@@ -111,12 +114,93 @@ export function buildConsoleModeCard() {
         actions: [
           startupButton("状态", "startup_status", "primary"),
           startupButton("项目/会话", "startup_windows", "default"),
-          startupButton("观察列表", "startup_observe", "default"),
-          startupButton("我的身份", "startup_whoami", "default"),
+          startupButton("观察", "startup_observe", "default"),
+          startupButton("关闭连接", "bridge_stop_prompt", "danger"),
         ],
       },
     ],
   });
+}
+
+export function formatHandoffDisabled() {
+  return [
+    "已退出当前接管，飞书连接仍然保持。",
+    "",
+    "后续普通消息会回到外层自然语言控制台，先理解项目/会话操作意图；不会再直通刚才的 Codex 会话。",
+    "可以直接说：项目列表、会话列表、观察第 2 个会话、接管第 2 个会话。",
+    "如果只是临时跳回控制台、不结束接管，用“控制台”或“跳出接管”。",
+  ].join("\n");
+}
+
+export function buildHandoffDisabledCard() {
+  return baseCard({
+    title: "已退出当前接管",
+    elements: [
+      {
+        tag: "markdown",
+        content: [
+          "**飞书连接仍然保持。**",
+          "",
+          "这次只结束了当前 Codex 会话的接管关系，并回到外层自然语言控制台。",
+          "后续普通消息会先理解项目/会话操作意图，不会再直通刚才的 Codex 会话。",
+          "如果只是临时跳回控制台、不结束接管，用 `控制台` 或 `跳出接管`。",
+        ].join("\n"),
+      },
+      {
+        tag: "action",
+        actions: [
+          startupButton("项目/会话", "startup_windows", "primary"),
+          startupButton("观察列表", "startup_observe", "default"),
+          startupButton("状态", "startup_status", "default"),
+        ],
+      },
+    ],
+  });
+}
+
+export function formatBridgeStopConfirm() {
+  return [
+    "确认关闭飞书连接？",
+    "",
+    "这会停止本机 Codex Lark Remote bridge，并断开飞书 WebSocket。",
+    "关闭后，飞书里的普通消息不会再进入 Codex；需要回到 Codex 里重新启动插件才能恢复。",
+    "如果只是退出当前会话接管，请发送“退出接管”。",
+  ].join("\n");
+}
+
+export function buildBridgeStopConfirmCard() {
+  return baseCard({
+    title: "确认关闭飞书连接",
+    elements: [
+      {
+        tag: "markdown",
+        content: [
+          "**这会停止本机 bridge，并断开飞书 WebSocket。**",
+          "",
+          "关闭后，飞书里的普通消息不会再进入 Codex；需要回到 Codex 里重新启动插件才能恢复。",
+          "如果只是退出当前会话接管，请发送 `退出接管`。",
+        ].join("\n"),
+      },
+      {
+        tag: "action",
+        actions: [
+          startupButton("确认关闭连接", "bridge_stop_execute", "danger"),
+          startupButton("取消", "bridge_stop_cancel", "default"),
+        ],
+      },
+    ],
+  });
+}
+
+export function formatBridgeStopping() {
+  return [
+    "正在关闭飞书连接。",
+    "本机 Codex Lark Remote bridge 和飞书 WebSocket 会停止；之后需要在 Codex 里重新启动插件。",
+  ].join("\n");
+}
+
+export function formatBridgeStopCancelled() {
+  return "已取消关闭连接。飞书连接仍然保持。";
 }
 
 export function formatWhoami(event) {
@@ -250,7 +334,7 @@ export function formatTakeoverActive(target) {
   return [
     `接管已生效，目标线程 ${String(target?.threadId || "").slice(0, 8) || "unknown"}。`,
     "现在直接发送普通飞书消息，就会继续这个 Codex 对话。",
-    "发送“控制台”可回到项目/会话控制台；发送“退出接管”会断开当前接管。",
+    "发送“控制台”可临时回到项目/会话控制台；发送“退出接管”会结束当前接管，但不会断开飞书连接。",
   ].join("\n");
 }
 

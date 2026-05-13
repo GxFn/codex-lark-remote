@@ -80,6 +80,11 @@ Turn it into a clear Feishu/Lark prompt that says what permission is needed and
 whether the user must approve it in Codex Desktop or can reply with explicit
 text consent in Feishu/Lark.
 
+`退出接管` / `handoff off` exits the current Codex session handoff only and
+keeps the Feishu/Lark bridge connected. `关闭飞书连接` is the explicit command to
+stop the local bridge and disconnect the Feishu/Lark WebSocket; it must ask for
+confirmation before stopping because replies cannot continue after shutdown.
+
 If another Feishu/Lark message arrives while Codex is already running, treat the
 next turn as supplemental guidance for the same conversation. Reconcile it with
 any work already completed by the previous turn instead of restarting from

@@ -144,7 +144,19 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
     kind: "handoff_disable",
   });
 
+  assert.deepEqual(classifyChatText("/codex bridge stop", config), {
+    kind: "bridge_stop_confirm",
+  });
+
   assert.deepEqual(classifyChatText("断开连接吧", config), {
+    kind: "bridge_stop_confirm",
+  });
+
+  assert.deepEqual(classifyChatText("关闭飞书连接", config), {
+    kind: "bridge_stop_confirm",
+  });
+
+  assert.deepEqual(classifyChatText("断开接管吧", config), {
     kind: "handoff_disable",
   });
 
@@ -185,7 +197,11 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
   });
 
   assert.deepEqual(classifyChatText("窗口列表", config), {
-    kind: "takeover_list",
+    kind: "takeover_window_list",
+  });
+
+  assert.deepEqual(classifyChatText("会话列表", config), {
+    kind: "takeover_window_list",
   });
 
   assert.deepEqual(classifyChatText("项目列表", config), {
@@ -193,6 +209,11 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
   });
 
   assert.deepEqual(classifyChatText("进入第一个项目", config), {
+    kind: "takeover_project_select",
+    selector: "1",
+  });
+
+  assert.deepEqual(classifyChatText("进入项目 1", config), {
     kind: "takeover_project_select",
     selector: "1",
   });
@@ -214,6 +235,11 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
   assert.deepEqual(classifyChatText("接管第 2 个窗口", config), {
     kind: "takeover_execute",
     selector: "2",
+  });
+
+  assert.deepEqual(classifyChatText("接管 1", config), {
+    kind: "takeover_execute",
+    selector: "1",
   });
 
   assert.deepEqual(classifyChatText("观察第 2 个窗口", config), {
@@ -255,7 +281,7 @@ test("classifyChatText recognizes repo prefixes and management commands", () => 
   });
 
   assert.deepEqual(classifyChatText("关掉插件", config), {
-    kind: "handoff_disable",
+    kind: "bridge_stop_confirm",
   });
 
   assert.deepEqual(classifyChatText("查看任务 rcmd_mozpql6u_e6ca8b55", config), {

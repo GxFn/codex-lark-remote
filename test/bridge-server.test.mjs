@@ -338,7 +338,8 @@ test("processLarkEvent disables handoff and cancels active handoff tasks", async
   );
 
   assert.deepEqual(cancelled, [{ id: "rcmd_running", reason: "handoff disabled by user" }]);
-  assert.match(replies[0].text, /handoff: off/);
+  assert.match(replies[0].text, /已退出当前接管/);
+  assert.match(replies[0].text, /飞书连接仍然保持/);
 });
 
 test("processLarkEvent lists and starts explicit read-only observation", async () => {
@@ -683,7 +684,76 @@ test("processLarkEvent shows console card from startup card", async () => {
   assert.deepEqual(replies, []);
   assert.equal(cards.length, 1);
   assert.match(JSON.stringify(cards[0].card), /自然语言控制台/);
+  assert.match(JSON.stringify(cards[0].card), /关闭连接/);
+  assert.match(JSON.stringify(cards[0].card), /bridge_stop_prompt/);
   assert.equal((await readIntentSession({ dataDir, event: { chatId: "oc_card" }, config: {} })).mode, "console");
+});
+
+test("processLarkEvent opens bridge stop confirmation from console card", async () => {
+  const replies = [];
+  const cards = [];
+
+  await processLarkEvent(
+    {
+      config: {
+        lark: { allowedUsers: ["ou_allowed"] },
+      },
+      notifier: {
+        reply: async (messageId, text) => replies.push({ messageId, text }),
+        replyCard: async (messageId, card) => {
+          cards.push({ messageId, card });
+          return { ok: true };
+        },
+      },
+      queue: { findByMessageId: async () => null },
+    },
+    cardActionEvent({ action: "bridge_stop_prompt", userId: "ou_allowed" }),
+  );
+
+  assert.deepEqual(replies, []);
+  assert.equal(cards.length, 1);
+  assert.match(JSON.stringify(cards[0].card), /确认关闭飞书连接/);
+  assert.match(JSON.stringify(cards[0].card), /bridge_stop_execute/);
+});
+
+test("processLarkEvent confirms before stopping the Feishu bridge", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-stop-bridge-"));
+  const replies = [];
+  const cards = [];
+  const stops = [];
+  const ctx = {
+    config: {
+      dataDir,
+      lark: { allowedUsers: ["ou_allowed"] },
+    },
+    queue: {
+      findByMessageId: async () => null,
+    },
+    notifier: {
+      reply: async (messageId, text) => replies.push({ messageId, text }),
+      replyCard: async (messageId, card) => {
+        cards.push({ messageId, card });
+        return { ok: true };
+      },
+    },
+    observer: { stop: () => {} },
+    keepAwake: { stop: () => {} },
+    stopBridge: (reason) => stops.push(reason),
+  };
+
+  await processLarkEvent(ctx, textEvent({ text: "关闭飞书连接", userId: "ou_allowed", messageId: "om_stop_prompt" }));
+  assert.equal(stops.length, 0);
+  assert.equal(cards.length, 1);
+  assert.match(JSON.stringify(cards[0].card), /确认关闭飞书连接/);
+  assert.match(JSON.stringify(cards[0].card), /bridge_stop_execute/);
+
+  await processLarkEvent(ctx, cardActionEvent({ action: "bridge_stop_cancel", userId: "ou_allowed", messageId: "om_stop_cancel" }));
+  assert.equal(stops.length, 0);
+  assert.match(replies.at(-1).text, /已取消关闭连接/);
+
+  await processLarkEvent(ctx, cardActionEvent({ action: "bridge_stop_execute", userId: "ou_allowed", messageId: "om_stop_confirm" }));
+  assert.deepEqual(stops, ["lark"]);
+  assert.match(replies.at(-1).text, /正在关闭飞书连接/);
 });
 
 test("processLarkEvent queues normal messages for pending takeover before old handoff", async () => {

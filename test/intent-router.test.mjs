@@ -15,6 +15,7 @@ test("handoff direct mode sends ordinary control-looking text to Codex", () => {
   });
   assert.deepEqual(classifyHandoffDirectText("控制台", {}), { kind: "intent_console_enable" });
   assert.deepEqual(classifyHandoffDirectText("退出接管", {}), { kind: "handoff_disable" });
+  assert.deepEqual(classifyHandoffDirectText("关闭飞书连接", {}), { kind: "bridge_stop_confirm" });
 });
 
 test("console route uses Codex intent translator for unrecognized natural language", async () => {
@@ -53,12 +54,32 @@ test("console route recognizes common project and window phrases without transla
     { kind: "takeover_window_list" },
   );
   assert.deepEqual(
+    await routeChatTextAction(ctx, { ...baseEvent, text: "会话列表" }, { kind: "takeover_list" }),
+    { kind: "takeover_window_list" },
+  );
+  assert.deepEqual(
+    await routeChatTextAction(ctx, { ...baseEvent, text: "进入项目 1" }, { kind: "task", taskText: "进入项目 1" }),
+    { kind: "takeover_project_select", selector: "1" },
+  );
+  assert.deepEqual(
     await routeChatTextAction(ctx, { ...baseEvent, text: "第 2 个窗口" }, { kind: "task", taskText: "第 2 个窗口" }),
+    { kind: "takeover_select", selector: "2" },
+  );
+  assert.deepEqual(
+    await routeChatTextAction(ctx, { ...baseEvent, text: "会话 2" }, { kind: "task", taskText: "会话 2" }),
     { kind: "takeover_select", selector: "2" },
   );
   assert.deepEqual(
     await routeChatTextAction(ctx, { ...baseEvent, text: "观察第 2 个窗口" }, { kind: "observe_enable", selector: "2" }),
     { kind: "takeover_observe", selector: "2" },
+  );
+  assert.deepEqual(
+    await routeChatTextAction(ctx, { ...baseEvent, text: "接管 1" }, { kind: "task", taskText: "接管 1" }),
+    { kind: "takeover_confirm", selector: "1" },
+  );
+  assert.deepEqual(
+    await routeChatTextAction(ctx, { ...baseEvent, text: "关闭飞书连接" }, { kind: "bridge_stop_confirm" }),
+    { kind: "bridge_stop_confirm" },
   );
 });
 
@@ -73,5 +94,12 @@ test("takeover execute intent maps to confirmation instead of direct execution",
   assert.deepEqual(
     intentToAction({ intent: "takeover.execute", args: { selector: "2" }, confidence: 0.95 }),
     { kind: "takeover_confirm", selector: "2" },
+  );
+});
+
+test("bridge stop intent maps to a confirmation action", () => {
+  assert.deepEqual(
+    intentToAction({ intent: "bridge.stop", args: {}, confidence: 0.95, needsConfirmation: true }),
+    { kind: "bridge_stop_confirm" },
   );
 });

@@ -2,16 +2,22 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildConsoleModeCard,
+  buildBridgeStopConfirmCard,
+  buildHandoffDisabledCard,
   buildStartupIntroCard,
   buildTakeoverConfirmCard,
   buildTakeoverListCard,
   buildTakeoverProjectListCard,
   buildTakeoverSelectedCard,
   formatBridgeStatus,
+  formatBridgeStopCancelled,
+  formatBridgeStopConfirm,
+  formatBridgeStopping,
   formatConsoleModeIntro,
   formatFinal,
   formatGuidanceQueued,
   formatHelp,
+  formatHandoffDisabled,
   formatObservationList,
   formatObservationStatus,
   formatPendingTakeoverInputQueued,
@@ -55,9 +61,12 @@ test("buildStartupIntroCard exposes clickable startup actions", () => {
   assert.match(rendered, /项目\/会话/);
   assert.match(rendered, /观察列表/);
   assert.match(rendered, /我的身份/);
+  assert.match(rendered, /关闭连接/);
+  assert.match(rendered, /真正断开飞书连接/);
   assert.match(rendered, /startup_status/);
   assert.match(rendered, /startup_console/);
   assert.match(rendered, /startup_windows/);
+  assert.match(rendered, /bridge_stop_prompt/);
   assert.doesNotMatch(rendered, /\/codex/);
 });
 
@@ -67,10 +76,38 @@ test("console mode intro is a natural-language control card", () => {
 
   assert.match(text, /已进入外层自然语言控制台/);
   assert.match(text, /任务直通模式/);
+  assert.match(text, /直接发送给目标 Codex 会话/);
   assert.match(rendered, /自然语言控制台/);
-  assert.match(rendered, /不再解析项目\/会话操作/);
+  assert.match(rendered, /直接发送给目标 Codex 会话/);
+  assert.match(rendered, /关闭飞书连接/);
   assert.match(rendered, /startup_windows/);
+  assert.match(rendered, /bridge_stop_prompt/);
+  assert.doesNotMatch(rendered, /我的身份/);
   assert.doesNotMatch(rendered, /进入控制台/);
+});
+
+test("handoff disabled message distinguishes takeover exit from bridge disconnect", () => {
+  const text = formatHandoffDisabled();
+  const rendered = JSON.stringify(buildHandoffDisabledCard());
+
+  assert.match(text, /已退出当前接管/);
+  assert.match(text, /飞书连接仍然保持/);
+  assert.match(rendered, /已退出当前接管/);
+  assert.match(rendered, /不会再直通刚才的 Codex 会话/);
+  assert.match(rendered, /startup_windows/);
+});
+
+test("bridge stop confirmation explains it closes the connection", () => {
+  const text = formatBridgeStopConfirm();
+  const rendered = JSON.stringify(buildBridgeStopConfirmCard());
+
+  assert.match(text, /确认关闭飞书连接/);
+  assert.match(text, /停止本机 Codex Lark Remote bridge/);
+  assert.match(text, /重新启动插件/);
+  assert.match(rendered, /确认关闭连接/);
+  assert.match(rendered, /bridge_stop_execute/);
+  assert.match(formatBridgeStopping(), /正在关闭飞书连接/);
+  assert.match(formatBridgeStopCancelled(), /已取消关闭连接/);
 });
 
 test("formatWhoami returns the sender id needed for allowlist setup", () => {
