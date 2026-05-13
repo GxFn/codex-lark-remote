@@ -43,10 +43,6 @@ The Feishu/Lark side has one main entry point: the natural-language console.
 After the bridge is connected, send `console` or click the console button on
 the startup card.
 
-<p>
-  <img src="plugins/codex-lark-remote/assets/console-en.png" alt="English natural-language console card in Feishu/Lark" width="760">
-</p>
-
 Console display language is bound per Feishu/Lark chat. Enter with English to
 keep later console cards in English; enter with Chinese to keep them in Chinese.
 Sending a control phrase in the other language switches that chat's later
@@ -99,7 +95,7 @@ npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plu
 To pin the exact reviewed release:
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.2/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.3/plugins/codex-lark-remote --plugin
 ```
 
 Then restart or refresh Codex if the plugin list does not update immediately.
@@ -110,7 +106,7 @@ If Codex asks for a GitHub target or direct artifact path, use the plugin bundle
 path, not the repository root:
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.2.2/plugins/codex-lark-remote
+https://github.com/GxFn/codex-lark-remote/tree/v0.2.3/plugins/codex-lark-remote
 ```
 
 If the Codex dialog separates source, ref, and sparse path, fill it like this:
@@ -120,7 +116,7 @@ Source:
 https://github.com/GxFn/codex-lark-remote.git
 
 Git ref:
-v0.2.2
+v0.2.3
 
 Sparse path:
 plugins/codex-lark-remote
@@ -138,7 +134,7 @@ Source:
 https://github.com/GxFn/codex-lark-remote.git
 
 Git ref:
-v0.2.2
+v0.2.3
 
 Sparse path:
 leave empty

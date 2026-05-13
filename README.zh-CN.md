@@ -40,10 +40,6 @@ bridge 连上后，目标选择由飞书/Lark 控制台完成。
 飞书/Lark 侧最重要的入口是自然语言控制台。bridge 连上后，发送 `控制台`，
 或点击启动卡片里的“控制台”。
 
-<p>
-  <img src="plugins/codex-lark-remote/assets/console-zh.png" alt="飞书/Lark 中文自然语言控制台卡片" width="760">
-</p>
-
 控制台会按飞书/Lark 会话绑定展示语言：用中文进入就持续展示中文卡片；用英文进入
 就展示英文卡片。之后发送另一种语言的控制口令，会切换该会话后续展示语言。
 
@@ -89,7 +85,7 @@ npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plu
 如果要固定到当前审核版本：
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.2/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.3/plugins/codex-lark-remote --plugin
 ```
 
 安装后如果 Codex 插件列表没有立刻刷新，重启或刷新 Codex。
@@ -100,7 +96,7 @@ npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.2/
 不要填写仓库根目录：
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.2.2/plugins/codex-lark-remote
+https://github.com/GxFn/codex-lark-remote/tree/v0.2.3/plugins/codex-lark-remote
 ```
 
 如果 Codex 弹窗把来源、Git 引用、稀疏路径拆开填写，请这样填：
@@ -110,7 +106,7 @@ https://github.com/GxFn/codex-lark-remote/tree/v0.2.2/plugins/codex-lark-remote
 https://github.com/GxFn/codex-lark-remote.git
 
 Git 引用：
-v0.2.2
+v0.2.3
 
 稀疏路径：
 plugins/codex-lark-remote
@@ -128,7 +124,7 @@ marketplace，而不是单独添加这个插件，可以填写：
 https://github.com/GxFn/codex-lark-remote.git
 
 Git 引用：
-v0.2.2
+v0.2.3
 
 稀疏路径：
 留空
