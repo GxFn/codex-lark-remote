@@ -165,6 +165,19 @@ test("requires explicit consent for conversation handoff", async () => {
   assert.doesNotMatch(server, /sending this Codex conversation/);
 });
 
+test("keeps startup tools from circular start and handoff guidance", async () => {
+  const server = await fs.readFile(
+    new URL("../plugins/codex-lark-remote/bin/codex-lark-remote-mcp.mjs", import.meta.url),
+    "utf8",
+  );
+
+  assert.doesNotMatch(server, /Use codex_lark_start first/);
+  assert.match(server, /formatBridgeStartFailure\(bridge, "start"\)/);
+  assert.match(server, /formatBridgeStartFailure\(bridge, "handoff"\)/);
+  assert.match(server, /formatBridgeStartFailure\(bridge, "takeover preparation"\)/);
+  assert.match(server, /No separate pre-start step is required/);
+});
+
 test("keeps bridge runtime isolated from the MCP stdio process", async () => {
   const server = await fs.readFile(
     new URL("../plugins/codex-lark-remote/bin/codex-lark-remote-mcp.mjs", import.meta.url),

@@ -85,7 +85,7 @@ npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plu
 如果要固定到当前审核版本：
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.3/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.4/plugins/codex-lark-remote --plugin
 ```
 
 安装后如果 Codex 插件列表没有立刻刷新，重启或刷新 Codex。
@@ -96,7 +96,7 @@ npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.3/
 不要填写仓库根目录：
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.2.3/plugins/codex-lark-remote
+https://github.com/GxFn/codex-lark-remote/tree/v0.2.4/plugins/codex-lark-remote
 ```
 
 如果 Codex 弹窗把来源、Git 引用、稀疏路径拆开填写，请这样填：
@@ -106,7 +106,7 @@ https://github.com/GxFn/codex-lark-remote/tree/v0.2.3/plugins/codex-lark-remote
 https://github.com/GxFn/codex-lark-remote.git
 
 Git 引用：
-v0.2.3
+v0.2.4
 
 稀疏路径：
 plugins/codex-lark-remote
@@ -124,7 +124,7 @@ marketplace，而不是单独添加这个插件，可以填写：
 https://github.com/GxFn/codex-lark-remote.git
 
 Git 引用：
-v0.2.3
+v0.2.4
 
 稀疏路径：
 留空
