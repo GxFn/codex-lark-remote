@@ -12,6 +12,7 @@ import {
   extractFinalMessage,
   extractProgressSummary,
   formatPermissionBoundaryNotice,
+  readSessionLastTurnSummary,
   summarizeCodexEvent,
   summarizeSessionProgressEvent,
 } from "../plugins/codex-lark-remote/src/runner.mjs";
@@ -167,9 +168,57 @@ test("CodexCliRunner sends a handoff started acknowledgement by default", async 
 
   await runner.processAll();
 
-  assert.deepEqual(replies.find((reply) => reply.text === "Started working on the Feishu/Lark message."), {
+  assert.deepEqual(replies.find((reply) => reply.text === "已收到，Codex 正在思考并处理这条消息。"), {
     messageId: "om_1",
-    text: "Started working on the Feishu/Lark message.",
+    text: "已收到，Codex 正在思考并处理这条消息。",
+  });
+});
+
+test("CodexCliRunner localizes the handoff started acknowledgement in English", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-started-en-"));
+  const fakeCodex = path.join(dataDir, "fake-codex");
+  await fs.writeFile(fakeCodex, "#!/bin/sh\necho '{\"type\":\"turn.completed\"}'\nexit 0\n");
+  await fs.chmod(fakeCodex, 0o755);
+  await activateHandoff({ dataDir, threadId: "thread-1", cwd: dataDir });
+
+  let command = {
+    id: "rcmd_started_en",
+    mode: "thread_handoff",
+    status: "pending",
+    messageId: "om_1",
+    projectRoot: dataDir,
+    prompt: "continue",
+    codexSessionId: "thread-1",
+  };
+  const replies = [];
+  const queue = {
+    claimNext: async () => {
+      if (command.status !== "pending") return null;
+      command = { ...command, status: "running" };
+      return command;
+    },
+    update: async (_id, patch) => {
+      command = { ...command, ...patch };
+      return command;
+    },
+    get: async () => command,
+  };
+  const runner = new CodexCliRunner({
+    queue,
+    config: {
+      dataDir,
+      intent: { language: "en" },
+      runner: { codexPath: fakeCodex },
+      handoff: { notifyProgress: false },
+    },
+    notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+  });
+
+  await runner.processAll();
+
+  assert.deepEqual(replies.find((reply) => reply.text === "Received. Codex is thinking through this message."), {
+    messageId: "om_1",
+    text: "Received. Codex is thinking through this message.",
   });
 });
 
@@ -214,7 +263,8 @@ test("CodexCliRunner suppresses the handoff started acknowledgement when explici
 
   await runner.processAll();
 
-  assert.equal(replies.some((reply) => reply.text === "Started working on the Feishu/Lark message."), false);
+  assert.equal(replies.some((reply) => reply.text === "已收到，Codex 正在思考并处理这条消息。"), false);
+  assert.equal(replies.some((reply) => reply.text === "Received. Codex is thinking through this message."), false);
 });
 
 test("CodexCliRunner suppresses handoff notifications after handoff is off", async () => {
@@ -260,6 +310,63 @@ test("CodexCliRunner suppresses handoff notifications after handoff is off", asy
 
   assert.equal(command.status, "completed");
   assert.deepEqual(replies, []);
+});
+
+test("CodexCliRunner discards a handoff command if the desktop session became busy before resume", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-desktop-busy-"));
+  const marker = path.join(dataDir, "codex-invoked");
+  const fakeCodex = path.join(dataDir, "fake-codex");
+  await fs.writeFile(fakeCodex, `#!/bin/sh\necho invoked > ${JSON.stringify(marker)}\nexit 0\n`);
+  await fs.chmod(fakeCodex, 0o755);
+  const sessionPath = path.join(dataDir, "rollout-2026-05-13T10-01-00-thread-1.jsonl");
+  await fs.writeFile(sessionPath, [
+    JSON.stringify({ type: "session_meta", payload: { id: "thread-1", cwd: dataDir, name: "Busy desktop" } }),
+    JSON.stringify({ type: "event_msg", payload: { type: "agent_reasoning", message: "desktop is working" } }),
+    "",
+  ].join("\n"));
+  await activateHandoff({ dataDir, threadId: "thread-1", threadPath: sessionPath, cwd: dataDir });
+
+  let command = {
+    id: "rcmd_busy",
+    mode: "thread_handoff",
+    status: "pending",
+    notifyStarted: true,
+    messageId: "om_1",
+    projectRoot: dataDir,
+    prompt: "continue from lark",
+    codexSessionId: "thread-1",
+    codexSessionPath: sessionPath,
+  };
+  const replies = [];
+  const queue = {
+    claimNext: async () => {
+      if (command.status !== "pending") return null;
+      command = { ...command, status: "running" };
+      return command;
+    },
+    update: async (_id, patch) => {
+      command = { ...command, ...patch };
+      return command;
+    },
+    get: async () => command,
+  };
+  const runner = new CodexCliRunner({
+    queue,
+    config: {
+      dataDir,
+      runner: { codexPath: fakeCodex },
+      handoff: { notifyProgress: false, idleDebounceMs: 60_000 },
+    },
+    notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+  });
+
+  await runner.processAll();
+
+  assert.equal(command.status, "cancelled");
+  assert.match(command.error, /正在 Codex Desktop 中执行/);
+  assert.equal(replies.length, 1);
+  assert.match(replies[0].text, /没有发送，也不会排队/);
+  await assert.rejects(fs.stat(marker), { code: "ENOENT" });
 });
 
 test("formatPermissionBoundaryNotice explains approval UI boundaries", () => {
@@ -634,4 +741,47 @@ test("extractProgressSummary collects non-chat Codex JSONL events", () => {
       "Codex turn completed. Tokens: input=10 output=20",
     ].join("\n"),
   );
+});
+
+test("readSessionLastTurnSummary returns the last completed turn final reply", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-session-recap-"));
+  const sessionPath = path.join(dataDir, "session.jsonl");
+  const lines = [
+    { type: "session_meta", payload: { id: "thread-1", cwd: dataDir } },
+    { type: "turn.started", payload: {} },
+    { type: "event_msg", payload: { type: "agent_message", phase: "final_answer", message: "旧任务已经结束。" } },
+    { type: "turn.completed", payload: {} },
+    { type: "turn.started", payload: {} },
+    { type: "event_msg", payload: { type: "agent_message", message: "正在检查接管链路。" } },
+    { type: "event_msg", payload: { type: "agent_message", phase: "final_answer", message: "新任务完成：已修复接管提示。" } },
+    { type: "turn.completed", payload: {} },
+  ].map((event) => JSON.stringify(event));
+  await fs.writeFile(sessionPath, `${lines.join("\n")}\n`);
+
+  const summary = await readSessionLastTurnSummary(sessionPath);
+
+  assert.equal(summary.finalMessage, "新任务完成：已修复接管提示。");
+  assert.match(summary.progressSummary, /正在检查接管链路/);
+  assert.doesNotMatch(summary.finalMessage, /旧任务/);
+});
+
+test("readSessionLastTurnSummary recognizes Codex Desktop task boundaries", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-session-recap-desktop-"));
+  const sessionPath = path.join(dataDir, "session.jsonl");
+  const lines = [
+    { type: "event_msg", payload: { type: "task_started", turn_id: "turn-1" } },
+    { type: "event_msg", payload: { type: "agent_message", phase: "final_answer", message: "旧桌面任务完成。" } },
+    { type: "event_msg", payload: { type: "task_complete", turn_id: "turn-1" } },
+    { type: "event_msg", payload: { type: "task_started", turn_id: "turn-2" } },
+    { type: "event_msg", payload: { type: "agent_message", message: "正在处理桌面任务。" } },
+    { type: "response_item", payload: { type: "message", role: "assistant", phase: "final_answer", content: [{ type: "text", text: "桌面任务完成：可以同步给飞书。" }] } },
+    { type: "event_msg", payload: { type: "task_complete", turn_id: "turn-2" } },
+  ].map((event) => JSON.stringify(event));
+  await fs.writeFile(sessionPath, `${lines.join("\n")}\n`);
+
+  const summary = await readSessionLastTurnSummary(sessionPath);
+
+  assert.equal(summary.finalMessage, "桌面任务完成：可以同步给飞书。");
+  assert.match(summary.progressSummary, /正在处理桌面任务/);
+  assert.doesNotMatch(summary.finalMessage, /旧桌面任务/);
 });

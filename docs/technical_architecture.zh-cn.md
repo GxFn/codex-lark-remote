@@ -161,7 +161,7 @@ Bridge HTTP API 主要包括：
 | `GET /bridge/takeover/targets` | 列出某个项目下的 Codex 窗口。 |
 | `POST /bridge/takeover/select` | 选择窗口但不执行接管。 |
 | `POST /bridge/takeover/execute` | 执行接管；running 窗口进入 pending。 |
-| `POST /bridge/takeover/input` | pending takeover 期间暂存飞书输入。 |
+| `POST /bridge/takeover/input` | pending takeover 期间拒绝输入；不会暂存或补发。 |
 | `DELETE /bridge/takeover` | 清理 takeover 状态。 |
 
 除 Lark webhook 入口外，`/bridge/*` 请求需要 `Authorization: Bearer <token>`。token 写在 `bridge-state.json`，由本地 MCP 进程读取并调用。
@@ -184,7 +184,7 @@ Bridge HTTP API 主要包括：
 | `bridge-state.json` | 当前 bridge 进程状态，供 MCP 进程寻找 bridge。 |
 | `queue.json` | 任务队列和事件日志。 |
 | `handoff.json` | 当前接管的 Codex thread id、session path、cwd、激活时间等。 |
-| `takeover.json` | 飞书端项目/窗口选择、pending takeover、待发送消息等状态。 |
+| `takeover.json` | 飞书端项目/窗口选择、pending takeover、激活/取消等状态。 |
 | `startup-notice.json` | 启动介绍的本地已发送标记和最近已授权 Lark 会话，避免 bridge 重启后重复刷屏，也支持后续启动主动推送。 |
 | `observation.json` | 当前只读观察状态。 |
 | `bridge.log` | bridge 子进程日志。 |
@@ -347,7 +347,7 @@ codex exec \
 
 Handoff prompt 默认是用户原文。第一次远程消息会追加一段边界提示，提醒 Codex：Lark 不能点击原生 UI 权限弹窗，需要把审批要求明确发回 Lark。
 
-当上一条 handoff 任务仍在 running 时，新的 Lark 消息会被视为 supplemental guidance，`buildHandoffGuidancePrompt` 会包装成“上一轮仍在执行时收到的补充引导”，并在队列中等待当前任务结束后继续进入同一 Codex 线程。
+当目标 Codex Desktop 会话仍在执行时，新的 Lark 消息不会热注入、不会排队，也不会暂存。bridge 会直接回复忙碌提示，要求用户在当前 Codex 轮次结束后重新发送。runner 在真正 `resume` 前还会做第二次忙碌检查，避免接管激活和桌面端执行发生竞态。
 
 ### Worktree 模式
 

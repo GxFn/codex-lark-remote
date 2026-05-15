@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { processLarkEvent, startBridge } from "../plugins/codex-lark-remote/src/bridge-server.mjs";
 import { configFilePath, stateFilePath } from "../plugins/codex-lark-remote/src/config.mjs";
-import { activateHandoff } from "../plugins/codex-lark-remote/src/handoff.mjs";
+import { activateHandoff, readHandoff } from "../plugins/codex-lark-remote/src/handoff.mjs";
 import { readIntentSession } from "../plugins/codex-lark-remote/src/intent-state.mjs";
 import { prepareTakeoverScope, readTakeover } from "../plugins/codex-lark-remote/src/takeover.mjs";
 
@@ -170,6 +170,57 @@ test("processLarkEvent routes normal messages to current-thread handoff when act
   assert.deepEqual(replies, []);
 });
 
+test("processLarkEvent discards handoff messages when the selected desktop session is busy", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-desktop-busy-"));
+  const sessionFile = path.join(dataDir, "rollout-2026-05-13T10-01-00-019e0ffb-52e9-7ee3-bb87-42019b58eaa2.jsonl");
+  await writeSession({
+    file: sessionFile,
+    id: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
+    cwd: "/workspace",
+    name: "Busy desktop session",
+    events: [{ type: "event_msg", payload: { type: "agent_reasoning", message: "desktop is working" } }],
+    mtime: new Date(),
+  });
+  await activateHandoff({
+    dataDir,
+    threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
+    threadPath: sessionFile,
+    cwd: "/workspace",
+    activatedBy: "test",
+  });
+  const replies = [];
+  const enqueued = [];
+  let kicked = 0;
+
+  const result = await processLarkEvent(
+    {
+      config: {
+        dataDir,
+        lark: { allowedUsers: ["ou_allowed"] },
+        takeover: { idleDebounceMs: 60_000 },
+      },
+      queue: {
+        findByMessageId: async () => null,
+        list: async () => [],
+        enqueue: async (input) => {
+          enqueued.push(input);
+          return { id: "rcmd_busy", status: "pending", ...input };
+        },
+      },
+      notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+      runner: { busy: false, processAll: () => { kicked += 1; } },
+    },
+    textEvent({ text: "继续这个任务", userId: "ou_allowed" }),
+  );
+
+  assert.equal(result.success, true);
+  assert.equal(kicked, 0);
+  assert.equal(enqueued.length, 0);
+  assert.equal(replies.length, 1);
+  assert.match(replies[0].text, /正在 Codex Desktop 中执行/);
+  assert.match(replies[0].text, /没有发送，也不会排队/);
+});
+
 test("processLarkEvent enables console mode and routes unknown text through intent translator", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-intent-console-"));
   const replies = [];
@@ -208,9 +259,10 @@ test("processLarkEvent enables console mode and routes unknown text through inte
   const stored = await readIntentSession({ dataDir, event: { chatId: "oc_chat" }, config: ctx.config });
   assert.equal(stored.mode, "console");
   assert.equal(translated, 1);
-  assert.equal(cards.length, 1);
+  assert.equal(cards.length, 2);
   assert.match(JSON.stringify(cards[0].card), /自然语言控制台/);
-  assert.match(replies[0].text, /Codex Lark Remote status/);
+  assert.match(JSON.stringify(cards[1].card), /Lark Remote 状态/);
+  assert.deepEqual(replies, []);
 });
 
 test("processLarkEvent does not send a duplicate startup intro when opening console first", async () => {
@@ -702,7 +754,10 @@ test("processLarkEvent executes takeover from a card action", async () => {
     id: "019e0000-0000-7000-8000-000000000012",
     cwd: "/workspace",
     name: "Target A",
-    events: [{ type: "turn.completed", payload: {} }],
+    events: [
+      { type: "event_msg", payload: { type: "agent_message", phase: "final_answer", message: "上轮已经完成插件状态卡片优化。" } },
+      { type: "turn.completed", payload: {} },
+    ],
     mtime: new Date("2026-05-13T10:01:00Z"),
   });
   await prepareTakeoverScope({ dataDir, codexHome, cwd: "/workspace" });
@@ -710,6 +765,7 @@ test("processLarkEvent executes takeover from a card action", async () => {
   process.env.CODEX_HOME = codexHome;
   const replies = [];
   let keepAwakeStarted = 0;
+  const temporaryObservations = [];
   const ctx = {
     config: {
       dataDir,
@@ -717,6 +773,7 @@ test("processLarkEvent executes takeover from a card action", async () => {
       takeover: { idleDebounceMs: 1 },
     },
     notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+    observer: { startTemporary: async (state) => temporaryObservations.push(state) },
     keepAwake: { start: () => { keepAwakeStarted += 1; } },
     queue: { enqueue: async (input) => ({ id: "rcmd_1", ...input }) },
     runner: { processAll: () => {} },
@@ -735,7 +792,10 @@ test("processLarkEvent executes takeover from a card action", async () => {
   }
 
   assert.equal(keepAwakeStarted, 1);
+  assert.equal(temporaryObservations.length, 0);
   assert.match(replies[0].text, /接管已生效/);
+  assert.match(replies[0].text, /上个任务同步/);
+  assert.match(replies[0].text, /上轮已经完成插件状态卡片优化/);
   assert.equal((await readIntentSession({ dataDir, event: { chatId: "oc_card" }, config: ctx.config })).mode, "handoff");
 });
 
@@ -861,6 +921,23 @@ test("processLarkEvent opens bridge stop confirmation from console card", async 
   assert.match(JSON.stringify(cards[0].card), /bridge_stop_execute/);
 });
 
+test("processLarkEvent refuses direct task mode when no session is taken over", async () => {
+  const replies = [];
+  await processLarkEvent(
+    {
+      config: {
+        dataDir: await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-no-handoff-mode-")),
+        lark: { allowedUsers: ["ou_allowed"] },
+      },
+      queue: { findByMessageId: async () => null },
+      notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+    },
+    textEvent({ text: "继续接管", userId: "ou_allowed" }),
+  );
+
+  assert.match(replies[0].text, /当前没有正在接管/);
+});
+
 test("processLarkEvent confirms before stopping the Feishu bridge", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-stop-bridge-"));
   const replies = [];
@@ -901,7 +978,7 @@ test("processLarkEvent confirms before stopping the Feishu bridge", async () => 
   assert.match(replies.at(-1).text, /正在关闭飞书连接/);
 });
 
-test("processLarkEvent queues normal messages for pending takeover before old handoff", async () => {
+test("processLarkEvent discards normal messages while takeover waits for a busy target", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-pending-before-handoff-"));
   const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-home-pending-before-handoff-"));
   const sessions = path.join(codexHome, "sessions", "2026", "05", "13");
@@ -925,6 +1002,7 @@ test("processLarkEvent queues normal messages for pending takeover before old ha
   process.env.CODEX_HOME = codexHome;
   const replies = [];
   const enqueued = [];
+  const temporaryObservations = [];
   const ctx = {
     config: {
       dataDir,
@@ -939,6 +1017,7 @@ test("processLarkEvent queues normal messages for pending takeover before old ha
       },
     },
     notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+    observer: { startTemporary: async (state) => temporaryObservations.push(state) },
     runner: { processAll: () => {} },
   };
 
@@ -960,10 +1039,140 @@ test("processLarkEvent queues normal messages for pending takeover before old ha
 
   const takeover = await readTakeover({ dataDir });
   assert.equal(takeover.state, "pending");
-  assert.equal(takeover.pendingInputs.length, 1);
-  assert.equal(takeover.pendingInputs[0].text, "这是给新目标的 pending 输入");
+  assert.equal(temporaryObservations.length, 1);
+  assert.equal(temporaryObservations[0].threadId, "019e0000-0000-7000-8000-000000000030");
+  assert.equal(temporaryObservations[0].mode, "takeover_pending_observe");
+  assert.deepEqual(takeover.pendingInputs, []);
   assert.equal(enqueued.length, 0);
-  assert.match(replies.at(-1).text, /已暂存这条消息/);
+  assert.match(replies.at(-1).text, /没有发送，也不会暂存/);
+});
+
+test("processLarkEvent cancels pending takeover without exiting the old handoff", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-pending-cancel-"));
+  const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-home-pending-cancel-"));
+  const sessions = path.join(codexHome, "sessions", "2026", "05", "13");
+  await fs.mkdir(sessions, { recursive: true });
+  await writeSession({
+    file: path.join(sessions, "rollout-2026-05-13T10-01-00-019e0000-0000-7000-8000-000000000040.jsonl"),
+    id: "019e0000-0000-7000-8000-000000000040",
+    cwd: "/workspace",
+    name: "Running new target",
+    events: [{ type: "event_msg", payload: { type: "agent_reasoning", message: "working" } }],
+    mtime: new Date(),
+  });
+  await activateHandoff({
+    dataDir,
+    threadId: "019e0000-0000-7000-8000-000000000041",
+    cwd: "/workspace",
+    activatedBy: "test",
+  });
+  await prepareTakeoverScope({ dataDir, codexHome, cwd: "/workspace" });
+  const originalCodexHome = process.env.CODEX_HOME;
+  process.env.CODEX_HOME = codexHome;
+  const replies = [];
+  const enqueued = [];
+  const temporaryStops = [];
+  const ctx = {
+    config: {
+      dataDir,
+      lark: { allowedUsers: ["ou_allowed"] },
+      takeover: { idleDebounceMs: 60_000 },
+    },
+    queue: {
+      findByMessageId: async () => null,
+      enqueue: async (input) => {
+        enqueued.push(input);
+        return { id: "rcmd_old", status: "pending", ...input };
+      },
+    },
+    notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+    observer: {
+      startTemporary: async () => {},
+      stopTemporary: async (match) => temporaryStops.push(match),
+    },
+    runner: { processAll: () => {} },
+  };
+
+  try {
+    await processLarkEvent(ctx, cardActionEvent({
+      action: "takeover_execute",
+      threadId: "019e0000-0000-7000-8000-000000000040",
+      userId: "ou_allowed",
+    }));
+    await processLarkEvent(ctx, textEvent({ text: "取消", userId: "ou_allowed", messageId: "om_cancel_pending" }));
+  } finally {
+    if (originalCodexHome === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = originalCodexHome;
+  }
+
+  assert.equal(await readTakeover({ dataDir }), null);
+  assert.equal((await readHandoff({ dataDir })).threadId, "019e0000-0000-7000-8000-000000000041");
+  assert.equal(enqueued.length, 0);
+  assert.equal(temporaryStops.length, 1);
+  assert.match(replies.at(-1).text, /已取消当前接管选择\/等待/);
+  assert.match(replies.at(-1).text, /原来的接管会话/);
+});
+
+test("processLarkEvent treats takeover off as exiting an active takeover", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-active-takeover-off-"));
+  const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-home-active-takeover-off-"));
+  const sessions = path.join(codexHome, "sessions", "2026", "05", "13");
+  await fs.mkdir(sessions, { recursive: true });
+  await writeSession({
+    file: path.join(sessions, "rollout-2026-05-13T10-01-00-019e0000-0000-7000-8000-000000000050.jsonl"),
+    id: "019e0000-0000-7000-8000-000000000050",
+    cwd: "/workspace",
+    name: "Idle target",
+    events: [{ type: "turn.completed", payload: {} }],
+    mtime: new Date("2026-05-13T10:01:00Z"),
+  });
+  await prepareTakeoverScope({ dataDir, codexHome, cwd: "/workspace" });
+  const originalCodexHome = process.env.CODEX_HOME;
+  process.env.CODEX_HOME = codexHome;
+  const replies = [];
+  let keepAwakeStopped = 0;
+  const ctx = {
+    config: {
+      dataDir,
+      lark: { allowedUsers: ["ou_allowed"] },
+      takeover: { idleDebounceMs: 1 },
+    },
+    queue: {
+      findByMessageId: async () => null,
+      enqueue: async (input) => ({ id: "rcmd_1", status: "pending", ...input }),
+      list: async () => [],
+      cancel: async () => null,
+    },
+    notifier: {
+      reply: async (messageId, text) => replies.push({ messageId, text }),
+      replyCard: async () => ({ ok: false }),
+    },
+    observer: { stopTemporary: async () => {} },
+    keepAwake: {
+      start: () => {},
+      stop: () => { keepAwakeStopped += 1; },
+    },
+    runner: { processAll: () => {} },
+  };
+
+  try {
+    await processLarkEvent(ctx, cardActionEvent({
+      action: "takeover_execute",
+      threadId: "019e0000-0000-7000-8000-000000000050",
+      userId: "ou_allowed",
+      messageId: "om_takeover",
+    }));
+    assert.equal((await readTakeover({ dataDir })).state, "active");
+    await processLarkEvent(ctx, textEvent({ text: "/codex takeover off", userId: "ou_allowed", messageId: "om_takeover_off" }));
+  } finally {
+    if (originalCodexHome === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = originalCodexHome;
+  }
+
+  assert.equal(await readTakeover({ dataDir }), null);
+  assert.equal(await readHandoff({ dataDir }), null);
+  assert.equal(keepAwakeStopped, 1);
+  assert.match(replies.at(-1).text, /Current takeover ended|接管已结束/);
 });
 
 test("processLarkEvent treats shell-looking text as chat input during handoff", async () => {

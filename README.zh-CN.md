@@ -85,7 +85,7 @@ npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plu
 如果要固定到当前审核版本：
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.4/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.5/plugins/codex-lark-remote --plugin
 ```
 
 安装后如果 Codex 插件列表没有立刻刷新，重启或刷新 Codex。
@@ -96,7 +96,7 @@ npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.4/
 不要填写仓库根目录：
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.2.4/plugins/codex-lark-remote
+https://github.com/GxFn/codex-lark-remote/tree/v0.2.5/plugins/codex-lark-remote
 ```
 
 如果 Codex 弹窗把来源、Git 引用、稀疏路径拆开填写，请这样填：
@@ -106,7 +106,7 @@ https://github.com/GxFn/codex-lark-remote/tree/v0.2.4/plugins/codex-lark-remote
 https://github.com/GxFn/codex-lark-remote.git
 
 Git 引用：
-v0.2.4
+v0.2.5
 
 稀疏路径：
 plugins/codex-lark-remote
@@ -124,7 +124,7 @@ marketplace，而不是单独添加这个插件，可以填写：
 https://github.com/GxFn/codex-lark-remote.git
 
 Git 引用：
-v0.2.4
+v0.2.5
 
 稀疏路径：
 留空
@@ -238,7 +238,8 @@ Mac 睡眠。关闭接管或停止 bridge 时，这个 keep-awake 进程会一�
 启动飞书接管的会话。这里基于 `~/.codex/sessions` 里的本机会话记录，不是 macOS
 窗口句柄枚举。点击“观察”进入只读串流，点击“接管”会先确认再执行 handoff。
 如果卡片不可用，可以回复 `1`、`2`、`3` 先选项目、再选会话，最后发送
-`takeover now`。仍显示为活跃的会话会等空闲后自动接管。
+`takeover now`。仍显示为活跃的会话会等空闲后自动接管；这期间飞书消息不会排队或暂存，
+请等接管生效提示出现后再发送。
 
 ## 观察其他 Codex 会话
 
@@ -275,11 +276,11 @@ Codex 原生 UI 弹窗。
 发回一条明确的飞书/Lark 提示：说明需要什么权限，以及你是必须回到 Mac 上的 Codex
 Desktop 批准，还是可以在飞书/Lark 里用文字明确授权后继续。
 
-## 执行中的补充引导
+## 忙碌会话
 
-如果 Codex 仍在执行时你又发了一条飞书/Lark 消息，插件不会尝试把文本热注入已经
-运行中的 Codex 进程。它会把这条消息保存为同一个 handoff 线程的补充引导，在飞书
-/Lark 里回复“已收到”，并在当前轮结束后立即作为下一轮继续执行。
+如果目标 Codex Desktop 会话仍在执行，Lark Remote 不会尝试把文本热注入已经运行中
+的 Codex 进程。这条飞书/Lark 消息不会发送，也不会排队或暂存；bridge 会回复忙碌
+提示，请等接管生效提示出现，或当前 Codex 轮次结束后再重新发送。
 
 ## Mac 保持唤醒
 

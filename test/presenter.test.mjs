@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   buildConsoleModeCard,
   buildBridgeStopConfirmCard,
+  buildBridgeStatusCard,
   buildHandoffDisabledCard,
   buildStartupIntroCard,
   buildTakeoverConfirmCard,
@@ -18,14 +19,19 @@ import {
   formatGuidanceQueued,
   formatHelp,
   formatHandoffDisabled,
+  formatHandoffModeUnavailable,
+  formatHandoffSessionBusy,
   formatObservationList,
   formatObservationStatus,
-  formatPendingTakeoverInputQueued,
+  formatPendingTakeoverInputDiscarded,
   formatProgress,
   formatStartupIntro,
   formatTask,
+  formatTakeoverActive,
+  formatTakeoverPreparationCancelled,
   formatTakeoverProjectList,
   formatTakeoverStatus,
+  formatTakeoverTimedOut,
   formatWhoami,
 } from "../plugins/codex-lark-remote/src/presenter.mjs";
 
@@ -182,6 +188,30 @@ test("formatBridgeStatus includes Mac keep-awake state", () => {
   assert.match(text, /Command display: off \(risky only\)/);
 });
 
+test("buildBridgeStatusCard explains mode and next message route", () => {
+  const card = buildBridgeStatusCard({
+    config: { lark: { transport: "websocket" } },
+    counts: { pending: 1 },
+    workerBusy: true,
+    larkWs: { enabled: true, connected: true },
+    takeover: {
+      state: "pending",
+      pendingInputs: [{ text: "继续" }],
+      target: {
+        threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
+        name: "Running target",
+        cwd: "/workspace/project",
+      },
+    },
+  });
+  const rendered = JSON.stringify(card);
+  assert.match(rendered, /Lark Remote 状态/);
+  assert.match(rendered, /接管等待中/);
+  assert.match(rendered, /等待目标会话空闲；当前不会发送或暂存/);
+  assert.match(rendered, /Running target/);
+  assert.match(rendered, /配置验证/);
+});
+
 test("formatObservationList and status describe read-only session streaming", () => {
   const list = formatObservationList([
     {
@@ -259,14 +289,51 @@ test("takeover fallback text is explicit and localized", () => {
     },
     pendingInputs: [{ text: "继续" }],
   });
-  const queued = formatPendingTakeoverInputQueued({ pendingInputs: [{ text: "继续" }] });
+  const discarded = formatPendingTakeoverInputDiscarded({}, { language: "zh" });
 
   assert.match(formatTakeoverStatus(null), /已关闭/);
   assert.match(status, /等待目标会话空闲/);
   assert.match(status, /线程: 019e0ffb/);
-  assert.match(queued, /已暂存这条消息/);
-  assert.match(queued, /待发送消息: 1/);
-  assert.doesNotMatch(`${status}\n${queued}`, /Queued|Pending messages|Target thread/);
+  assert.match(discarded, /没有发送，也不会暂存/);
+  assert.doesNotMatch(`${status}\n${discarded}`, /Queued|Pending messages|Target thread|待发送消息/);
+});
+
+test("formatHandoffSessionBusy explains that Lark input is discarded while desktop is active", () => {
+  const text = formatHandoffSessionBusy(
+    { threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2" },
+    { reason: "last event running" },
+  );
+
+  assert.match(text, /正在 Codex Desktop 中执行/);
+  assert.match(text, /没有发送，也不会排队/);
+  assert.match(text, /线程: 019e0ffb/);
+});
+
+test("formatTakeoverActive includes an idle session recap when available", () => {
+  const rendered = formatTakeoverActive(
+    { threadId: "019e0000-0000-7000-8000-000000000099" },
+    { recap: { finalMessage: "上个任务已经完成，并通过了 npm test。" } },
+  );
+
+  assert.match(rendered, /接管已生效/);
+  assert.match(rendered, /上个任务同步/);
+  assert.match(rendered, /上个任务已经完成/);
+});
+
+test("takeover cancellation and timeout messages separate preparation from active handoff", () => {
+  const handoff = { active: true, threadId: "019e0000-0000-7000-8000-000000000001" };
+  const takeover = {
+    state: "pending",
+    pendingInputs: [{ text: "继续" }],
+    target: { threadId: "019e0000-0000-7000-8000-000000000002" },
+  };
+
+  assert.match(formatHandoffModeUnavailable(), /当前没有正在接管/);
+  assert.match(formatTakeoverPreparationCancelled({ takeover, handoff }), /已取消当前接管选择\/等待/);
+  assert.match(formatTakeoverPreparationCancelled({ takeover, handoff }), /暂存的消息不会发送/);
+  assert.match(formatTakeoverPreparationCancelled({ takeover, handoff }), /原来的接管会话/);
+  assert.match(formatTakeoverTimedOut({ takeover, handoff }), /接管等待已超时/);
+  assert.match(formatTakeoverTimedOut({ takeover, handoff }), /已回到原来的接管会话/);
 });
 
 test("formatTask exposes the last notification delivery error", () => {

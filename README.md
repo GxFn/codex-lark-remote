@@ -95,7 +95,7 @@ npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plu
 To pin the exact reviewed release:
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.4/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.5/plugins/codex-lark-remote --plugin
 ```
 
 Then restart or refresh Codex if the plugin list does not update immediately.
@@ -106,7 +106,7 @@ If Codex asks for a GitHub target or direct artifact path, use the plugin bundle
 path, not the repository root:
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.2.4/plugins/codex-lark-remote
+https://github.com/GxFn/codex-lark-remote/tree/v0.2.5/plugins/codex-lark-remote
 ```
 
 If the Codex dialog separates source, ref, and sparse path, fill it like this:
@@ -116,7 +116,7 @@ Source:
 https://github.com/GxFn/codex-lark-remote.git
 
 Git ref:
-v0.2.4
+v0.2.5
 
 Sparse path:
 plugins/codex-lark-remote
@@ -134,7 +134,7 @@ Source:
 https://github.com/GxFn/codex-lark-remote.git
 
 Git ref:
-v0.2.4
+v0.2.5
 
 Sparse path:
 leave empty
@@ -274,7 +274,9 @@ not a macOS window enumeration. Then use **Observe** for read-only progress
 streaming or **Takeover** to confirm handoff. If cards are unavailable, reply
 with `1`, `2`, `3`, etc. to choose a project, then choose a session, then send
 `takeover now`. Active sessions enter pending takeover and attach after the
-current turn finishes.
+current turn finishes. Messages sent from Feishu/Lark while the selected Codex
+session is still busy are not queued; send them again after the takeover-active
+notice appears.
 
 ## Observe another Codex session
 
@@ -318,13 +320,12 @@ agent to send a clear Feishu/Lark message instead of waiting silently. The
 message explains what permission is needed and whether you must approve it in
 Codex Desktop on the Mac or can reply in Feishu/Lark with explicit text consent.
 
-## Mid-run guidance
+## Busy sessions
 
-If you send another Feishu/Lark message while Codex is still working, the plugin
-does not try to hot-inject text into the already running Codex process. Instead,
-it stores the message as supplemental guidance for the same handoff thread,
-acknowledges it in Feishu/Lark, and runs it as the next turn as soon as the
-current turn finishes.
+If the selected Codex Desktop session is still working, Lark Remote does not try
+to hot-inject text into that already running process. The Feishu/Lark message is
+not sent or queued; the bridge replies with a busy notice and asks you to resend
+after the takeover-active notice or after the current Codex turn finishes.
 
 ## Mac keep-awake
 

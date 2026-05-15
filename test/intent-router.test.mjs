@@ -120,6 +120,26 @@ test("console route recognizes common project and window phrases without transla
   );
 });
 
+test("pending takeover treats cancel as takeover-preparation control", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-intent-router-pending-"));
+  const event = { text: "取消", chatId: "oc_chat", chatIdHash: "c_chat", userIdHash: "u_user" };
+  await fs.writeFile(path.join(dataDir, "takeover.json"), `${JSON.stringify({
+    version: 1,
+    state: "pending",
+    target: { threadId: "thread-2", threadPath: "/tmp/session.jsonl" },
+    lark: { chatIdHash: "c_chat" },
+    pendingInputs: [],
+  }, null, 2)}\n`);
+
+  const action = await routeChatTextAction(
+    { config: { dataDir } },
+    event,
+    { kind: "task", taskText: event.text },
+  );
+
+  assert.deepEqual(action, { kind: "takeover_disable" });
+});
+
 test("intent clarify hides internal translator failures", () => {
   assert.deepEqual(
     intentToAction({ intent: "unknown", reason: "codex translator failed: Reading additional input from stdin..." }),

@@ -35,9 +35,11 @@ test("buildLarkSetupVerificationReport separates platform readiness from live ev
   assert.equal(report.checks.cardCallbackReceived, false);
   assert.match(formatSetupVerification(report), /事件配置 im\.message\.receive_v1: 已收到消息事件/);
   assert.match(formatSetupVerification(report), /回调配置 card\.action\.trigger: 等待卡片回调/);
-  assert.match(formatSetupVerification(report), /先回到 Codex 同意连接当前会话/);
+  assert.match(formatSetupVerification(report), /允许用户: 1 个/);
+  assert.match(formatSetupVerification(report), /回到 Codex 同意连接当前会话/);
   assert.match(formatSetupVerification(report), /连接生效后再给机器人发送 whoami/);
   assert.match(JSON.stringify(buildSetupVerificationCard(report)), /刷新验证/);
+  assert.match(JSON.stringify(buildSetupVerificationCard(report)), /允许用户 lark\.allowedUsers/);
 });
 
 test("verifyLarkSetup can start bridge and report websocket readiness without exposing secrets", async () => {
@@ -67,6 +69,6 @@ test("verifyLarkSetup can start bridge and report websocket readiness without ex
   assert.equal(report.ok, true);
   assert.equal(report.checks.webSocketConnected, true);
   assert.doesNotMatch(formatSetupVerification(report), /secret_value/);
-  assert.match(formatSetupVerification(report), /先去飞书后台做长连接配置验证/);
+  assert.match(formatSetupVerification(report), /推荐顺序：先在飞书后台验证长连接事件和卡片回调/);
   assert.match(formatSetupVerification(report), /同意连接当前会话/);
 });

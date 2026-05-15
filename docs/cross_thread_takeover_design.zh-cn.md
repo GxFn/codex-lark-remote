@@ -26,7 +26,7 @@
 1. A 正在同一个项目里执行任务。
 2. 用户在同一个项目里打开新的 Codex 对话 B。
 3. 用户在 B 里启动 Lark Remote，并在飞书/Lark 中看到可接管的 A。
-4. 如果 A 仍在执行，飞书/Lark 可以先进入 pending takeover 状态，接收补充输入，但不立即向 A 注入消息。
+4. 如果 A 仍在执行，飞书/Lark 可以先进入 pending takeover 状态，但不会接收、暂存或补发补充输入。
 5. 等 A 当前轮结束后，bridge 自动把 pending takeover 激活为 A 的 handoff。
 6. 激活后，飞书/Lark 的普通消息继续进入 A 的同一个 Codex 线程。
 
@@ -249,7 +249,7 @@ Commands:
 ```text
 Takeover pending for thread 12345678...
 A is still running. I will attach after its current turn finishes.
-Messages you send now will be held and delivered after takeover activates.
+Messages sent before takeover activates are not queued. Send them again after the takeover-active notice.
 ```
 
 如果选中的 A 已经 idle：
@@ -269,22 +269,13 @@ takeover 1 now
 
 ### A 正在运行时
 
-pending 期间，普通 Lark 消息有两种策略：
+pending 期间，普通 Lark 消息不再保存为待发送输入：
 
-- 默认策略：存入 pending input 队列，等 takeover active 后按顺序注入 A。
-- 保守策略：只保存最后一条补充输入，并提示用户“已更新待发送内容”。
+- 直接提示目标会话仍在运行。
+- 这条消息不会排队、不会暂存、不会在激活后补发。
+- 用户需要等 takeover active 提示出现后重新发送。
 
-推荐第一阶段采用“保存多条 pending input，但激活后合并成一条 prompt”：
-
-```text
-[Messages received while takeover was waiting for the current Codex turn to finish]
-
-1. ...
-2. ...
-3. ...
-```
-
-这样避免 A 当前轮结束后连续触发多次 `resume`，也更符合用户“补充引导”的意图。
+这样可以避免在桌面端当前轮还未结束时，把飞书侧意图和桌面侧正在执行的上下文混在一起。
 
 ### A 当前轮结束时
 
@@ -293,8 +284,7 @@ bridge 的 observer/takeover watcher 检测到 A idle 后：
 1. 写入 active handoff。
 2. 清除 takeover pending 状态。
 3. 启动 keep-awake。
-4. 如果有 pending input，创建一个 `thread_handoff` 队列任务。
-5. 回复 Lark：接管已激活，并说明是否已投递 pending input。
+4. 回复 Lark：接管已激活；用户之后发送的普通消息才会进入该会话。
 
 ## 状态模型
 
@@ -454,7 +444,7 @@ Codex session JSONL 是当前最稳妥的本地可读信号。第一阶段可以
 3. 卡片回调：`takeover_view` 只查看，`takeover_observe` 只观察，`takeover_confirm` 展示确认卡片，`takeover_execute` 才执行接管。
 4. selected takeover：`takeover now` 才执行接管；`observe` 则进入只读观察；`list` 返回候选列表。
 5. active handoff：沿用现有 `enqueueHandoffTask`。
-6. pending takeover：保存为 pending input，不执行 Codex。
+6. pending takeover：拒绝普通消息，不执行 Codex，也不保存为后续补发输入。
 7. 无 handoff/takeover：沿用现有 worktree task 或 rejected 策略。
 
 纯数字输入只在 takeover 选择上下文有效。没有选择上下文时，`1`、`2` 这类消息不应被当成接管命令，避免误操作。
@@ -464,15 +454,11 @@ Codex session JSONL 是当前最稳妥的本地可读信号。第一阶段可以
 pending takeover 时的普通消息回复：
 
 ```text
-Queued for pending takeover.
-Target thread is still running. This message will be delivered after takeover activates.
+The selected Codex session is still busy, so this Lark message was not sent or queued.
+Wait for the takeover-active notice, then send the message again.
 ```
 
-如果 pending input 过多，应做限制：
-
-- 最多 20 条。
-- 单条仍受 `policy.maxPromptChars` 或 takeover 专属上限控制。
-- 超出时回复提示，要求用户等激活后继续发。
+pending 期间不维护 input 队列，因此没有待发送消息数量或合并策略。
 
 ## MCP 工具改动
 
@@ -582,7 +568,6 @@ MCP 侧只准备 takeover scope，不替用户选择目标，也不默认接管�
 - `listTakeoverTargets`
 - `selectTakeoverTarget`
 - `executeTakeoverTarget`
-- `appendPendingTakeoverInput`
 - `activateTakeover`
 - `formatTakeoverStatus` 可以放在 presenter，也可以先放这里再迁移。
 
@@ -680,7 +665,7 @@ takeover: {
 可选优化：
 
 - 增加 `source: "takeover"`。
-- pending input 合并后的任务设置 `handoffGuidance: true`，便于 presenter 显示。
+- runner 启动 `resume` 前再次检测目标 session 是否仍在运行，避免接管激活后和桌面端新一轮执行竞争。
 
 ### 扩展 `src/presenter.mjs`
 
@@ -690,7 +675,8 @@ takeover: {
 - `formatTakeoverStatus`
 - `formatTakeoverPending`
 - `formatTakeoverActivated`
-- `formatPendingTakeoverInputQueued`
+- `formatPendingTakeoverInputDiscarded`
+- `formatHandoffSessionBusy`
 
 ### 扩展 `src/diagnostics.mjs`
 
@@ -698,7 +684,6 @@ takeover: {
 
 - 是否有 selecting/pending takeover。
 - target thread id、cwd、lastSeenStatus。
-- pending input 数量。
 - watcher 是否运行。
 
 ### 扩展 MCP 入口
@@ -729,7 +714,7 @@ takeover: {
 
 - target 状态为 running 时不创建 `thread_handoff` 任务。
 - pending watcher 必须等 idle debounce 成立后才激活。
-- queue 中若已有同 target 的 running handoff 任务，继续把输入当 supplemental guidance 排队。
+- 目标 Codex Desktop session 仍在执行时，Lark 输入直接拒绝并提示重发，不排队、不暂存。
 
 ### Lark 事件快速响应
 
@@ -757,7 +742,7 @@ takeover: {
 - thread 前缀唯一匹配和冲突处理。
 - running target 进入 pending。
 - idle target 直接激活 handoff。
-- pending input 合并。
+- pending 期间普通消息丢弃并提示。
 - pending timeout 和 cancel。
 
 扩展现有测试：
@@ -767,8 +752,8 @@ takeover: {
 | `test/lark.test.mjs` | `takeover`、纯数字选择、`takeover now` 命令分类。 |
 | `test/lark-ws.test.mjs` | 同时注册 `im.message.receive_v1` 和 `card.action.trigger`。 |
 | `test/notifier.test.mjs` | 回复交互卡片、更新共享卡片、Lark API 错误处理。 |
-| `test/bridge-server.test.mjs` | takeover route、数字选项路由、卡片回调路由、selected 后执行接管、pending input。 |
-| `test/runner.test.mjs` | takeover 激活后复用 handoff args，不改变 resume 参数。 |
+| `test/bridge-server.test.mjs` | takeover route、数字选项路由、卡片回调路由、selected 后执行接管、pending 时丢弃输入。 |
+| `test/runner.test.mjs` | takeover 激活后复用 handoff args，不改变 resume 参数；resume 前检测桌面端忙碌并丢弃。 |
 | `test/diagnostics.test.mjs` | takeover 状态诊断。 |
 | `test/presenter.test.mjs` | takeover 列表、pending、active 文案。 |
 | `test/plugin-layout.test.mjs` | MCP 工具声明和 skill/README 文档同步。 |
@@ -789,11 +774,11 @@ takeover: {
 - 在 selected 窗口中输入 `takeover now` 或点击确认卡片，idle 目标立即激活 handoff。
 - running 目标先只显示“当前仍在运行，可进入 pending”或进入 pending 但不自动激活。
 
-### Phase 2：pending input 队列
+### Phase 2：pending takeover 输入保护
 
 - running 目标进入 pending。
-- pending 期间普通 Lark 消息保存为 pending input。
-- `takeover status` 展示 target 和 pending input 数量。
+- pending 期间普通 Lark 消息不保存为 pending input，直接提示当前目标忙碌并丢弃。
+- `takeover status` 展示 target 和等待状态。
 - `takeover off` 清理状态。
 
 ### Phase 3：idle 检测和自动激活
@@ -801,7 +786,7 @@ takeover: {
 - 增加 takeover watcher。
 - 基于 session JSONL 和 idle debounce 判断 A 当前轮结束。
 - 自动激活 handoff。
-- 合并 pending input 并创建第一条 `thread_handoff` 任务。
+- 激活后才接收新的普通 Lark 消息并创建 `thread_handoff` 任务。
 
 ### Phase 4：体验和稳健性
 
@@ -845,9 +830,8 @@ flowchart TD
 
 1. Codex session JSONL 的 running/idle 事件是否在所有版本中稳定。
 2. 是否需要在 Lark 候选列表中隐藏完整 cwd，只显示仓库名。
-3. pending 期间的多条输入是合并成一条，还是逐条创建 handoff 任务。
-4. 如果 A 当前轮失败但退出为 idle，是否自动激活并投递 pending input，还是先提示用户确认。
-5. 如果 A 被用户在 Codex Desktop 手动关闭，watcher 如何给出清晰超时提示。
+3. 如果 A 当前轮失败但退出为 idle，是否自动激活，还是先提示用户确认。
+4. 如果 A 被用户在 Codex Desktop 手动关闭，watcher 如何给出清晰超时提示。
 
 ## 推荐结论
 

@@ -5,9 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { readHandoff } from "../plugins/codex-lark-remote/src/handoff.mjs";
 import {
-  appendPendingTakeoverInput,
   activatePendingTakeoverIfIdle,
-  buildPendingTakeoverPrompt,
   clearPendingTakeoverInputs,
   clearTakeover,
   detectSessionStatus,
@@ -134,7 +132,7 @@ test("executing an idle takeover target activates handoff", async () => {
   assert.equal((await readHandoff({ dataDir })).threadId, "019e0000-0000-7000-8000-000000000004");
 });
 
-test("executing a running takeover target enters pending and queues input", async () => {
+test("executing a running takeover target enters pending without input queueing", async () => {
   const { dataDir, codexHome, sessions } = await fixture();
   await writeSession({
     file: path.join(sessions, "rollout-2026-05-13T10-01-00-019e0000-0000-7000-8000-000000000005.jsonl"),
@@ -148,13 +146,11 @@ test("executing a running takeover target enters pending and queues input", asyn
   await refreshTakeoverSelection({ dataDir, codexHome, cwd: "/workspace/project", idleDebounceMs: 60_000 });
 
   const executed = await executeTakeoverTarget({ dataDir, codexHome, selector: "1", idleDebounceMs: 60_000 });
-  const queued = await appendPendingTakeoverInput({ dataDir, text: "继续补测试", messageId: "om_2" });
 
   assert.equal(executed.pending, true);
   assert.match((await readTakeover({ dataDir })).pendingAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal((await readTakeover({ dataDir })).state, "pending");
-  assert.equal(queued.pendingInputs.length, 1);
-  assert.match(buildPendingTakeoverPrompt(queued.pendingInputs), /继续补测试/);
+  assert.deepEqual((await readTakeover({ dataDir })).pendingInputs, []);
 
   const cleared = await clearPendingTakeoverInputs({ dataDir });
   assert.deepEqual(cleared.pendingInputs, []);
