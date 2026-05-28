@@ -245,6 +245,10 @@ Bridge HTTP API 主要包括：
 }
 ```
 
+`lark.domain` 用于选择开放平台域名；未配置时默认 `feishu`。`feishu` 对应 `https://open.feishu.cn`，
+`lark` 对应 `https://open.larksuite.com`。REST OpenAPI 和 WebSocket SDK
+必须使用同一域名，且 App ID/App Secret 必须来自对应平台。
+
 ## Handoff 主流程
 
 ### 从 Codex 里启动接管

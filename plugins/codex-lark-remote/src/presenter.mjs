@@ -404,6 +404,7 @@ export function formatSetupVerification(report = {}) {
   return [
     "飞书配置验证",
     "",
+    `开放平台域名: ${report.lark?.domainLabel || report.lark?.baseUrl || "-"}`,
     `App 凭证: ${formatSetupCheck(checks.appCredentialsConfigured, "已配置", "未配置")}${formatAuthSuffix(checks.appCredentialsValid, report.auth)}`,
     `Bridge: ${checks.bridgeRunning ? "运行中" : "未启动"}`,
     `WebSocket 长连接: ${formatSetupCheck(checks.webSocketConnected, "已连接", larkWs.message || "未连接")}`,
@@ -428,6 +429,7 @@ export function buildSetupVerificationCard(report = {}) {
         tag: "markdown",
         content: [
           setupVerificationLine("App 凭证", report.checks?.appCredentialsConfigured, report.checks?.appCredentialsValid === false ? "鉴权失败" : "已配置", "未配置"),
+          `开放平台域名：${report.lark?.domainLabel || report.lark?.baseUrl || "-"}`,
           setupVerificationLine("Bridge", report.checks?.bridgeRunning, "运行中", "未启动"),
           setupVerificationLine("WebSocket 长连接", report.checks?.webSocketConnected, "已连接", report.bridge?.larkWs?.message || "未连接"),
           setupVerificationLine("事件配置 im.message.receive_v1", report.checks?.messageEventReceived, `已收到消息事件${formatSeenAt(report.bridge?.larkWs?.lastMessageEventAt)}`, "等待飞书消息事件"),

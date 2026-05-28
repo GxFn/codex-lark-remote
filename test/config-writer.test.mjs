@@ -11,6 +11,7 @@ test("updateRuntimeConfig writes config and returns a sanitized summary", async 
   const result = await updateRuntimeConfig({
     dataDir,
     lark: {
+      domain: "lark",
       appId: "cli_123456789",
       appSecret: "secret_value",
       verificationToken: "token_value",
@@ -42,6 +43,7 @@ test("updateRuntimeConfig writes config and returns a sanitized summary", async 
   });
 
   const saved = JSON.parse(await fs.readFile(result.configPath, "utf8"));
+  assert.equal(saved.lark.domain, "lark");
   assert.equal(saved.lark.appSecret, "secret_value");
   assert.equal(saved.takeover.projectLimit, 30);
   assert.equal(saved.takeover.selectionTtlMs, 120000);
@@ -50,6 +52,8 @@ test("updateRuntimeConfig writes config and returns a sanitized summary", async 
   assert.equal(saved.intent.mode, "hybrid");
   assert.equal(saved.intent.translator.timeoutMs, 9000);
   assert.equal(result.summary.lark.appIdPrefix, "cli_1234...");
+  assert.equal(result.summary.lark.domainKey, "lark");
+  assert.equal(result.summary.lark.baseUrl, "https://open.larksuite.com");
   assert.equal(result.summary.lark.appSecretConfigured, true);
   assert.equal(result.summary.lark.allowedUsersCount, 1);
   assert.equal(result.summary.startup.receiveIdConfigured, true);
@@ -57,6 +61,7 @@ test("updateRuntimeConfig writes config and returns a sanitized summary", async 
 
   const text = formatConfigUpdate(result);
   assert.match(text, /configuration saved/);
+  assert.match(text, /Lark international/);
   assert.match(text, /Startup intro target: configured/);
   assert.match(text, /codex_lark_verify_setup/);
   assert.match(text, /控制台 or console/);

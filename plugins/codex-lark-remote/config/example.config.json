@@ -1,5 +1,6 @@
 {
   "lark": {
+    "domain": "feishu",
     "appId": "cli_xxx",
     "appSecret": "xxx",
     "verificationToken": "",

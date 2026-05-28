@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { configFilePath, ensureDir, resolveDataDir } from "./config.mjs";
 import { configuredAllowedUsers } from "./lark.mjs";
+import { formatLarkDomain, larkDomainInfo } from "./lark-domain.mjs";
 
 export async function updateRuntimeConfig(input = {}) {
   const dataDir = resolveDataDir(input.dataDir);
@@ -26,6 +27,7 @@ export function formatConfigUpdate(result) {
   return [
     "Codex Lark Remote configuration saved",
     `Config: ${result.configPath}`,
+    `Domain: ${summary.lark.domain}`,
     `Lark app: ${summary.lark.appIdPrefix || "-"}`,
     `App secret: ${summary.lark.appSecretConfigured ? "configured" : "missing"}`,
     `Verification token: ${summary.lark.verificationTokenConfigured ? "configured" : "missing"}`,
@@ -35,6 +37,7 @@ export function formatConfigUpdate(result) {
     "",
     "Next steps:",
     "- Run codex_lark_check_auth to verify App ID/App Secret.",
+    "- Make sure the App ID/App Secret were copied from the same Feishu/Lark Open Platform domain shown above.",
     "- Run codex_lark_verify_setup to start/reuse the bridge and confirm WebSocket is connected.",
     "- In Feishu Event Configuration, choose long connection, add im.message.receive_v1, then click verify/save.",
     "- In Feishu Callback Configuration, choose long connection, add card.action.trigger, then click verify/save.",
@@ -89,10 +92,14 @@ async function readJsonIfExists(filePath) {
 
 function summarizeConfig(config) {
   const allowedUsers = configuredAllowedUsers(config);
+  const domain = larkDomainInfo(config);
   return {
     defaultRepo: config.defaultRepo || "",
     repoKeys: Object.keys(config.repos || {}),
     lark: {
+      domain: formatLarkDomain(config),
+      domainKey: domain.key,
+      baseUrl: domain.baseUrl,
       appIdPrefix: config.lark?.appId ? `${String(config.lark.appId).slice(0, 8)}...` : "",
       appSecretConfigured: Boolean(config.lark?.appSecret),
       verificationTokenConfigured: Boolean(config.lark?.verificationToken),

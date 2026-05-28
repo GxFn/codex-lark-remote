@@ -43,11 +43,13 @@ When the user says "start this plugin" or similar:
    plugin's built-in keep-awake process unless `handoff.keepAwake` is disabled.
 5. If Feishu/Lark `appId` or `appSecret` is missing, ask for the missing values
    and give the short platform path: create an internal/custom app in
-   Feishu/Lark Open Platform, enable bot capability, copy App ID/App Secret from
+   the matching Feishu/Lark Open Platform, enable bot capability, copy App ID/App Secret from
    Credentials & Basic Info, choose long connection/WebSocket in Event
    Configuration for `im.message.receive_v1`, choose long connection/WebSocket
    in Callback Configuration for `card.action.trigger`, then publish/enable the
-   app. Tell the user to copy App ID/App Secret to the clipboard and reply
+   app. For Feishu China use `lark.domain: "feishu"` or omit it; for
+   international Lark use `lark.domain: "lark"`. Credentials created on one
+   Open Platform domain do not work on the other. Tell the user to copy App ID/App Secret to the clipboard and reply
    naturally with `已复制` or `copied`. When the user says they copied the
    values, read the clipboard with the local clipboard command if available,
    parse `appId` and `appSecret`, and call `codex_lark_configure`; do not echo

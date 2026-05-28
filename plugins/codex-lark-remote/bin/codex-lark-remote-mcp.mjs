@@ -25,6 +25,14 @@ const tools = [
         lark: {
           type: "object",
           properties: {
+            domain: {
+              type: "string",
+              description: "Feishu/Lark OpenAPI domain. Use 'feishu' for https://open.feishu.cn or 'lark' for https://open.larksuite.com. A full custom https URL is also accepted.",
+            },
+            baseUrl: {
+              type: "string",
+              description: "Advanced: explicit OpenAPI base URL. Overrides domain.",
+            },
             appId: { type: "string" },
             appSecret: { type: "string" },
             verificationToken: { type: "string" },

@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 import { nowIso } from "./config.mjs";
+import { larkDomainInfo, larkSdkDomain } from "./lark-domain.mjs";
 
 export class LarkWebSocketReceiver {
   constructor({ config = {}, onEvent, sdkLoader = loadLarkSdk, logger = console } = {}) {
@@ -69,6 +70,7 @@ export class LarkWebSocketReceiver {
       this.client = new lark.WSClient({
         appId,
         appSecret,
+        domain: larkSdkDomain(lark, this.config.lark || {}),
         loggerLevel: this.config.lark?.websocketLoggerLevel ?? lark.LoggerLevel?.error ?? 0,
         autoReconnect: true,
       });
@@ -117,6 +119,7 @@ export class LarkWebSocketReceiver {
       lastError: this.lastError,
       eventCounts: { ...this.eventCounts },
       registeredEvents: ["im.message.receive_v1", "card.action.trigger"],
+      domain: larkDomainInfo(this.config.lark || {}),
     };
   }
 }

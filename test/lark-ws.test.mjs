@@ -24,6 +24,7 @@ test("LarkWebSocketReceiver starts SDK client and forwards message events", asyn
   const status = await receiver.start();
   assert.equal(status.connected, true);
   assert.equal(fakeSdk.WSClient.last.options.appId, "cli_test");
+  assert.equal(fakeSdk.WSClient.last.options.domain, "FEISHU_DOMAIN");
 
   await fakeSdk.EventDispatcher.last.handlers["im.message.receive_v1"]({ event: { message: { message_id: "om_1" } } });
   await fakeSdk.EventDispatcher.last.handlers["card.action.trigger"]({ event: { action: { value: { action: "takeover_view" } } } });
@@ -39,6 +40,23 @@ test("LarkWebSocketReceiver starts SDK client and forwards message events", asyn
 
   receiver.stop();
   assert.equal(receiver.status().connected, false);
+});
+
+test("LarkWebSocketReceiver passes the international domain to the SDK client", async () => {
+  const fakeSdk = createFakeLarkSdk();
+  const receiver = new LarkWebSocketReceiver({
+    config: { lark: { appId: "cli_test", appSecret: "secret", domain: "lark" } },
+    onEvent: () => {},
+    sdkLoader: async () => fakeSdk,
+    logger: { error() {} },
+  });
+
+  const status = await receiver.start();
+
+  assert.equal(status.connected, true);
+  assert.equal(status.domain.key, "lark");
+  assert.equal(status.domain.baseUrl, "https://open.larksuite.com");
+  assert.equal(fakeSdk.WSClient.last.options.domain, "LARK_DOMAIN");
 });
 
 test("LarkWebSocketReceiver reports missing credentials without throwing", async () => {
@@ -100,5 +118,5 @@ function createFakeLarkSdk() {
     }
   }
 
-  return { EventDispatcher, WSClient, LoggerLevel: { info: 2 } };
+  return { EventDispatcher, WSClient, LoggerLevel: { info: 2 }, Domain: { Feishu: "FEISHU_DOMAIN", Lark: "LARK_DOMAIN" } };
 }

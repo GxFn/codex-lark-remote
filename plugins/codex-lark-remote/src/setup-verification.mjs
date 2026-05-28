@@ -1,6 +1,7 @@
 import { loadConfig } from "./config.mjs";
 import { larkWebSocketEnabled } from "./lark-ws.mjs";
 import { configuredAllowedUsers } from "./lark.mjs";
+import { formatLarkDomain, larkDomainInfo } from "./lark-domain.mjs";
 import { LarkNotifier } from "./notifier.mjs";
 import { hasLarkAppCredentials } from "./setup-guide.mjs";
 import { bridgeStatus, startBridgeProcess } from "./supervisor.mjs";
@@ -35,6 +36,7 @@ export function buildLarkSetupVerificationReport({ config = {}, status = {}, aut
   const messageEventReceived = Boolean(larkWs?.lastMessageEventAt);
   const cardCallbackReceived = Boolean(larkWs?.lastCardActionAt);
   const registeredEvents = Array.isArray(larkWs?.registeredEvents) ? larkWs.registeredEvents : [];
+  const domain = larkDomainInfo(config);
 
   const checks = {
     appCredentialsConfigured,
@@ -54,6 +56,9 @@ export function buildLarkSetupVerificationReport({ config = {}, status = {}, aut
     checks,
     auth: sanitizeAuth(auth),
     lark: {
+      domain: domain.key,
+      baseUrl: domain.baseUrl,
+      domainLabel: formatLarkDomain(config),
       transport: config.lark?.transport || "websocket",
       appIdPrefix: config.lark?.appId ? `${config.lark.appId.slice(0, 8)}...` : "",
       allowedUsersCount: configuredAllowedUsers(config).length,
@@ -80,7 +85,7 @@ function buildVerificationNextActions({ checks, auth, larkWs }) {
     return actions;
   }
   if (auth && !auth.ok) {
-    actions.push("App ID/App Secret 鉴权失败，请重新从“凭证与基础信息”复制后保存。");
+    actions.push("App ID/App Secret 鉴权失败，请确认凭证来自当前配置的飞书/Lark 开放平台域名，然后重新从“凭证与基础信息”复制后保存。");
     return actions;
   }
   if (!checks.bridgeRunning) {
@@ -88,7 +93,7 @@ function buildVerificationNextActions({ checks, auth, larkWs }) {
     return actions;
   }
   if (checks.webSocketEnabled && !checks.webSocketConnected) {
-    actions.push(`长连接还没连上：${larkWs?.message || "not connected"}。保持本机网络可访问 open.feishu.cn 后重试。`);
+    actions.push(`长连接还没连上：${larkWs?.message || "not connected"}。保持本机网络可访问当前配置的飞书/Lark 开放平台域名后重试。`);
     return actions;
   }
   if (checks.webSocketConnected) {

@@ -1,90 +1,58 @@
+<div align="center">
+
 # Lark Remote
 
-Control and take over local Codex sessions from Feishu/Lark.
+Control, observe, and take over local Codex sessions from Feishu/Lark.
 
-Chinese version: [README.zh-CN.md](README.zh-CN.md)
+[![Codex Marketplace](https://img.shields.io/badge/Codex%20Marketplace-codex--lark--remote-blue?style=flat-square)](https://www.codex-marketplace.com/plugins/codex-lark-remote)
+[![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square)](https://nodejs.org)
 
-Marketplace page: [codex-lark-remote](https://www.codex-marketplace.com/plugins/codex-lark-remote)
+[中文](README.zh-CN.md)
 
-This repository is the `gxfn` Codex plugin marketplace. The installable plugin
-bundle lives in [`plugins/codex-lark-remote/`](plugins/codex-lark-remote/).
-The repository root keeps a full README so first-time users can understand the
-product before opening the bundled plugin docs.
+</div>
 
-Bundled plugin docs:
+---
 
-- [English plugin README](plugins/codex-lark-remote/README.md)
-- [Chinese plugin README](plugins/codex-lark-remote/README.zh-CN.md)
-- [Technical architecture guide (Chinese)](docs/technical_architecture.zh-cn.md)
-- [Cross-thread takeover design (Chinese)](docs/cross_thread_takeover_design.zh-cn.md)
-- [Feishu natural-language intent translator design (Chinese)](docs/intent_translator_design.zh-cn.md)
+- [Why](#why) - [Install](#install) - [Getting Started](#getting-started) - [Configure Feishu/Lark](#configure-feishulark) - [Start With The Console](#start-with-the-console) - [Start From Codex](#start-from-codex) - [How It Works](#how-it-works) - [Behavior And Boundaries](#behavior-and-boundaries) - [Repository Layout](#repository-layout) - [Development](#development)
 
-## Overview
+## Why
 
-Lark Remote connects Feishu/Lark to local Codex sessions on your Mac. Start the
-local bridge from Codex, then use Feishu/Lark as a control console to choose a
-project, inspect sessions, observe progress, or take over a selected session.
+Codex is strongest when it can work inside your local project, but you are not
+always sitting at the Mac where Codex Desktop is running. Lark Remote bridges
+that gap: Codex keeps running locally, while Feishu/Lark becomes the lightweight
+remote control surface.
 
-The default experience is intentionally narrow:
-
-- Start the bridge from a trusted Codex conversation.
-- Use the Feishu/Lark console as the main entry point.
-- Choose a local Codex project and session.
-- Observe read-only progress or take over that session.
-- After takeover, send normal messages to the selected Codex session.
-
-The Codex conversation that starts the bridge can be attached as the first
-target, but the plugin is not limited to that one conversation. Target selection
-is controlled from Feishu/Lark after the bridge is connected.
-
-## Start With The Console
-
-The Feishu/Lark side has one main entry point: the natural-language console.
-After the bridge is connected, send `console` or click the console button on
-the startup card.
-
-Console display language is bound per Feishu/Lark chat. Enter with English to
-keep later console cards in English; enter with Chinese to keep them in Chinese.
-Sending a control phrase in the other language switches that chat's later
-display language.
-
-In the console, use short phrases:
+The default product shape is narrow on purpose:
 
 ```text
-console
-project list
-session list
-open project 1
-observe session 2
-takeover 1
+Codex Desktop session
+   |
+   v
+Local Lark Remote bridge
+   |
+   v
+Feishu/Lark bot and control console
+   |
+   v
+Observe, choose, or take over local Codex sessions
 ```
 
-The same controls also work in Chinese, such as `控制台`, `项目列表`,
-`会话列表`, `进入项目 1`, `观察会话 2`, and `接管 1`.
+The bridge is local-first. Existing Codex chat history is not sent to
+Feishu/Lark during startup. Feishu/Lark users must be allowed before
+project/session takeover is available, and native Codex permission dialogs stay
+on the Mac.
 
-When you take over a Codex session, the chat switches to direct task mode.
-Ordinary Feishu/Lark messages are then sent straight to that Codex session as
-new tasks or follow-up instructions. They no longer go through project/session
-intent routing.
-
-To temporarily return to the console, say `console` or `jump out of handoff`.
-To end the current takeover but keep the Feishu/Lark bridge connected, say
-`handoff off` or `exit handoff`. To stop the local bridge and disconnect
-Feishu/Lark, say `close Lark connection`; the bot asks for confirmation first.
-
-## Daily Flow
-
-1. Install the plugin and configure the Feishu/Lark app once.
-2. In Codex, start Lark Remote to connect the local bridge.
-3. In Feishu/Lark, enter the console and choose a project/session.
-4. Take over the session, then send normal coding requests.
-5. Use `console` when you need to choose another project or session.
+This repository is the `gxfn` Codex plugin marketplace source. The installable
+plugin bundle lives in [`plugins/codex-lark-remote/`](plugins/codex-lark-remote/).
+The root README is the full first-time guide; bundled plugin docs live at
+[English plugin README](plugins/codex-lark-remote/README.md) and
+[Chinese plugin README](plugins/codex-lark-remote/README.zh-CN.md).
 
 ## Install
 
 First-time users do not need to clone this repository.
 
-### Option A: Codex Marketplace CLI
+### Codex Marketplace CLI
 
 Install the approved marketplace artifact:
 
@@ -92,7 +60,7 @@ Install the approved marketplace artifact:
 npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plugin
 ```
 
-To pin the exact reviewed release:
+To pin the reviewed release:
 
 ```bash
 npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.5/plugins/codex-lark-remote --plugin
@@ -100,7 +68,7 @@ npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.5/
 
 Then restart or refresh Codex if the plugin list does not update immediately.
 
-### Option B: Codex Desktop GitHub install
+### Codex Desktop GitHub Install
 
 If Codex asks for a GitHub target or direct artifact path, use the plugin bundle
 path, not the repository root:
@@ -124,74 +92,61 @@ plugins/codex-lark-remote
 
 Enable `codex-lark-remote` from the plugin list after installation.
 
-### Option C: Add this repository as a marketplace
+### Marketplace Source
 
-This repository also includes `.agents/plugins/marketplace.json`. If you want to
-add the whole `gxfn` marketplace instead of the single plugin, use:
+This repository also includes `.agents/plugins/marketplace.json`. To add the
+whole `gxfn` marketplace instead of only this plugin, use the repository root
+with an empty sparse path. Use `main` only when you intentionally want
+unreleased changes.
 
-```text
-Source:
-https://github.com/GxFn/codex-lark-remote.git
+## Getting Started
 
-Git ref:
-v0.2.5
+The short successful path is:
 
-Sparse path:
-leave empty
-```
+1. Install and enable the plugin in Codex.
+2. Create a Feishu/Lark internal app and copy its App ID/App Secret.
+3. Tell Codex `copied` or `已复制`; Codex reads the clipboard and calls
+   `codex_lark_configure`.
+4. Let Codex run `codex_lark_check_auth` and `codex_lark_verify_setup`.
+5. Verify long-connection Event Configuration and Callback Configuration in the
+   Feishu/Lark Open Platform while the bridge is running.
+6. Return to Codex and explicitly approve connecting the current Codex
+   conversation to Lark Remote.
+7. Send `whoami` to the bot from Feishu/Lark, then add the returned `senderId`
+   to `lark.allowedUsers`.
+8. In Feishu/Lark, send `console`, choose a project/session, and use
+   `takeover 1` or the card buttons.
 
-Use `main` instead of a tag only if you intentionally want the latest unreleased
-changes.
+Daily use after setup is simpler: start Lark Remote from a trusted Codex
+conversation, open the Feishu/Lark console, choose a session, then send ordinary
+coding requests after takeover is active.
 
 ## Configure Feishu/Lark
 
-For first-time setup, use this path:
-
-1. Create the Feishu/Lark bot app.
-2. Copy App ID and App Secret to the clipboard.
-3. Return to Codex and say `copied` or `已复制`.
-4. Codex reads the clipboard, saves config, and runs `codex_lark_check_auth`.
-5. Codex runs `codex_lark_verify_setup` to start/reuse the bridge and confirm
-   that WebSocket is connected.
-6. In Feishu/Lark Open Platform, click verify/save on the Event Configuration
-   and Callback Configuration pages.
-7. Return to Codex and explicitly approve connecting this Codex conversation to
-   Lark Remote.
-8. After Codex confirms the connection is active, send `whoami` to the bot from
-   Feishu/Lark.
-9. Add the returned `senderId` to `lark.allowedUsers`, then use the console.
-
-Create the Feishu/Lark bot app:
+Create the bot app on the platform you want to connect:
 
 1. Open [Feishu Open Platform](https://open.feishu.cn/) or
    [Lark Open Platform](https://open.larksuite.com/).
-2. Create an internal/custom app.
-3. Enable the bot capability.
-4. In **Credentials & Basic Info**, copy **App ID** and **App Secret**.
-5. In **Event Configuration**, choose long connection/WebSocket and subscribe to
+2. Use `lark.domain: "feishu"` for Feishu China, which is the default.
+   Use `lark.domain: "lark"` for international Lark. App ID/App Secret must
+   come from the same Open Platform domain; Feishu and Lark credentials are not
+   interchangeable.
+3. Create an internal/custom app.
+4. Enable the bot capability.
+5. In **Credentials & Basic Info**, copy **App ID** and **App Secret**.
+6. In **Event Configuration**, choose long connection/WebSocket and subscribe to
    `im.message.receive_v1`.
-6. In **Callback Configuration**, choose long connection/WebSocket and subscribe
-   to `card.action.trigger`. Keep Codex Lark Remote bridge running when you
-   click Feishu/Lark's verify/save buttons.
-7. If you switch to webhook mode, configure
-   `/bridge/lark/event` as the callback URL and keep verification token /
-   encrypt key in sync.
-8. Add the message receive, send/reply, and card interaction callback
-   permissions requested by the platform, then publish or enable the app for
-   your tenant.
+7. In **Callback Configuration**, choose long connection/WebSocket and subscribe
+   to `card.action.trigger`. Keep the Lark Remote bridge running when you click
+   verify/save.
+8. Add the message receive, send/reply, and card interaction permissions
+   requested by the platform, then publish or enable the app for your tenant.
 
-`codex_lark_verify_setup` is mainly for first-time setup, reconfiguration, and
-troubleshooting. It reports whether credentials work, whether the bridge is
-running, whether WebSocket is connected, and whether the plugin has actually
-received `im.message.receive_v1` message events and `card.action.trigger` card
-callbacks. You do not need to run it repeatedly during normal use.
-
-Copy App ID and App Secret to the clipboard. If you do not know your sender id
-yet, leave `allowedUsers` empty for this first private setup. The clipboard can
-use this shape:
+Copy the credentials to the clipboard in this shape:
 
 ```text
 Feishu/Lark app:
+- domain: feishu
 - appId: cli_xxx
 - appSecret: xxx
 
@@ -205,39 +160,59 @@ Optional startup intro:
 - startup: { receiveId: "oc_xxx", receiveIdType: "chat_id", once: true }
 ```
 
-After copying it, return to Codex and say `copied` or `已复制`. Codex reads the
-clipboard, calls `codex_lark_configure`, then runs `codex_lark_check_auth` and
-`codex_lark_verify_setup`. Do not send App Secret to a Feishu/Lark group chat.
-After the Feishu/Lark Event Configuration and Callback Configuration pages are
-verified and published, return to Codex and explicitly approve connecting the
-current conversation.
+For international Lark, change `domain` to `lark` and use credentials created
+at `https://open.larksuite.com`.
 
-The plugin stores private runtime config in:
+Private runtime config is stored outside the repository:
 
 ```text
 ~/.codex-lark-remote/config.json
 ```
 
-Do not commit that file.
+Do not commit that file. For first private setup, `allowedUsers: []` is only a
+temporary discovery state. After `whoami` works, add the returned sender id
+before using full project/session takeover.
 
-After Codex confirms the current conversation is connected to Lark Remote, send
-`whoami` to the bot from Feishu/Lark, then paste the returned `senderId` back
-into Codex and ask it to update `lark.allowedUsers`. Project/session takeover
-stays blocked until `allowedUsers` is non-empty.
-The `whoami` reply includes an `allowedUsers: ["..."]` line you can paste back
-directly.
+`startup.receiveId` is optional. If configured, the bridge proactively sends a
+startup intro card to that chat. Without it, the first allowed Feishu/Lark
+message supplies the `chat_id`, receives the intro once, and becomes the
+remembered startup target.
 
-`startup.receiveId` is an optional proactive target. When configured, the bridge
-sends a startup intro card after the first successful Feishu/Lark
-connection or handoff activation. When it is not configured, the first allowed
-Feishu/Lark message supplies the current `chat_id`, receives the intro once,
-and becomes the default target for later bridge starts. If card delivery fails,
-the bridge falls back to a text intro. The sent marker and last remembered chat
-are stored in `~/.codex-lark-remote/startup-notice.json`; set `startup.once` to
-`false` while debugging if you want the intro every time.
+## Start With The Console
 
-When `appId` or `appSecret` is missing, the plugin does not start the bridge and
-does not attach the Codex conversation. It returns setup guidance instead.
+The Feishu/Lark side has one main entry point: the natural-language console.
+After the bridge is connected, send `console` or click the console button on the
+startup card.
+
+Console display language is bound per Feishu/Lark chat. Enter with English to
+keep later console cards in English; enter with Chinese to keep them in Chinese.
+Sending a control phrase in the other language switches that chat's later
+display language.
+
+Useful console phrases:
+
+```text
+console
+project list
+session list
+enter project 1
+observe session 2
+takeover 1
+status
+whoami
+commands on
+commands off
+handoff off
+close Lark connection
+```
+
+The same controls also work in Chinese: `控制台`, `项目列表`, `会话列表`,
+`进入项目 1`, `观察会话 2`, `接管 1`, `状态`, and `关闭飞书连接`.
+
+After takeover, the chat switches to direct task mode. Ordinary Feishu/Lark
+messages go straight to the selected Codex session as new tasks or follow-up
+instructions. They no longer go through project/session intent routing until you
+return to the console or exit handoff.
 
 ## Start From Codex
 
@@ -249,134 +224,84 @@ Start codex-lark-remote.
 
 Codex asks for explicit consent before storing local routing state for this
 thread in the local bridge. Existing chat history is not sent to Feishu/Lark.
-After you confirm, the plugin starts the bridge and opens the Feishu/Lark
+After you confirm, the plugin starts or reuses the bridge and opens the
+Feishu/Lark control path.
+
+When a Codex thread is attached, handoff uses the exact thread id or session
+path supplied by Codex. It does not guess the nearest conversation by workspace
+path. Feishu/Lark can later choose another allowed local session from the
 console.
 
-When a specific Codex thread is attached, handoff is strict about that
-session/window. The plugin uses the exact thread id or session path supplied by
-Codex when the tool is called. Feishu/Lark can later choose another allowed
-project/session from the console.
-
 On macOS, the bridge starts `caffeinate -dimsu` while handoff is active so the
-Mac can turn the display off without going to sleep. It stops that keep-awake
-process when handoff is turned off or the bridge stops.
+Mac can keep working with the display off. Set `handoff.keepAwake` to `false`
+in `~/.codex-lark-remote/config.json` if you prefer to manage sleep manually.
 
-## Take over Codex sessions from Feishu/Lark
+## How It Works
 
-Feishu/Lark controls target selection with `takeover` or `windows`.
-Full-project takeover requires `lark.allowedUsers`; if the
-allowlist is empty, the bot refuses to list projects or execute takeover.
+### Local Bridge
 
-The bot first replies with a project list from local Codex session records.
-Choose a project to open every Codex session/window in that project, including
-the session that started takeover. This is based on `~/.codex/sessions`; it is
-not a macOS window enumeration. Then use **Observe** for read-only progress
-streaming or **Takeover** to confirm handoff. If cards are unavailable, reply
-with `1`, `2`, `3`, etc. to choose a project, then choose a session, then send
-`takeover now`. Active sessions enter pending takeover and attach after the
-current turn finishes. Messages sent from Feishu/Lark while the selected Codex
-session is still busy are not queued; send them again after the takeover-active
-notice appears.
+The plugin MCP server runs inside Codex and starts a separate local bridge
+process. The bridge owns Feishu/Lark WebSocket delivery, event parsing, queue
+state, startup notices, observation streams, and handoff routing.
 
-## Observe another Codex session
+### Target Selection
 
-Observation is read-only and separate from handoff. Use `observe` to list
-observable Codex sessions, then `observe <number>` or
-`observe <thread-prefix>` to stream progress from the selected session
-into Feishu/Lark. Messages you send in Feishu/Lark are not routed into the
-observed session. Use `observe off` to stop that stream.
+Feishu/Lark controls target selection with `console`, `windows`, `project list`,
+and `takeover`. The bot first lists local Codex projects from session records,
+then lists sessions/windows inside the chosen project. These are Codex session
+records, not macOS window handles.
 
-## Output behavior
+### Observation And Takeover
 
-The Feishu/Lark replies are optimized for remote coding:
+Observation is read-only. Use `observe`, `observe <number>`, and `observe off`
+to stream progress from another Codex session without routing Feishu/Lark input
+into that session.
+
+Takeover is write-capable after confirmation. Full-project takeover requires a
+non-empty `lark.allowedUsers` allowlist. Active sessions enter pending takeover
+and attach only after the selected Codex turn becomes idle.
+
+## Behavior And Boundaries
+
+Remote replies are optimized for coding in chat:
 
 - Final Codex answers are sent back as normal text.
-- Long answers are split into multiple Feishu/Lark messages instead of being
-  truncated.
-- Progress replies do not include internal task ids by default.
+- Long answers are split across multiple Feishu/Lark messages.
+- Progress replies hide internal task ids by default.
 - Normal shell commands and `Output:` are hidden by default.
-- Use `commands on` or say "show commands" to enable command display.
-  Use `commands off` to hide them again.
-- Potentially risky commands are always shown with a `Warning:` line, even when
-  normal command display is off.
-- When command display is on, command `Output:` is still limited to one
-  high-signal line with line/character counts when more content was omitted.
-- Source inspection output from commands such as `cat`, `nl`, `sed`, `grep`, and
-  ordinary `rg` searches is summarized instead of dumping large code blocks.
+- `commands on` shows command summaries; `commands off` hides them again.
+- Risky commands are always shown with a `Warning:` line.
+- Source inspection output from `cat`, `nl`, `sed`, `grep`, and normal `rg`
+  searches is summarized instead of pasted in full.
 - Secrets in command text are redacted before they are sent to Feishu/Lark.
 
-This keeps Feishu/Lark focused on what Codex did, what changed, and what needs
-attention.
+Lark Remote takes over the conversation stream, not the native Codex Desktop UI.
+Feishu/Lark cannot click permission dialogs, MCP approvals, sandbox-escalation
+prompts, network/install approvals, or other native Codex UI popups. When Codex
+hits one of those boundaries, it should send a clear Feishu/Lark message
+explaining what approval is needed and where to approve it.
 
-## Permission boundaries
+If the selected Codex Desktop session is already working, Lark Remote does not
+hot-inject text into the running process. The Feishu/Lark message is not queued;
+send it again after the takeover-active notice or after the current Codex turn
+finishes.
 
-Lark Remote takes over the conversation stream, not the native Codex
-Desktop UI. Feishu/Lark cannot click permission dialogs, MCP approvals,
-sandbox-escalation prompts, network/install approvals, or other native Codex UI
-popups.
+## Repository Layout
 
-When Codex hits one of those boundaries, the bridge and prompt contract ask the
-agent to send a clear Feishu/Lark message instead of waiting silently. The
-message explains what permission is needed and whether you must approve it in
-Codex Desktop on the Mac or can reply in Feishu/Lark with explicit text consent.
+| Path | Purpose |
+| --- | --- |
+| `plugins/codex-lark-remote/` | Installable Codex plugin bundle. |
+| `plugins/codex-lark-remote/bin/` | MCP server and local bridge entrypoints. |
+| `plugins/codex-lark-remote/src/` | Bridge, Feishu/Lark, handoff, observer, presenter, and runner modules. |
+| `plugins/codex-lark-remote/skills/` | Codex skill instructions bundled with the plugin. |
+| `plugins/codex-lark-remote/config/example.config.json` | Example private runtime config shape. |
+| `docs/technical_architecture.zh-cn.md` | Technical architecture guide. |
+| `docs/cross_thread_takeover_design.zh-cn.md` | Cross-thread takeover design. |
+| `docs/intent_translator_design.zh-cn.md` | Feishu natural-language intent translator design. |
+| `test/` | Node test suite. |
+| `scripts/sync-gxfn-marketplace.mjs` | Marketplace snapshot sync helper. |
 
-## Busy sessions
-
-If the selected Codex Desktop session is still working, Lark Remote does not try
-to hot-inject text into that already running process. The Feishu/Lark message is
-not sent or queued; the bridge replies with a busy notice and asks you to resend
-after the takeover-active notice or after the current Codex turn finishes.
-
-## Mac keep-awake
-
-The default handoff config keeps the Mac awake during remote takeover:
-
-```json
-{
-  "handoff": {
-    "keepAwake": true,
-    "keepAwakeCommand": "caffeinate",
-    "keepAwakeArgs": ["-dimsu"]
-  }
-}
-```
-
-Set `handoff.keepAwake` to `false` in `~/.codex-lark-remote/config.json` if you
-prefer to manage sleep manually. This feature only runs on macOS.
-
-## Troubleshooting
-
-If Codex says the `codex_lark_*` tools are not available, the plugin MCP server
-was not loaded in that conversation. Refresh or re-enable the plugin, then start
-a new Codex conversation. Normal startup should use the plugin MCP tools, not
-local shell script fallbacks.
-
-If `status` shows `websocket disabled`, verify that `appId` and
-`appSecret` exist in `~/.codex-lark-remote/config.json`, then start handoff
-again from Codex.
-
-If Feishu/Lark replies twice to the same message, check for an older local
-bridge process or duplicate plugin installation and stop the stale one before
-starting again.
-
-If Codex writes files into the plugin cache, start the handoff from the Codex
-conversation whose working directory is the project you want to edit.
-
-## Sync To GxFn Marketplace
-
-After publishing or refreshing the plugin, sync its installable plugin root into
-the aggregate `GxFn/GxFnCodexMarketplace` repository:
-
-```bash
-npm run sync:gxfn-marketplace
-```
-
-Use `npm run sync:gxfn-marketplace:push` to copy, commit, and push the
-marketplace snapshot. Set
-`GXFN_CODEX_MARKETPLACE_DIR=/path/to/GxFnCodexMarketplace` if the marketplace
-repository is not checked out next to this repository.
-
-## Local development
+## Development
 
 For local development, register this repository as a local marketplace:
 
@@ -394,3 +319,25 @@ Run tests before publishing:
 ```text
 npm test
 ```
+
+After publishing or refreshing the plugin, sync its installable plugin root into
+the aggregate `GxFn/GxFnCodexMarketplace` repository:
+
+```bash
+npm run sync:gxfn-marketplace
+```
+
+Use `npm run sync:gxfn-marketplace:push` to copy, commit, and push the
+marketplace snapshot. Set
+`GXFN_CODEX_MARKETPLACE_DIR=/path/to/GxFnCodexMarketplace` if the marketplace
+repository is not checked out next to this repository.
+
+## Troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| `codex_lark_*` tools are missing | Refresh or re-enable the plugin, then start a new Codex conversation. |
+| `status` says `websocket disabled` | Confirm `appId`, `appSecret`, and `lark.domain` in `~/.codex-lark-remote/config.json`. |
+| Feishu/Lark replies twice | Stop stale bridge processes or duplicate plugin installations. |
+| Codex edits the plugin cache | Start handoff from a Codex conversation whose cwd is the project you want to edit. |
+| Auth fails for international users | Use `lark.domain: "lark"` and credentials from `https://open.larksuite.com`. |

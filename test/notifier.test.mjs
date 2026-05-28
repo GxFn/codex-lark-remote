@@ -9,6 +9,27 @@ test("LarkNotifier.checkAuth reports missing credentials without throwing", asyn
   assert.equal(result.hasCredentials, false);
 });
 
+test("LarkNotifier uses the configured international OpenAPI domain", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const urls = [];
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (url) => {
+    urls.push(String(url));
+    return Response.json({ code: 0, tenant_access_token: "token", expire: 3600 });
+  };
+
+  const notifier = new LarkNotifier({ appId: "cli_test", appSecret: "secret", domain: "lark" });
+  const result = await notifier.checkAuth();
+
+  assert.equal(result.ok, true);
+  assert.equal(result.domain, "lark");
+  assert.equal(result.baseUrl, "https://open.larksuite.com");
+  assert.match(urls[0], /^https:\/\/open\.larksuite\.com\/open-apis\/auth\/v3\/tenant_access_token\/internal$/);
+});
+
 test("LarkNotifier.reply treats Feishu business errors as failed delivery", async (t) => {
   const originalFetch = globalThis.fetch;
   t.after(() => {

@@ -1,7 +1,10 @@
+import { larkDomainInfo, larkOpenApiUrl } from "./lark-domain.mjs";
+
 export class LarkNotifier {
-  constructor({ appId = process.env.CODEX_LARK_APP_ID, appSecret = process.env.CODEX_LARK_APP_SECRET } = {}) {
+  constructor({ appId = process.env.CODEX_LARK_APP_ID, appSecret = process.env.CODEX_LARK_APP_SECRET, ...options } = {}) {
     this.appId = appId || "";
     this.appSecret = appSecret || "";
+    this.domain = larkDomainInfo(options);
     this.tenantToken = "";
     this.tenantTokenExpiresAt = 0;
   }
@@ -15,6 +18,8 @@ export class LarkNotifier {
       ok: Boolean(token),
       hasCredentials: true,
       appIdPrefix: `${this.appId.slice(0, 8)}...`,
+      domain: this.domain.key,
+      baseUrl: this.domain.baseUrl,
       message: token ? "Tenant access token acquired" : "Tenant access token request failed",
     };
   }
@@ -55,7 +60,7 @@ export class LarkNotifier {
     if (!this.appId || !this.appSecret) return { ok: false, error: "Missing Lark appId/appSecret" };
     const token = await this.#tenantToken();
     if (!token) return { ok: false, error: "Missing Lark tenant access token" };
-    const response = await fetch(`https://open.feishu.cn/open-apis/im/v1/messages/${messageId}`, {
+    const response = await fetch(this.#url(`/open-apis/im/v1/messages/${messageId}`), {
       method: "PATCH",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -71,7 +76,7 @@ export class LarkNotifier {
 
   async updateCardByToken(token, card) {
     if (!token) return { ok: false, error: "Missing Lark card update token" };
-    const response = await fetch("https://open.feishu.cn/open-apis/interactive/v1/card/update", {
+    const response = await fetch(this.#url("/open-apis/interactive/v1/card/update"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token, card }),
@@ -86,7 +91,7 @@ export class LarkNotifier {
     if (!token) return { ok: false, error: "Missing Lark tenant access token" };
     const messageIds = [];
     for (const chunk of chunks) {
-      const response = await fetch(`https://open.feishu.cn/open-apis/im/v1/messages/${messageId}/reply`, {
+      const response = await fetch(this.#url(`/open-apis/im/v1/messages/${messageId}/reply`), {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -121,7 +126,7 @@ export class LarkNotifier {
     const safeReceiveIdType = encodeURIComponent(receiveIdType || "chat_id");
     const messageIds = [];
     for (const chunk of chunks) {
-      const response = await fetch(`https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=${safeReceiveIdType}`, {
+      const response = await fetch(this.#url(`/open-apis/im/v1/messages?receive_id_type=${safeReceiveIdType}`), {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -151,7 +156,7 @@ export class LarkNotifier {
 
   async #tenantToken() {
     if (this.tenantToken && Date.now() < this.tenantTokenExpiresAt) return this.tenantToken;
-    const response = await fetch("https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal", {
+    const response = await fetch(this.#url("/open-apis/auth/v3/tenant_access_token/internal"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ app_id: this.appId, app_secret: this.appSecret }),
@@ -164,6 +169,10 @@ export class LarkNotifier {
       return this.tenantToken;
     }
     return "";
+  }
+
+  #url(path) {
+    return larkOpenApiUrl(this.domain, path);
   }
 }
 

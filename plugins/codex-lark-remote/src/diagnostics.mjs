@@ -3,6 +3,7 @@ import { loadConfig } from "./config.mjs";
 import { readHandoff } from "./handoff.mjs";
 import { larkWebSocketEnabled } from "./lark-ws.mjs";
 import { configuredAllowedUsers } from "./lark.mjs";
+import { formatLarkDomain, larkDomainInfo } from "./lark-domain.mjs";
 import { LarkNotifier } from "./notifier.mjs";
 import { formatMissingLarkCredentials, hasLarkAppCredentials } from "./setup-guide.mjs";
 import { bridgeStatus } from "./supervisor.mjs";
@@ -20,6 +21,7 @@ export async function diagnoseLarkRemote(options = {}) {
   const auth = options.checkAuth ? await new LarkNotifier(config.lark || {}).checkAuth() : null;
   const handoff = await readHandoff({ dataDir: config.dataDir });
   const takeover = await readTakeover({ dataDir: config.dataDir });
+  const domain = larkDomainInfo(config);
 
   const issues = [];
   const warnings = [];
@@ -72,6 +74,9 @@ export async function diagnoseLarkRemote(options = {}) {
     handoff,
     takeover,
     lark: {
+      domain: domain.key,
+      baseUrl: domain.baseUrl,
+      domainLabel: formatLarkDomain(config),
       transport: config.lark?.transport || "websocket",
       appIdPrefix: config.lark?.appId ? `${config.lark.appId.slice(0, 8)}...` : "",
       appSecretConfigured: Boolean(config.lark?.appSecret),
@@ -94,6 +99,7 @@ export function formatDiagnostics(diagnostics) {
     `Bridge: ${diagnostics.checks.bridgeRunning ? "running" : "stopped"}`,
     `Config: ${diagnostics.paths?.configPath || "-"}`,
     `Feishu/Lark: ${formatTransport(diagnostics)}`,
+    `Domain: ${diagnostics.lark.domainLabel || "-"}`,
     diagnostics.handoff?.active ? `Conversation: attached ${formatThread(diagnostics.handoff.threadId)}` : "Conversation: not attached",
     diagnostics.takeover ? `Takeover: ${diagnostics.takeover.state}` : "Takeover: off",
     `Mac keep-awake: ${formatKeepAwake(diagnostics.bridge?.keepAwake)}`,
@@ -127,6 +133,7 @@ export function formatHandoff(diagnostics) {
     "Codex Lark Remote",
     diagnostics.ok ? "Status: ready for Feishu/Lark" : "Status: needs attention",
     `Feishu/Lark: ${formatTransport(diagnostics)}`,
+    `Domain: ${diagnostics.lark.domainLabel || "-"}`,
     handoff?.active ? `Conversation: attached ${formatThread(handoff.threadId)}` : "Conversation: not attached",
     diagnostics.takeover ? `Takeover: ${diagnostics.takeover.state}` : "Takeover: off",
     `Mac keep-awake: ${formatKeepAwake(diagnostics.bridge?.keepAwake)}`,
@@ -175,6 +182,7 @@ function buildNextActions({ config, status, webhookUrl, publicUrl, webSocketEnab
   const actions = [];
   if (!hasLarkAppCredentials(config)) {
     actions.push("Create a Feishu/Lark internal/custom app and enable the bot capability.");
+    actions.push("Use lark.domain=feishu for https://open.feishu.cn or lark.domain=lark for https://open.larksuite.com, matching where the app was created.");
     actions.push("In Event Configuration, choose long connection/WebSocket and subscribe to im.message.receive_v1.");
     actions.push("In Callback Configuration, choose long connection/WebSocket and subscribe to card.action.trigger.");
     actions.push("Copy App ID/App Secret to the clipboard, then return to Codex and say 已复制.");
