@@ -138,12 +138,8 @@ test("declares a plugin-root cwd for the MCP server", async () => {
   const config = JSON.parse(await fs.readFile(new URL("../plugins/codex-lark-remote/.mcp.json", import.meta.url), "utf8"));
   const server = config.mcpServers?.["codex-lark-remote"];
 
-  assert.equal(server?.command, "npx");
+  assert.equal(server?.command, "node");
   assert.deepEqual(server?.args, [
-    "-y",
-    "--package",
-    "@larksuiteoapi/node-sdk@1.63.1",
-    "node",
     "./bin/codex-lark-remote-mcp.mjs",
   ]);
   assert.equal(server?.cwd, ".");

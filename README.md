@@ -63,7 +63,7 @@ npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plu
 To pin the reviewed release:
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.5/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.6/plugins/codex-lark-remote --plugin
 ```
 
 Then restart or refresh Codex if the plugin list does not update immediately.
@@ -74,7 +74,7 @@ If Codex asks for a GitHub target or direct artifact path, use the plugin bundle
 path, not the repository root:
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.2.5/plugins/codex-lark-remote
+https://github.com/GxFn/codex-lark-remote/tree/v0.2.6/plugins/codex-lark-remote
 ```
 
 If the Codex dialog separates source, ref, and sparse path, fill it like this:
@@ -84,7 +84,7 @@ Source:
 https://github.com/GxFn/codex-lark-remote.git
 
 Git ref:
-v0.2.5
+v0.2.6
 
 Sparse path:
 plugins/codex-lark-remote
