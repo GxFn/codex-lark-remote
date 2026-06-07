@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { startupNoticeFilePath } from "../plugins/codex-lark-remote/src/config.mjs";
-import { sendStartupIntroIfNeeded, startupNoticeTarget } from "../plugins/codex-lark-remote/src/startup-notice.mjs";
+import { startupNoticeFilePath } from "../src/config.mjs";
+import { sendStartupIntroIfNeeded, startupNoticeTarget } from "../src/startup-notice.mjs";
 
 test("sendStartupIntroIfNeeded sends configured startup intro only once", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-startup-notice-"));

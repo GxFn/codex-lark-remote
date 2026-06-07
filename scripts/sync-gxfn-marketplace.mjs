@@ -55,21 +55,27 @@ console.log(`  target: ${targetPath}`);
 
 if (options.dryRun) {
   console.log('Dry run only; no files changed.');
+  if (existsSync(targetManifestPath)) {
+    const existingTargetManifest = readJson(targetManifestPath);
+    console.log(
+      `Existing target has ${existingTargetManifest.name ?? '(unknown)'}@${existingTargetManifest.version ?? '(unknown)'}`,
+    );
+  }
 } else {
   rmSync(targetPath, { recursive: true, force: true });
   mkdirSync(dirname(targetPath), { recursive: true });
   cpSync(pluginRoot, targetPath, { recursive: true, filter: shouldCopy });
-}
 
-const targetManifest = readJson(targetManifestPath);
-if (targetManifest.name !== pluginName) {
-  throw new Error(`Synced plugin name mismatch: expected ${pluginName}, got ${targetManifest.name}`);
-}
-if (targetManifest.version !== pluginVersion) {
-  throw new Error(`Synced plugin version mismatch: expected ${pluginVersion}, got ${targetManifest.version}`);
-}
+  const targetManifest = readJson(targetManifestPath);
+  if (targetManifest.name !== pluginName) {
+    throw new Error(`Synced plugin name mismatch: expected ${pluginName}, got ${targetManifest.name}`);
+  }
+  if (targetManifest.version !== pluginVersion) {
+    throw new Error(`Synced plugin version mismatch: expected ${pluginVersion}, got ${targetManifest.version}`);
+  }
 
-console.log(`Verified ${targetManifest.name}@${targetManifest.version} in ${targetDisplay}`);
+  console.log(`Verified ${targetManifest.name}@${targetManifest.version} in ${targetDisplay}`);
+}
 
 if (options.commit || options.push) {
   git(['add', relative(marketplaceDir, targetPath)], marketplaceDir);
@@ -140,6 +146,7 @@ function shouldCopy(sourcePath) {
   if (
     relativePath === '.codex-marketplace-install.json' ||
     relativePath === '.codex-marketplace-syncignore' ||
+    relativePath === '.agents' ||
     relativePath === 'docs-dev' ||
     isIgnoredBySyncFile(relativePath)
   ) {

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { formatConfigUpdate, updateRuntimeConfig } from "../plugins/codex-lark-remote/src/config-writer.mjs";
+import { formatConfigUpdate, updateRuntimeConfig } from "../src/config-writer.mjs";
 
 test("updateRuntimeConfig writes config and returns a sanitized summary", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-config-"));

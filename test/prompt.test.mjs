@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildRunnerPrompt } from "../plugins/codex-lark-remote/src/prompt.mjs";
+import { buildRunnerPrompt } from "../src/prompt.mjs";
 
 test("buildRunnerPrompt includes Lark remote context and safety contract", () => {
   const prompt = buildRunnerPrompt(

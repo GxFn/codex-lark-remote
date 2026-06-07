@@ -38,11 +38,8 @@ Codex Desktop 会话
 bridge 是 local-first 的。启动时不会把已有 Codex 聊天历史发送到飞书/Lark。
 项目/会话接管需要先配置允许用户，Codex 原生权限弹窗也仍然留在 Mac 上处理。
 
-这个仓库是 `gxfn` Codex 插件 marketplace 的源码。真正可安装的插件包位于
-[`plugins/codex-lark-remote/`](plugins/codex-lark-remote/)。
-仓库根 README 是完整首次使用指南；插件包内还有
-[英文插件 README](plugins/codex-lark-remote/README.md) 和
-[中文插件 README](plugins/codex-lark-remote/README.zh-CN.md)。
+这个仓库是 `gxfn` Codex 插件 marketplace 的源码。仓库根目录就是可安装的
+Codex 插件根目录，层级和 Wakeflow 保持一致。
 
 ## 安装
 
@@ -53,24 +50,23 @@ bridge 是 local-first 的。启动时不会把已有 Codex 聊天历史发送�
 安装已经审核的 marketplace 插件：
 
 ```bash
-npx codex-marketplace add GxFn/codex-lark-remote/plugins/codex-lark-remote --plugin
+npx codex-marketplace add GxFn/codex-lark-remote --plugin
 ```
 
 如果要固定到当前审核版本：
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.6/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.6 --plugin
 ```
 
 安装后如果 Codex 插件列表没有立刻刷新，重启或刷新 Codex。
 
 ### Codex Desktop GitHub 安装
 
-如果 Codex 要求填写 GitHub target 或直接 artifact path，请填写插件包路径，
-不要填写仓库根目录：
+如果 Codex 要求填写 GitHub target 或直接 artifact path，请填写仓库根目录：
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.2.6/plugins/codex-lark-remote
+https://github.com/GxFn/codex-lark-remote/tree/v0.2.6
 ```
 
 如果 Codex 弹窗把来源、Git 引用、稀疏路径拆开填写，请这样填：
@@ -83,7 +79,7 @@ Git 引用：
 v0.2.6
 
 稀疏路径：
-plugins/codex-lark-remote
+留空
 ```
 
 安装后在插件列表里启用 `codex-lark-remote`。
@@ -259,11 +255,11 @@ Lark Remote 接管的是对话输入输出链路，不是 Codex Desktop 的原�
 
 | 路径 | 用途 |
 | --- | --- |
-| `plugins/codex-lark-remote/` | 可安装的 Codex 插件包。 |
-| `plugins/codex-lark-remote/bin/` | MCP server 和本地 bridge 入口。 |
-| `plugins/codex-lark-remote/src/` | bridge、飞书/Lark、handoff、observer、presenter 和 runner 模块。 |
-| `plugins/codex-lark-remote/skills/` | 随插件发布的 Codex skill 指令。 |
-| `plugins/codex-lark-remote/config/example.config.json` | 私密运行配置示例。 |
+| `./` | 可安装的 Codex 插件包。 |
+| `bin/` | MCP server 和本地 bridge 入口。 |
+| `src/` | bridge、飞书/Lark、handoff、observer、presenter 和 runner 模块。 |
+| `skills/` | 随插件发布的 Codex skill 指令。 |
+| `config/example.config.json` | 私密运行配置示例。 |
 | `docs/technical_architecture.zh-cn.md` | 技术架构文档。 |
 | `docs/cross_thread_takeover_design.zh-cn.md` | 跨对话接管设计。 |
 | `docs/intent_translator_design.zh-cn.md` | 飞书自然语言意图翻译设计。 |

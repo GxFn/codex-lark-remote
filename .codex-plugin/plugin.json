@@ -3,15 +3,21 @@
   "version": "0.2.6",
   "description": "Control, observe, and take over local Codex sessions from Feishu/Lark.",
   "author": {
-    "name": "Lark Remote Contributors"
+    "name": "GxFn",
+    "url": "https://github.com/GxFn"
   },
+  "homepage": "https://github.com/GxFn/codex-lark-remote#readme",
+  "repository": "https://github.com/GxFn/codex-lark-remote",
   "license": "MIT",
   "keywords": [
     "codex",
+    "codex-plugin",
     "lark",
     "feishu",
     "remote",
-    "mcp"
+    "mcp",
+    "remote-control",
+    "local-first"
   ],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
@@ -19,13 +25,14 @@
     "displayName": "Lark Remote",
     "shortDescription": "Control, observe, and take over Codex sessions from Feishu/Lark.",
     "longDescription": "Lark Remote connects Feishu/Lark to a local Codex bridge. Use the natural-language console to list projects and sessions, observe read-only progress, or take over a selected Codex session. After takeover, Feishu/Lark messages go directly to that Codex session as tasks or follow-up instructions.",
-    "developerName": "Lark Remote Contributors",
+    "developerName": "GxFn",
     "category": "Productivity",
     "capabilities": [
+      "Interactive",
       "Read",
-      "Run",
-      "Interactive"
+      "Write"
     ],
+    "websiteURL": "https://github.com/GxFn/codex-lark-remote#readme",
     "defaultPrompt": [
       "Start Lark Remote for this Codex workspace",
       "Configure Lark Remote with my Feishu/Lark app credentials",

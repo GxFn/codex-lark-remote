@@ -571,11 +571,11 @@ pending intent 示例：
 新增模块：
 
 ```text
-plugins/codex-lark-remote/src/intent-schema.mjs
-plugins/codex-lark-remote/src/intent-translator.mjs
-plugins/codex-lark-remote/src/intent-router.mjs
-plugins/codex-lark-remote/src/intent-state.mjs
-plugins/codex-lark-remote/src/intent-cards.mjs
+src/intent-schema.mjs
+src/intent-translator.mjs
+src/intent-router.mjs
+src/intent-state.mjs
+src/intent-cards.mjs
 ```
 
 职责：

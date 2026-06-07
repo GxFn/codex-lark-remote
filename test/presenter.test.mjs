@@ -33,7 +33,7 @@ import {
   formatTakeoverStatus,
   formatTakeoverTimedOut,
   formatWhoami,
-} from "../plugins/codex-lark-remote/src/presenter.mjs";
+} from "../src/presenter.mjs";
 
 test("formatHelp includes whoami command", () => {
   assert.match(formatHelp(), /\bwhoami\b/);

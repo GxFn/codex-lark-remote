@@ -8,7 +8,7 @@
       "name": "codex-lark-remote",
       "source": {
         "source": "local",
-        "path": "./plugins/codex-lark-remote"
+        "path": "."
       },
       "policy": {
         "installation": "AVAILABLE",

@@ -15,8 +15,8 @@ import {
   readSessionLastTurnSummary,
   summarizeCodexEvent,
   summarizeSessionProgressEvent,
-} from "../plugins/codex-lark-remote/src/runner.mjs";
-import { activateHandoff } from "../plugins/codex-lark-remote/src/handoff.mjs";
+} from "../src/runner.mjs";
+import { activateHandoff } from "../src/handoff.mjs";
 
 test("buildCodexExecArgs uses supported codex exec flags", () => {
   const args = buildCodexExecArgs({

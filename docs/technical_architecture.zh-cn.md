@@ -22,39 +22,39 @@
 .
 ├── README.md
 ├── README.zh-CN.md
+├── .codex-plugin/plugin.json
+├── .mcp.json
+├── assets/
+├── bin/
+│   ├── codex-lark-bridge.mjs
+│   └── codex-lark-remote-mcp.mjs
+├── config/example.config.json
 ├── docs/
 │   ├── technical_architecture.zh-cn.md
 │   └── cross_thread_takeover_design.zh-cn.md
 ├── package.json
-├── plugins/
-│   └── codex-lark-remote/
-│       ├── .codex-plugin/plugin.json
-│       ├── bin/
-│       │   ├── codex-lark-bridge.mjs
-│       │   └── codex-lark-remote-mcp.mjs
-│       ├── config/example.config.json
-│       ├── skills/codex-lark-remote/SKILL.md
-│       └── src/
-│           ├── actions.mjs
-│           ├── bridge-server.mjs
-│           ├── codex-context.mjs
-│           ├── config.mjs
-│           ├── config-writer.mjs
-│           ├── crypto.mjs
-│           ├── diagnostics.mjs
-│           ├── handoff.mjs
-│           ├── keep-awake.mjs
-│           ├── lark.mjs
-│           ├── lark-ws.mjs
-│           ├── notifier.mjs
-│           ├── observer.mjs
-│           ├── presenter.mjs
-│           ├── prompt.mjs
-│           ├── queue.mjs
-│           ├── runner.mjs
-│           ├── sanitize.mjs
-│           ├── setup-guide.mjs
-│           └── supervisor.mjs
+├── skills/codex-lark-remote/SKILL.md
+├── src/
+│   ├── actions.mjs
+│   ├── bridge-server.mjs
+│   ├── codex-context.mjs
+│   ├── config.mjs
+│   ├── config-writer.mjs
+│   ├── crypto.mjs
+│   ├── diagnostics.mjs
+│   ├── handoff.mjs
+│   ├── keep-awake.mjs
+│   ├── lark.mjs
+│   ├── lark-ws.mjs
+│   ├── notifier.mjs
+│   ├── observer.mjs
+│   ├── presenter.mjs
+│   ├── prompt.mjs
+│   ├── queue.mjs
+│   ├── runner.mjs
+│   ├── sanitize.mjs
+│   ├── setup-guide.mjs
+│   └── supervisor.mjs
 └── test/
     ├── bridge-server.test.mjs
     ├── codex-context.test.mjs
@@ -67,7 +67,7 @@
     └── ...
 ```
 
-根目录是开发工作区；真正可安装的插件包在 `plugins/codex-lark-remote/`。根目录 README 主要服务 GitHub 和 marketplace 用户，插件目录内的 README、skill 和 `.codex-plugin/plugin.json` 服务 Codex 插件安装和运行。
+仓库根目录就是可安装的 Codex 插件根目录，和 Wakeflow 一样直接在根目录放置 `.codex-plugin/plugin.json`、`.mcp.json`、`skills/`、`bin/` 和 `src/`。README 同时服务 GitHub、marketplace 和插件安装后的说明入口。
 
 ## 运行时总览
 
@@ -98,7 +98,7 @@ MCP 进程偏控制面，bridge 进程偏数据面。这样的拆分可以让 Co
 
 ## MCP 进程
 
-入口文件是 `plugins/codex-lark-remote/bin/codex-lark-remote-mcp.mjs`。它实现了 MCP 的 `initialize`、`tools/list` 和 `tools/call`。
+入口文件是 `bin/codex-lark-remote-mcp.mjs`。它实现了 MCP 的 `initialize`、`tools/list` 和 `tools/call`。
 
 当前暴露的工具包括：
 
@@ -124,7 +124,7 @@ MCP 进程偏控制面，bridge 进程偏数据面。这样的拆分可以让 Co
 
 ## Bridge 进程
 
-入口文件是 `plugins/codex-lark-remote/bin/codex-lark-bridge.mjs`，核心实现在 `src/bridge-server.mjs`。
+入口文件是 `bin/codex-lark-bridge.mjs`，核心实现在 `src/bridge-server.mjs`。
 
 `startBridge` 的启动步骤：
 

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseControlSemanticAction } from "../plugins/codex-lark-remote/src/control-semantics.mjs";
+import { parseControlSemanticAction } from "../src/control-semantics.mjs";
 
 test("control semantics normalize project and session phrases", () => {
   assert.deepEqual(parseControlSemanticAction("项目列表", { mode: "console" }), { kind: "takeover_list" });
