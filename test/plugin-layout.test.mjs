@@ -93,6 +93,8 @@ test("keeps the repository root as the plugin root", async () => {
     const entryStat = await fs.lstat(rootPath);
     assert.equal(entryStat.isSymbolicLink(), false, `${entry} must be a real plugin-root file or directory`);
   }
+
+  await assert.rejects(fs.lstat(new URL("../docs", import.meta.url)), { code: "ENOENT" }, "docs should not ship in the plugin root");
 });
 
 test("keeps full plugin-root READMEs", async () => {

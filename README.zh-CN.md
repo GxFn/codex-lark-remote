@@ -260,9 +260,6 @@ Lark Remote 接管的是对话输入输出链路，不是 Codex Desktop 的原�
 | `src/` | bridge、飞书/Lark、handoff、observer、presenter 和 runner 模块。 |
 | `skills/` | 随插件发布的 Codex skill 指令。 |
 | `config/example.config.json` | 私密运行配置示例。 |
-| `docs/technical_architecture.zh-cn.md` | 技术架构文档。 |
-| `docs/cross_thread_takeover_design.zh-cn.md` | 跨对话接管设计。 |
-| `docs/intent_translator_design.zh-cn.md` | 飞书自然语言意图翻译设计。 |
 | `test/` | Node 测试。 |
 | `scripts/sync-gxfn-marketplace.mjs` | marketplace 快照同步脚本。 |
 

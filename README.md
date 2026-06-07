@@ -293,9 +293,6 @@ finishes.
 | `src/` | Bridge, Feishu/Lark, handoff, observer, presenter, and runner modules. |
 | `skills/` | Codex skill instructions bundled with the plugin. |
 | `config/example.config.json` | Example private runtime config shape. |
-| `docs/technical_architecture.zh-cn.md` | Technical architecture guide. |
-| `docs/cross_thread_takeover_design.zh-cn.md` | Cross-thread takeover design. |
-| `docs/intent_translator_design.zh-cn.md` | Feishu natural-language intent translator design. |
 | `test/` | Node test suite. |
 | `scripts/sync-gxfn-marketplace.mjs` | Marketplace snapshot sync helper. |
 

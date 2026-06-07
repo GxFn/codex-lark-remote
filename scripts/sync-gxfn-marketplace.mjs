@@ -147,6 +147,7 @@ function shouldCopy(sourcePath) {
     relativePath === '.codex-marketplace-install.json' ||
     relativePath === '.codex-marketplace-syncignore' ||
     relativePath === '.agents' ||
+    relativePath === 'docs' ||
     relativePath === 'docs-dev' ||
     isIgnoredBySyncFile(relativePath)
   ) {
