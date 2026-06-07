@@ -29,6 +29,7 @@ import {
   formatTask,
   formatTakeoverActive,
   formatTakeoverPreparationCancelled,
+  formatTakeoverList,
   formatTakeoverProjectList,
   formatTakeoverStatus,
   formatTakeoverTimedOut,
@@ -276,6 +277,47 @@ test("takeover cards use Chinese labels", () => {
   assert.match(rendered, /确认接管/);
   assert.match(rendered, /取消/);
   assert.doesNotMatch(rendered, /查看|列表|View|Observe|Takeover|List|Confirm takeover|Cancel/);
+});
+
+test("takeover project and session cards paginate three items at a time", () => {
+  const projects = Array.from({ length: 5 }, (_, index) => ({
+    index: index + 1,
+    name: `project-${index + 1}`,
+    cwd: `/workspace/project-${index + 1}`,
+    windowCount: index + 1,
+    activeWindowCount: index === 3 ? 1 : 0,
+  }));
+  const targets = Array.from({ length: 4 }, (_, index) => ({
+    index: index + 1,
+    status: index === 3 ? "running" : "idle",
+    threadId: `019e0ffb-52e9-7ee3-bb87-42019b58eaa${index + 1}`,
+    name: `session-${index + 1}`,
+  }));
+
+  const firstProjects = JSON.stringify(buildTakeoverProjectListCard(projects));
+  const nextProjects = JSON.stringify(buildTakeoverProjectListCard(projects, { page: 1 }));
+  const firstTargets = JSON.stringify(buildTakeoverListCard(targets));
+  const nextTargets = JSON.stringify(buildTakeoverListCard(targets, { page: 1 }));
+
+  assert.match(firstProjects, /project-1/);
+  assert.match(firstProjects, /project-3/);
+  assert.doesNotMatch(firstProjects, /project-4/);
+  assert.match(firstProjects, /下一组/);
+  assert.match(nextProjects, /project-4/);
+  assert.match(nextProjects, /project-5/);
+  assert.doesNotMatch(nextProjects, /project-1/);
+  assert.match(nextProjects, /上一组/);
+
+  assert.match(firstTargets, /session-1/);
+  assert.match(firstTargets, /session-3/);
+  assert.doesNotMatch(firstTargets, /session-4/);
+  assert.match(nextTargets, /session-4/);
+  assert.doesNotMatch(nextTargets, /session-1/);
+
+  assert.match(formatTakeoverProjectList(projects), /1-3\/5/);
+  assert.doesNotMatch(formatTakeoverProjectList(projects), /project-4/);
+  assert.match(formatTakeoverList(targets), /1-3\/4/);
+  assert.doesNotMatch(formatTakeoverList(targets), /session-4/);
 });
 
 test("takeover fallback text is explicit and localized", () => {

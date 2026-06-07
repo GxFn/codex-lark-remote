@@ -64,6 +64,8 @@ export async function markHandoffRemoteNoteSent(options = {}) {
 }
 
 export async function resolveCodexThread(options = {}) {
+  const codexHome = path.resolve(options.codexHome || process.env.CODEX_HOME || path.join(os.homedir(), ".codex"));
+  const archivedIds = await readArchivedSessionIds(codexHome);
   if (options.threadId) {
     const resolved = {
       threadId: options.threadId,
@@ -72,6 +74,9 @@ export async function resolveCodexThread(options = {}) {
       name: options.name || "",
       source: "explicit",
     };
+    if (archivedIds.has(resolved.threadId)) {
+      throw new Error("Codex session is archived and cannot be used for handoff.");
+    }
     if (!resolved.threadPath) {
       const match = await findCodexThreadById(options.threadId, options);
       if (match) return { ...match, cwd: resolved.cwd || match.cwd, name: resolved.name || match.name };
@@ -82,11 +87,10 @@ export async function resolveCodexThread(options = {}) {
     throw new Error("Current Codex thread id is required for handoff. Refusing to guess from workspace path.");
   }
 
-  const codexHome = path.resolve(options.codexHome || process.env.CODEX_HOME || path.join(os.homedir(), ".codex"));
   const sessionsRoot = path.join(codexHome, "sessions");
   const requestedCwd = options.cwd ? path.resolve(options.cwd) : "";
   const candidates = await listSessionFiles(sessionsRoot);
-  const exact = await findSession(candidates, requestedCwd);
+  const exact = await findSession(candidates, requestedCwd, archivedIds);
   if (exact) return exact;
   throw new Error("No Codex session found for handoff. Pass threadId explicitly.");
 }
@@ -96,11 +100,12 @@ export async function listCodexThreads(options = {}) {
   const sessionsRoot = path.join(codexHome, "sessions");
   const requestedCwd = options.cwd ? path.resolve(options.cwd) : "";
   const limit = Number(options.limit || 10);
+  const archivedIds = await readArchivedSessionIds(codexHome);
   const candidates = [];
   for (const file of await listSessionFiles(sessionsRoot)) {
     if (candidates.length >= limit) break;
     const meta = await readSessionMeta(file.path);
-    if (!meta?.id || isHiddenSession(meta)) continue;
+    if (!meta?.id || isArchivedSession(meta, archivedIds) || isHiddenSession(meta)) continue;
     const candidate = {
       threadId: meta.id,
       threadPath: file.path,
@@ -119,10 +124,12 @@ export async function findCodexThreadById(threadId, options = {}) {
   const target = String(threadId || "").trim().toLowerCase();
   if (!target) return null;
   const codexHome = path.resolve(options.codexHome || process.env.CODEX_HOME || path.join(os.homedir(), ".codex"));
+  const archivedIds = await readArchivedSessionIds(codexHome);
+  if (archivedIds.has(target)) return null;
   const sessionsRoot = path.join(codexHome, "sessions");
   for (const file of await listSessionFiles(sessionsRoot)) {
     const meta = await readSessionMeta(file.path);
-    if (!meta?.id || isHiddenSession(meta)) continue;
+    if (!meta?.id || isArchivedSession(meta, archivedIds) || isHiddenSession(meta)) continue;
     if (String(meta.id).toLowerCase() !== target) continue;
     return {
       threadId: meta.id,
@@ -136,11 +143,12 @@ export async function findCodexThreadById(threadId, options = {}) {
   return null;
 }
 
-async function findSession(files, requestedCwd) {
+async function findSession(files, requestedCwd, archivedIds = new Set()) {
   let fallback = null;
   for (const file of files) {
     const meta = await readSessionMeta(file.path);
     if (!meta?.id) continue;
+    if (isArchivedSession(meta, archivedIds)) continue;
     if (isHiddenSession(meta)) continue;
     const candidate = {
       threadId: meta.id,
@@ -154,6 +162,16 @@ async function findSession(files, requestedCwd) {
     if (!requestedCwd || cwdMatches(candidate.cwd, requestedCwd)) return candidate;
   }
   return fallback;
+}
+
+async function readArchivedSessionIds(codexHome) {
+  const archivedRoot = path.join(codexHome, "archived_sessions");
+  const archivedIds = new Set();
+  for (const file of await listSessionFiles(archivedRoot)) {
+    const id = idFromPath(file.path);
+    if (id) archivedIds.add(id.toLowerCase());
+  }
+  return archivedIds;
 }
 
 async function listSessionFiles(root) {
@@ -323,4 +341,9 @@ function isHiddenSession(meta) {
   if (meta.agentRole || meta.agentNickname) return true;
   if (/judging one planned coding-agent action|guardian/i.test(meta.baseInstructions || "")) return true;
   return false;
+}
+
+function isArchivedSession(meta, archivedIds = new Set()) {
+  const id = String(meta?.id || "").trim().toLowerCase();
+  return Boolean(id && archivedIds.has(id));
 }

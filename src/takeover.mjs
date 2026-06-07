@@ -6,6 +6,7 @@ import { listCodexThreads, findCodexThreadById } from "./handoff.mjs";
 
 const FINAL_EVENT_RE = /(?:turn[./_-]?completed|response[./_-]?completed|final_answer|agent_message)/i;
 const RUNNING_EVENT_RE = /(?:tool_call|command|exec|turn[./_-]?started|response[./_-]?started|agent_reasoning|agent_progress)/i;
+const DEFAULT_DISPLAY_PAGE_SIZE = 3;
 
 export async function readTakeover(options = {}) {
   const dataDir = resolveDataDir(options.dataDir);
@@ -65,10 +66,11 @@ export async function listTakeoverTargets(options = {}) {
   const cwd = options.cwd || scope.cwd || "";
   const excludeThreadId = options.excludeThreadId || "";
   const limit = Number(options.limit || 10);
+  const threadLimit = Number(options.threadLimit || Math.max(limit * 20, 200));
   const candidates = await listCodexThreads({
     ...options,
     cwd,
-    limit: Math.max(limit + 5, limit),
+    limit: threadLimit,
   });
   const filtered = [];
   for (const thread of candidates) {
@@ -82,9 +84,8 @@ export async function listTakeoverTargets(options = {}) {
       statusReason: status.reason,
       lastEventAtMs: status.lastEventAtMs || thread.updatedAtMs || 0,
     });
-    if (filtered.length >= limit) break;
   }
-  return filtered;
+  return sortTakeoverTargets(filtered).slice(0, limit);
 }
 
 export async function listTakeoverProjects(options = {}) {
@@ -106,8 +107,20 @@ export async function listTakeoverProjects(options = {}) {
       updatedAtMs: 0,
       latestThreadId: "",
       latestWindowName: "",
+      activeWindowCount: 0,
+      activeUpdatedAtMs: 0,
     };
     existing.windowCount += 1;
+    const status = await detectSessionStatus(thread.threadPath, {
+      idleDebounceMs: options.idleDebounceMs,
+    });
+    if (status.status === "running") {
+      existing.activeWindowCount += 1;
+      existing.activeUpdatedAtMs = Math.max(
+        existing.activeUpdatedAtMs,
+        Number(status.lastEventAtMs || thread.updatedAtMs || 0),
+      );
+    }
     if (Number(thread.updatedAtMs || 0) > existing.updatedAtMs) {
       existing.updatedAtMs = Number(thread.updatedAtMs || 0);
       existing.latestThreadId = thread.threadId || "";
@@ -116,7 +129,7 @@ export async function listTakeoverProjects(options = {}) {
     projects.set(cwd, existing);
   }
   return Array.from(projects.values())
-    .sort((a, b) => Number(b.updatedAtMs || 0) - Number(a.updatedAtMs || 0))
+    .sort(compareProjects)
     .slice(0, limit)
     .map((project, index) => ({ ...project, index: index + 1 }));
 }
@@ -126,12 +139,16 @@ export async function refreshTakeoverProjectSelection(options = {}) {
   const state = await readTakeover({ dataDir }) || await prepareTakeoverScope(options);
   const projects = await listTakeoverProjects(options);
   const now = Date.now();
+  const pageSize = normalizePageSize(options.pageSize || DEFAULT_DISPLAY_PAGE_SIZE);
+  const page = clampPage(options.page, projects.length, pageSize);
   const updated = {
     ...state,
     state: "selecting_project",
     projectSelection: {
       listedAt: nowIso(),
       expiresAt: new Date(now + Number(options.selectionTtlMs || 10 * 60 * 1000)).toISOString(),
+      page,
+      pageSize,
       options: projects.map((project, index) => optionForProject(project, index + 1)),
     },
     selection: emptySelection(),
@@ -184,13 +201,66 @@ export async function refreshTakeoverSelection(options = {}) {
     idleDebounceMs: options.idleDebounceMs,
   });
   const now = Date.now();
+  const pageSize = normalizePageSize(options.pageSize || DEFAULT_DISPLAY_PAGE_SIZE);
+  const page = clampPage(options.page, targets.length, pageSize);
   const updated = {
     ...state,
     state: "selecting",
     selection: {
       listedAt: nowIso(),
       expiresAt: new Date(now + Number(options.selectionTtlMs || 10 * 60 * 1000)).toISOString(),
+      page,
+      pageSize,
       options: targets.map((target, index) => optionForTarget(target, index + 1)),
+    },
+    target: null,
+    lastSeenAt: nowIso(),
+  };
+  await writeTakeover({ dataDir }, updated);
+  return { state: updated, targets };
+}
+
+export async function setTakeoverProjectPage(options = {}) {
+  const dataDir = resolveDataDir(options.dataDir);
+  const state = await readTakeover({ dataDir });
+  const projectSelection = state?.projectSelection || {};
+  const projects = Array.isArray(projectSelection.options) ? projectSelection.options : [];
+  if (!state || !projects.length) throw new Error("请先打开项目列表。");
+
+  const pageSize = normalizePageSize(options.pageSize || projectSelection.pageSize || DEFAULT_DISPLAY_PAGE_SIZE);
+  const page = clampPage(options.page, projects.length, pageSize);
+  const updated = {
+    ...state,
+    state: "selecting_project",
+    projectSelection: {
+      ...projectSelection,
+      page,
+      pageSize,
+    },
+    selection: emptySelection(),
+    target: null,
+    lastSeenAt: nowIso(),
+  };
+  await writeTakeover({ dataDir }, updated);
+  return { state: updated, projects };
+}
+
+export async function setTakeoverSelectionPage(options = {}) {
+  const dataDir = resolveDataDir(options.dataDir);
+  const state = await readTakeover({ dataDir });
+  const selection = state?.selection || {};
+  const targets = Array.isArray(selection.options) ? selection.options : [];
+  if (!state || !targets.length) throw new Error("请先打开会话列表。");
+
+  const pageSize = normalizePageSize(options.pageSize || selection.pageSize || DEFAULT_DISPLAY_PAGE_SIZE);
+  const page = clampPage(options.page, targets.length, pageSize);
+  const updated = {
+    ...state,
+    state: "selecting",
+    selection: {
+      ...selection,
+      page,
+      pageSize,
     },
     target: null,
     lastSeenAt: nowIso(),
@@ -453,7 +523,7 @@ async function writeTakeover(options, state) {
 }
 
 function emptySelection() {
-  return { listedAt: "", expiresAt: "", options: [] };
+  return { listedAt: "", expiresAt: "", page: 0, pageSize: DEFAULT_DISPLAY_PAGE_SIZE, options: [] };
 }
 
 function optionForTarget(target, index) {
@@ -476,6 +546,8 @@ function optionForProject(project, index) {
     cwd: project.cwd || "",
     name: project.name || projectNameFromCwd(project.cwd),
     windowCount: project.windowCount || 0,
+    activeWindowCount: project.activeWindowCount || 0,
+    activeUpdatedAtMs: project.activeUpdatedAtMs || 0,
     updatedAtMs: project.updatedAtMs || 0,
     latestThreadId: project.latestThreadId || "",
     latestWindowName: project.latestWindowName || "",
@@ -484,13 +556,52 @@ function optionForProject(project, index) {
 
 function refreshProjectFromTargets(project, targets = []) {
   const latest = targets[0] || null;
+  const activeTargets = targets.filter((target) => target.status === "running");
   return {
     ...project,
     windowCount: targets.length,
+    activeWindowCount: activeTargets.length,
+    activeUpdatedAtMs: Math.max(...activeTargets.map((target) => Number(target.lastEventAtMs || target.updatedAtMs || 0)), 0),
     updatedAtMs: latest?.updatedAtMs || project.updatedAtMs || 0,
     latestThreadId: latest?.threadId || project.latestThreadId || "",
     latestWindowName: latest?.name || project.latestWindowName || "",
   };
+}
+
+function sortTakeoverTargets(targets = []) {
+  return [...targets].sort((a, b) =>
+    windowStatusRank(a.status) - windowStatusRank(b.status)
+    || Number(b.lastEventAtMs || b.updatedAtMs || 0) - Number(a.lastEventAtMs || a.updatedAtMs || 0)
+    || String(a.name || "").localeCompare(String(b.name || ""))
+  );
+}
+
+function compareProjects(a, b) {
+  const aActive = Number(a.activeWindowCount || 0);
+  const bActive = Number(b.activeWindowCount || 0);
+  return Number(bActive > 0) - Number(aActive > 0)
+    || bActive - aActive
+    || Number(b.activeUpdatedAtMs || 0) - Number(a.activeUpdatedAtMs || 0)
+    || Number(b.updatedAtMs || 0) - Number(a.updatedAtMs || 0)
+    || String(a.name || "").localeCompare(String(b.name || ""));
+}
+
+function windowStatusRank(status) {
+  if (status === "running") return 0;
+  if (status === "unknown") return 1;
+  return 2;
+}
+
+function normalizePageSize(value) {
+  const size = Number(value || DEFAULT_DISPLAY_PAGE_SIZE);
+  return Number.isFinite(size) && size > 0 ? Math.max(1, Math.floor(size)) : DEFAULT_DISPLAY_PAGE_SIZE;
+}
+
+function clampPage(value, total, pageSize) {
+  const maxPage = Math.max(0, Math.ceil(Number(total || 0) / normalizePageSize(pageSize)) - 1);
+  const page = Number(value || 0);
+  if (!Number.isFinite(page)) return 0;
+  return Math.min(Math.max(0, Math.floor(page)), maxPage);
 }
 
 function projectNameFromCwd(cwd) {

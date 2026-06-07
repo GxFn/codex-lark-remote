@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { activateHandoff, clearHandoff, listCodexThreads, markHandoffRemoteNoteSent, readHandoff, resolveCodexThread } from "../src/handoff.mjs";
+import { activateHandoff, clearHandoff, findCodexThreadById, listCodexThreads, markHandoffRemoteNoteSent, readHandoff, resolveCodexThread } from "../src/handoff.mjs";
 
 test("activateHandoff stores an explicit thread id", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-handoff-"));
@@ -114,6 +114,45 @@ test("resolveCodexThread skips hidden subagent and exec sessions", async () => {
   const resolved = await resolveCodexThread({ codexHome, cwd: "/workspace/project" });
 
   assert.equal(resolved.threadId, "019e0000-0000-7000-8000-000000000005");
+});
+
+test("Codex thread discovery skips archived sessions", async () => {
+  const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-home-archived-"));
+  const sessions = path.join(codexHome, "sessions", "2026", "05", "10");
+  const archivedSessions = path.join(codexHome, "archived_sessions");
+  await fs.mkdir(sessions, { recursive: true });
+  await fs.mkdir(archivedSessions, { recursive: true });
+  const archivedId = "019e0000-0000-7000-8000-000000000006";
+  const activeId = "019e0000-0000-7000-8000-000000000007";
+  await writeSession({
+    file: path.join(sessions, `rollout-2026-05-10T12-00-00-${archivedId}.jsonl`),
+    id: archivedId,
+    cwd: "/workspace/project",
+    mtime: new Date("2026-05-10T12:00:00Z"),
+  });
+  await writeSession({
+    file: path.join(archivedSessions, `rollout-2026-05-10T12-00-00-${archivedId}.jsonl`),
+    id: archivedId,
+    cwd: "/workspace/project",
+    mtime: new Date("2026-05-10T12:00:00Z"),
+  });
+  await writeSession({
+    file: path.join(sessions, `rollout-2026-05-10T11-00-00-${activeId}.jsonl`),
+    id: activeId,
+    cwd: "/workspace/project",
+    mtime: new Date("2026-05-10T11:00:00Z"),
+  });
+
+  const threads = await listCodexThreads({ codexHome, cwd: "/workspace/project", limit: 10 });
+  const resolved = await resolveCodexThread({ codexHome, cwd: "/workspace/project" });
+
+  assert.deepEqual(threads.map((thread) => thread.threadId), [activeId]);
+  assert.equal(resolved.threadId, activeId);
+  assert.equal(await findCodexThreadById(archivedId, { codexHome }), null);
+  await assert.rejects(
+    resolveCodexThread({ codexHome, threadId: archivedId }),
+    /archived/,
+  );
 });
 
 test("listCodexThreads infers title from the first user message", async () => {

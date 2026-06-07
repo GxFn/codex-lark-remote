@@ -73,7 +73,11 @@ import {
   refreshTakeoverSelection,
   selectTakeoverProject,
   selectTakeoverTarget,
+  setTakeoverProjectPage,
+  setTakeoverSelectionPage,
 } from "./takeover.mjs";
+
+const TAKEOVER_DISPLAY_PAGE_SIZE = 3;
 
 export async function startBridge(options = {}) {
   const config = await loadConfig({ dataDir: options.dataDir, configPath: options.configPath });
@@ -577,13 +581,13 @@ async function handleChatAction(ctx, event, action) {
     return handleCommandVisibility(ctx, event, action);
   }
   if (action.kind === "takeover_list") {
-    return handleTakeoverProjectList(ctx, event);
+    return handleTakeoverProjectList(ctx, event, action);
   }
   if (action.kind === "takeover_project_select") {
     return handleTakeoverProjectSelect(ctx, event, action);
   }
   if (action.kind === "takeover_window_list") {
-    return handleTakeoverWindowList(ctx, event);
+    return handleTakeoverWindowList(ctx, event, action);
   }
   if (action.kind === "takeover_select") {
     return handleTakeoverSelect(ctx, event, action);
@@ -746,16 +750,45 @@ function stopBridgeSoon(ctx) {
   timer.unref?.();
 }
 
-async function handleTakeoverProjectList(ctx, event) {
+async function handleTakeoverProjectList(ctx, event, action = {}) {
   const language = await languageForEvent(ctx, event);
   const refreshed = await refreshTakeoverProjectSelection({
     dataDir: ctx.config.dataDir,
     limit: ctx.config.takeover?.projectLimit || 20,
+    page: action.page || 0,
+    pageSize: action.pageSize || TAKEOVER_DISPLAY_PAGE_SIZE,
+    idleDebounceMs: ctx.config.takeover?.idleDebounceMs,
     selectionTtlMs: ctx.config.takeover?.selectionTtlMs,
   });
-  const card = buildTakeoverProjectListCard(refreshed.projects, { language });
-  const text = formatTakeoverProjectList(refreshed.projects, { language });
+  const pageOptions = {
+    language,
+    page: refreshed.state.projectSelection?.page || 0,
+    pageSize: refreshed.state.projectSelection?.pageSize || TAKEOVER_DISPLAY_PAGE_SIZE,
+  };
+  const card = buildTakeoverProjectListCard(refreshed.projects, pageOptions);
+  const text = formatTakeoverProjectList(refreshed.projects, pageOptions);
   return replyCardOrText(ctx, event.messageId, card, text);
+}
+
+async function handleTakeoverProjectPage(ctx, event, action = {}) {
+  const language = await languageForEvent(ctx, event);
+  try {
+    const paged = await setTakeoverProjectPage({
+      dataDir: ctx.config.dataDir,
+      page: action.page,
+      pageSize: action.pageSize || TAKEOVER_DISPLAY_PAGE_SIZE,
+    });
+    const pageOptions = {
+      language,
+      page: paged.state.projectSelection?.page || 0,
+      pageSize: paged.state.projectSelection?.pageSize || TAKEOVER_DISPLAY_PAGE_SIZE,
+    };
+    const card = buildTakeoverProjectListCard(paged.projects, pageOptions);
+    const text = formatTakeoverProjectList(paged.projects, pageOptions);
+    return replyCardOrText(ctx, event.messageId, card, text);
+  } catch {
+    return handleTakeoverProjectList(ctx, event, action);
+  }
 }
 
 async function handleTakeoverProjectSelect(ctx, event, action) {
@@ -767,18 +800,25 @@ async function handleTakeoverProjectSelect(ctx, event, action) {
       projectIndex: action.projectIndex,
       cwd: action.cwd,
       limit: 10,
+      pageSize: TAKEOVER_DISPLAY_PAGE_SIZE,
       idleDebounceMs: ctx.config.takeover?.idleDebounceMs,
       selectionTtlMs: ctx.config.takeover?.selectionTtlMs,
     });
-    const card = buildTakeoverListCard(selected.targets, { cwd: selected.project?.cwd || action.cwd || "", language });
-    const text = formatTakeoverList(selected.targets, { cwd: selected.project?.cwd || action.cwd || "", language });
+    const pageOptions = {
+      cwd: selected.project?.cwd || action.cwd || "",
+      language,
+      page: selected.state.selection?.page || 0,
+      pageSize: selected.state.selection?.pageSize || TAKEOVER_DISPLAY_PAGE_SIZE,
+    };
+    const card = buildTakeoverListCard(selected.targets, pageOptions);
+    const text = formatTakeoverList(selected.targets, pageOptions);
     return replyCardOrText(ctx, event.messageId, card, text);
   } catch (error) {
     return ctx.notifier.reply(event.messageId, error.message);
   }
 }
 
-async function handleTakeoverWindowList(ctx, event) {
+async function handleTakeoverWindowList(ctx, event, action = {}) {
   const language = await languageForEvent(ctx, event);
   const scope = await takeoverListScope(ctx);
   const refreshed = await refreshTakeoverSelection({
@@ -788,12 +828,43 @@ async function handleTakeoverWindowList(ctx, event) {
     threadPath: scope.threadPath,
     excludeThreadId: scope.excludeThreadId,
     limit: 10,
+    page: action.page || 0,
+    pageSize: action.pageSize || TAKEOVER_DISPLAY_PAGE_SIZE,
     idleDebounceMs: ctx.config.takeover?.idleDebounceMs,
     selectionTtlMs: ctx.config.takeover?.selectionTtlMs,
   });
-  const card = buildTakeoverListCard(refreshed.targets, { cwd: scope.cwd, language });
-  const text = formatTakeoverList(refreshed.targets, { cwd: scope.cwd, language });
+  const pageOptions = {
+    cwd: scope.cwd,
+    language,
+    page: refreshed.state.selection?.page || 0,
+    pageSize: refreshed.state.selection?.pageSize || TAKEOVER_DISPLAY_PAGE_SIZE,
+  };
+  const card = buildTakeoverListCard(refreshed.targets, pageOptions);
+  const text = formatTakeoverList(refreshed.targets, pageOptions);
   return replyCardOrText(ctx, event.messageId, card, text);
+}
+
+async function handleTakeoverWindowPage(ctx, event, action = {}) {
+  const language = await languageForEvent(ctx, event);
+  try {
+    const paged = await setTakeoverSelectionPage({
+      dataDir: ctx.config.dataDir,
+      page: action.page,
+      pageSize: action.pageSize || TAKEOVER_DISPLAY_PAGE_SIZE,
+    });
+    const cwd = action.cwd || paged.state.scope?.cwd || paged.targets[0]?.cwd || "";
+    const pageOptions = {
+      cwd,
+      language,
+      page: paged.state.selection?.page || 0,
+      pageSize: paged.state.selection?.pageSize || TAKEOVER_DISPLAY_PAGE_SIZE,
+    };
+    const card = buildTakeoverListCard(paged.targets, pageOptions);
+    const text = formatTakeoverList(paged.targets, pageOptions);
+    return replyCardOrText(ctx, event.messageId, card, text);
+  } catch {
+    return handleTakeoverWindowList(ctx, event, action);
+  }
 }
 
 async function takeoverListScope(ctx) {
@@ -923,6 +994,8 @@ async function handleCardAction(ctx, event) {
     projectIndex: event.value?.projectIndex,
     cwd: event.value?.cwd,
     threadId: event.value?.threadId,
+    page: event.value?.page,
+    pageSize: event.value?.pageSize,
     messageId: event.messageId,
     chatIdHash: event.chatIdHash,
     userIdHash: event.userIdHash,
@@ -930,6 +1003,8 @@ async function handleCardAction(ctx, event) {
   try {
     if (action === "takeover_list") return handleTakeoverProjectList(ctx, event);
     if (action === "takeover_window_list") return handleTakeoverWindowList(ctx, event);
+    if (action === "takeover_project_page") return handleTakeoverProjectPage(ctx, event, payload);
+    if (action === "takeover_window_page") return handleTakeoverWindowPage(ctx, event, payload);
     if (action === "takeover_project_select") return handleTakeoverProjectSelect(ctx, event, { kind: "takeover_project_select", ...payload });
     if (action === "takeover_view") return handleTakeoverSelect(ctx, event, { kind: "takeover_select", ...payload });
     if (action === "takeover_observe") {
@@ -1100,6 +1175,34 @@ async function withTakeoverSelectionContext(ctx, event, action) {
   const text = String(event.text || "").trim();
   const takeover = await readTakeover({ dataDir: ctx.config.dataDir });
   if (!takeover || !["selecting_project", "selecting", "selected"].includes(takeover.state)) return action;
+  if (/^(next|more|下一组|下一个|更多)$/i.test(text)) {
+    if (takeover.state === "selecting_project") {
+      return {
+        kind: "takeover_list",
+        page: Number(takeover.projectSelection?.page || 0) + 1,
+        pageSize: takeover.projectSelection?.pageSize || TAKEOVER_DISPLAY_PAGE_SIZE,
+      };
+    }
+    return {
+      kind: "takeover_window_list",
+      page: Number(takeover.selection?.page || 0) + 1,
+      pageSize: takeover.selection?.pageSize || TAKEOVER_DISPLAY_PAGE_SIZE,
+    };
+  }
+  if (/^(prev|previous|back|上一组|上一个)$/i.test(text)) {
+    if (takeover.state === "selecting_project") {
+      return {
+        kind: "takeover_list",
+        page: Number(takeover.projectSelection?.page || 0) - 1,
+        pageSize: takeover.projectSelection?.pageSize || TAKEOVER_DISPLAY_PAGE_SIZE,
+      };
+    }
+    return {
+      kind: "takeover_window_list",
+      page: Number(takeover.selection?.page || 0) - 1,
+      pageSize: takeover.selection?.pageSize || TAKEOVER_DISPLAY_PAGE_SIZE,
+    };
+  }
   if (takeover.state === "selecting_project" && action.kind === "takeover_select" && action.selector) {
     return { kind: "takeover_project_select", selector: action.selector };
   }

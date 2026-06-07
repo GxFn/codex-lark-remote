@@ -586,71 +586,81 @@ export function formatObservationStatus(observation, options = {}) {
   ].filter(Boolean).join("\n");
 }
 
+const DEFAULT_DISPLAY_PAGE_SIZE = 3;
+
 export function formatTakeoverList(targets = [], options = {}) {
   const language = languageOf(options);
+  const page = paginateItems(targets, options);
   if (language === "en") {
     if (!targets.length) return "No takeover-ready Codex sessions found.";
     return [
-      "Codex sessions in the current project",
+      `Codex sessions in the current project (${page.rangeLabel})`,
       options.cwd ? `Project: ${options.cwd}` : "",
       "This lists Codex session records under this project, including the session that started Lark takeover. It is not a macOS window list.",
-      ...targets.map((target, index) => [
-        `${index + 1}. [${formatWindowStatus(target.status, language)}] ${target.name || "Untitled Codex chat"}`,
+      ...page.items.map(({ item: target, index }) => [
+        `${index}. [${formatWindowStatus(target.status, language)}] ${target.name || "Untitled Codex chat"}`,
         `   Thread: ${String(target.threadId || "").slice(0, 8)}`,
         target.cwd ? `   Folder: ${target.cwd}` : "",
         target.updatedAtMs ? `   Updated: ${new Date(target.updatedAtMs).toLocaleString()}` : "",
       ].filter(Boolean).join("\n")),
       "",
-      "Reply 1, 2, or 3 to select a session. Reply takeover now to take over the selected session.",
+      `Reply one of the shown numbers (${formatPageIndexes(page, language)}) to select a session. Reply takeover now to take over the selected session.`,
+      page.hasNext ? "Click Next Group or reply next to see more sessions." : "",
     ].join("\n");
   }
   if (!targets.length) return "没有找到可接管的 Codex 会话。";
   return [
-    "当前项目的 Codex 会话",
+    `当前项目的 Codex 会话（${page.rangeLabel}）`,
     options.cwd ? `项目: ${options.cwd}` : "",
     "这里只显示该项目下的 Codex 会话记录，包括启动飞书接管的会话；它不是 macOS 窗口枚举。",
-    ...targets.map((target, index) => [
-      `${index + 1}. [${formatWindowStatus(target.status, language)}] ${target.name || "未命名 Codex 对话"}`,
+    ...page.items.map(({ item: target, index }) => [
+      `${index}. [${formatWindowStatus(target.status, language)}] ${target.name || "未命名 Codex 对话"}`,
       `   线程: ${String(target.threadId || "").slice(0, 8)}`,
       target.cwd ? `   目录: ${target.cwd}` : "",
       target.updatedAtMs ? `   更新: ${new Date(target.updatedAtMs).toLocaleString()}` : "",
     ].filter(Boolean).join("\n")),
     "",
-    "回复 1、2、3 可以选择会话；回复 takeover now 可以接管已选择会话。",
+    `回复当前显示的序号（${formatPageIndexes(page, language)}）可以选择会话；回复 takeover now 可以接管已选择会话。`,
+    page.hasNext ? "点击“下一组”或回复“下一组”查看更多会话。" : "",
   ].join("\n");
 }
 
 export function formatTakeoverProjectList(projects = [], options = {}) {
   const language = languageOf(options);
+  const page = paginateItems(projects, options);
   if (language === "en") {
     if (!projects.length) return "No takeover-ready Codex projects found.";
     return [
-      "Takeover-ready projects",
+      `Takeover-ready projects (${page.rangeLabel})`,
       "These come from all local Codex session records. Only users in lark.allowedUsers can continue.",
-      ...projects.map((project, index) => [
-        `${index + 1}. ${project.name || "Unknown project"}`,
+      ...page.items.map(({ item: project, index }) => [
+        `${index}. ${project.name || "Unknown project"}`,
         `   Folder: ${project.cwd}`,
         `   Sessions: ${project.windowCount || 0}`,
+        project.activeWindowCount ? `   Active sessions: ${project.activeWindowCount}` : "",
         project.latestWindowName ? `   Latest session: ${project.latestWindowName}` : "",
         project.updatedAtMs ? `   Updated: ${new Date(project.updatedAtMs).toLocaleString()}` : "",
       ].filter(Boolean).join("\n")),
       "",
-      "Reply 1, 2, or 3 to enter a project, then choose a session to observe or take over.",
+      `Reply one of the shown numbers (${formatPageIndexes(page, language)}) to enter a project, then choose a session to observe or take over.`,
+      page.hasNext ? "Click Next Group or reply next to see more projects." : "",
     ].join("\n");
   }
   if (!projects.length) return "没有找到可接管的 Codex 项目。";
   return [
-    "可接管项目",
+    `可接管项目（${page.rangeLabel}）`,
     "这里来自本机全部 Codex 会话记录。只有 lark.allowedUsers 中的飞书用户可以继续操作。",
-    ...projects.map((project, index) => [
-      `${index + 1}. ${project.name || "未知项目"}`,
+    ...page.items.map(({ item: project, index }) => [
+      `${index}. ${project.name || "未知项目"}`,
       `   目录: ${project.cwd}`,
       `   会话: ${project.windowCount || 0}`,
+      project.activeWindowCount ? `   活跃会话: ${project.activeWindowCount}` : "",
       project.latestWindowName ? `   最近会话: ${project.latestWindowName}` : "",
       project.updatedAtMs ? `   更新: ${new Date(project.updatedAtMs).toLocaleString()}` : "",
     ].filter(Boolean).join("\n")),
     "",
-    "回复 1、2、3 进入项目，再选择窗口观察或接管。",
+    `回复当前显示的序号（${formatPageIndexes(page, language)}）进入项目，再选择窗口观察或接管。`,
+    page.hasNext ? "点击“下一组”或回复“下一组”查看更多项目。" : "",
   ].join("\n");
 }
 
@@ -876,15 +886,17 @@ export function formatHandoffSessionBusy(target = {}, status = {}, options = {})
 
 export function buildTakeoverListCard(targets = [], options = {}) {
   const language = languageOf(options);
+  const page = paginateItems(targets, options);
   if (language === "en") {
     const projectElements = options.cwd
       ? [{ tag: "markdown", content: `**Current Project**\n${escapeCardText(options.cwd)}\n\nThis lists Codex session records under this project, including the session that started Lark takeover. It is not a macOS window list.` }, { tag: "hr" }]
       : [];
     return baseCard({
-      title: "Codex Sessions In Current Project",
+      title: `Codex Sessions In Current Project (${page.rangeLabel})`,
       elements: targets.length ? [
         ...projectElements,
-        ...targets.flatMap((target, index) => targetCardElements(target, index + 1, language)),
+        ...page.items.flatMap(({ item: target, index }) => targetCardElements(target, index, language)),
+        ...paginationElements("takeover_window_page", page, language, { cwd: options.cwd || "" }),
       ] : [
         ...projectElements,
         { tag: "markdown", content: "No takeover-ready Codex sessions found." },
@@ -895,10 +907,11 @@ export function buildTakeoverListCard(targets = [], options = {}) {
     ? [{ tag: "markdown", content: `**当前项目**\n${escapeCardText(options.cwd)}\n\n这里只显示该项目下的 Codex 会话记录，包括启动飞书接管的会话；不是 macOS 窗口枚举。` }, { tag: "hr" }]
     : [];
   return baseCard({
-    title: "当前项目的 Codex 会话",
+    title: `当前项目的 Codex 会话（${page.rangeLabel}）`,
     elements: targets.length ? [
       ...projectElements,
-      ...targets.flatMap((target, index) => targetCardElements(target, index + 1, language)),
+      ...page.items.flatMap(({ item: target, index }) => targetCardElements(target, index, language)),
+      ...paginationElements("takeover_window_page", page, language, { cwd: options.cwd || "" }),
     ] : [
       ...projectElements,
       { tag: "markdown", content: "没有找到可接管的 Codex 会话。" },
@@ -908,30 +921,33 @@ export function buildTakeoverListCard(targets = [], options = {}) {
 
 export function buildTakeoverProjectListCard(projects = [], options = {}) {
   const language = languageOf(options);
+  const page = paginateItems(projects, options);
   if (language === "en") {
     return baseCard({
-      title: "Takeover-Ready Projects",
+      title: `Takeover-Ready Projects (${page.rangeLabel})`,
       elements: projects.length ? [
         {
           tag: "markdown",
           content: "These projects come from local Codex session records. Only Lark users in `lark.allowedUsers` can enter projects, observe sessions, or take over sessions.",
         },
         { tag: "hr" },
-        ...projects.flatMap((project, index) => projectCardElements(project, index + 1, language)),
+        ...page.items.flatMap(({ item: project, index }) => projectCardElements(project, index, language)),
+        ...paginationElements("takeover_project_page", page, language),
       ] : [
         { tag: "markdown", content: "No takeover-ready Codex projects found." },
       ],
     });
   }
   return baseCard({
-    title: "可接管项目",
+    title: `可接管项目（${page.rangeLabel}）`,
     elements: projects.length ? [
       {
         tag: "markdown",
         content: "这些项目来自本机 Codex 会话记录。只有 `lark.allowedUsers` 中的飞书用户可以进入项目、观察会话或接管会话。",
       },
       { tag: "hr" },
-      ...projects.flatMap((project, index) => projectCardElements(project, index + 1, language)),
+      ...page.items.flatMap(({ item: project, index }) => projectCardElements(project, index, language)),
+      ...paginationElements("takeover_project_page", page, language),
     ] : [
       { tag: "markdown", content: "没有找到可接管的 Codex 项目。" },
     ],
@@ -1181,6 +1197,55 @@ function languageOf(options = {}) {
   return options?.language === "en" ? "en" : "zh";
 }
 
+function paginateItems(items = [], options = {}) {
+  const pageSize = normalizePageSize(options.pageSize || DEFAULT_DISPLAY_PAGE_SIZE);
+  const total = items.length;
+  const maxPage = Math.max(0, Math.ceil(total / pageSize) - 1);
+  const requestedPage = Number(options.page || 0);
+  const page = Number.isFinite(requestedPage) ? Math.min(Math.max(0, Math.floor(requestedPage)), maxPage) : 0;
+  const start = page * pageSize;
+  const visible = items.slice(start, start + pageSize);
+  const indexedItems = visible.map((item, visibleIndex) => ({
+    item,
+    index: Number(item?.index || start + visibleIndex + 1),
+  }));
+  const first = total ? start + 1 : 0;
+  const last = Math.min(total, start + visible.length);
+  return {
+    page,
+    pageSize,
+    total,
+    start,
+    first,
+    last,
+    rangeLabel: total ? `${first}-${last}/${total}` : "0/0",
+    indexes: indexedItems.map(({ index }) => index),
+    items: indexedItems,
+    hasPrevious: page > 0,
+    hasNext: page < maxPage,
+  };
+}
+
+function formatPageIndexes(page, language = "zh") {
+  return (page.indexes || []).join(language === "en" ? ", " : "、");
+}
+
+function normalizePageSize(value) {
+  const size = Number(value || DEFAULT_DISPLAY_PAGE_SIZE);
+  return Number.isFinite(size) && size > 0 ? Math.max(1, Math.floor(size)) : DEFAULT_DISPLAY_PAGE_SIZE;
+}
+
+function paginationElements(action, page, language = "zh", extraValue = {}) {
+  const actions = [];
+  if (page.hasPrevious) {
+    actions.push(pageButton(language === "en" ? "Previous Group" : "上一组", action, page.page - 1, page.pageSize, extraValue, "default"));
+  }
+  if (page.hasNext) {
+    actions.push(pageButton(language === "en" ? "Next Group" : "下一组", action, page.page + 1, page.pageSize, extraValue, "primary"));
+  }
+  return actions.length ? [{ tag: "action", actions }] : [];
+}
+
 function targetCardElements(target, index, language = "zh") {
   return [
     {
@@ -1209,6 +1274,7 @@ function projectCardElements(project, index, language = "zh") {
           `**${index}. ${escapeCardText(project.name || "Unknown project")}**`,
           `Folder: ${escapeCardText(project.cwd || "")}`,
           `Sessions: ${project.windowCount || 0}`,
+          project.activeWindowCount ? `Active sessions: ${project.activeWindowCount}` : "",
           project.latestWindowName ? `Latest session: ${escapeCardText(project.latestWindowName)}` : "",
           project.updatedAtMs ? `Updated: ${new Date(project.updatedAtMs).toLocaleString()}` : "",
         ].filter(Boolean).join("\n"),
@@ -1229,6 +1295,7 @@ function projectCardElements(project, index, language = "zh") {
         `**${index}. ${escapeCardText(project.name || "未知项目")}**`,
         `目录: ${escapeCardText(project.cwd || "")}`,
         `会话: ${project.windowCount || 0}`,
+        project.activeWindowCount ? `活跃会话: ${project.activeWindowCount}` : "",
         project.latestWindowName ? `最近会话: ${escapeCardText(project.latestWindowName)}` : "",
         project.updatedAtMs ? `更新: ${new Date(project.updatedAtMs).toLocaleString()}` : "",
       ].filter(Boolean).join("\n"),
@@ -1265,6 +1332,20 @@ function projectButton(text, action, project, type = "default", index = project?
       action,
       projectIndex: Number(index || project?.index || 0),
       cwd: project?.cwd || "",
+    },
+  };
+}
+
+function pageButton(text, action, page, pageSize, extraValue = {}, type = "default") {
+  return {
+    tag: "button",
+    text: { tag: "plain_text", content: text },
+    type,
+    value: {
+      ...extraValue,
+      action,
+      page,
+      pageSize,
     },
   };
 }

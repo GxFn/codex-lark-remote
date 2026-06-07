@@ -93,6 +93,86 @@ test("takeover project selection groups windows by project before listing window
   assert.deepEqual(selected.targets.map((target) => target.name), ["Beta C", "Beta B"]);
 });
 
+test("takeover project and window lists prioritize active sessions", async () => {
+  const { dataDir, codexHome, sessions } = await fixture();
+  await writeSession({
+    file: path.join(sessions, "rollout-2026-05-13T10-00-00-019e0000-0000-7000-8000-000000000030.jsonl"),
+    id: "019e0000-0000-7000-8000-000000000030",
+    cwd: "/workspace/alpha",
+    name: "Active older",
+    events: [{ type: "event_msg", payload: { type: "agent_reasoning", message: "working" } }],
+    mtime: new Date("2026-05-13T10:00:00Z"),
+  });
+  await writeSession({
+    file: path.join(sessions, "rollout-2026-05-13T10-03-00-019e0000-0000-7000-8000-000000000031.jsonl"),
+    id: "019e0000-0000-7000-8000-000000000031",
+    cwd: "/workspace/alpha",
+    name: "Idle newer",
+    events: [{ type: "turn.completed", payload: {} }],
+    mtime: new Date("2026-05-13T10:03:00Z"),
+  });
+  await writeSession({
+    file: path.join(sessions, "rollout-2026-05-13T10-04-00-019e0000-0000-7000-8000-000000000032.jsonl"),
+    id: "019e0000-0000-7000-8000-000000000032",
+    cwd: "/workspace/beta",
+    name: "Idle project",
+    events: [{ type: "turn.completed", payload: {} }],
+    mtime: new Date("2026-05-13T10:04:00Z"),
+  });
+
+  const projects = await listTakeoverProjects({ codexHome, idleDebounceMs: 60_000 });
+  assert.equal(projects[0].cwd, "/workspace/alpha");
+  assert.equal(projects[0].activeWindowCount, 1);
+
+  await prepareTakeoverScope({ dataDir, codexHome, cwd: "/workspace/alpha" });
+  const { targets } = await refreshTakeoverSelection({
+    dataDir,
+    codexHome,
+    cwd: "/workspace/alpha",
+    idleDebounceMs: 60_000,
+  });
+  assert.deepEqual(targets.map((target) => target.name), ["Active older", "Idle newer"]);
+});
+
+test("takeover project and window lists skip archived sessions", async () => {
+  const { dataDir, codexHome, sessions } = await fixture();
+  const archivedSessions = path.join(codexHome, "archived_sessions");
+  await fs.mkdir(archivedSessions, { recursive: true });
+  const archivedId = "019e0000-0000-7000-8000-000000000040";
+  await writeSession({
+    file: path.join(sessions, `rollout-2026-05-13T10-00-00-${archivedId}.jsonl`),
+    id: archivedId,
+    cwd: "/workspace/archived-only",
+    name: "Archived window",
+    mtime: new Date("2026-05-13T10:00:00Z"),
+  });
+  await writeSession({
+    file: path.join(archivedSessions, `rollout-2026-05-13T10-00-00-${archivedId}.jsonl`),
+    id: archivedId,
+    cwd: "/workspace/archived-only",
+    name: "Archived window",
+    mtime: new Date("2026-05-13T10:00:00Z"),
+  });
+  await writeSession({
+    file: path.join(sessions, "rollout-2026-05-13T10-01-00-019e0000-0000-7000-8000-000000000041.jsonl"),
+    id: "019e0000-0000-7000-8000-000000000041",
+    cwd: "/workspace/active",
+    name: "Active window",
+    mtime: new Date("2026-05-13T10:01:00Z"),
+  });
+
+  const projects = await listTakeoverProjects({ codexHome });
+  assert.deepEqual(projects.map((project) => project.cwd), ["/workspace/active"]);
+
+  await prepareTakeoverScope({ dataDir, codexHome, cwd: "/workspace/archived-only" });
+  const { targets } = await refreshTakeoverSelection({
+    dataDir,
+    codexHome,
+    cwd: "/workspace/archived-only",
+  });
+  assert.deepEqual(targets, []);
+});
+
 test("selecting a takeover target only stores selected state", async () => {
   const { dataDir, codexHome, sessions } = await fixture();
   await writeSession({
