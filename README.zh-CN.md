@@ -38,7 +38,7 @@ Codex Desktop 会话
 bridge 是 local-first 的。启动时不会把已有 Codex 聊天历史发送到飞书/Lark。
 项目/会话接管需要先配置允许用户，Codex 原生权限弹窗也仍然留在 Mac 上处理。
 
-这个仓库是 `gxfn` Codex 插件 marketplace 的源码。仓库根目录就是可安装的
+这个仓库是自包含的 Codex 插件 marketplace 源码。仓库根目录就是可安装的
 Codex 插件根目录，层级和 Wakeflow 保持一致。
 
 ## 安装
@@ -86,9 +86,9 @@ v0.2.6
 
 ### Marketplace 源
 
-这个仓库也包含 `.agents/plugins/marketplace.json`。如果要添加整个 `gxfn`
-marketplace，而不是只安装这个插件，可以使用仓库根目录并让稀疏路径留空。
-只有在明确想使用未发布改动时，才使用 `main`。
+这个仓库包含 `.agents/plugins/marketplace.json`。它声明 `codex-lark-remote`
+marketplace，里面只有一个指向仓库根目录的插件条目。只有在明确想使用未发布
+改动时，才使用 `main`。
 
 ## 快速开始
 
@@ -261,7 +261,6 @@ Lark Remote 接管的是对话输入输出链路，不是 Codex Desktop 的原�
 | `skills/` | 随插件发布的 Codex skill 指令。 |
 | `config/example.config.json` | 私密运行配置示例。 |
 | `test/` | Node 测试。 |
-| `scripts/sync-gxfn-marketplace.mjs` | marketplace 快照同步脚本。 |
 
 ## 开发
 
@@ -282,17 +281,6 @@ enabled = true
 npm test
 ```
 
-发布或刷新插件后，把可安装插件根目录同步到聚合
-`GxFn/GxFnCodexMarketplace` 仓库：
-
-```bash
-npm run sync:gxfn-marketplace
-```
-
-如果要让脚本同时复制、提交并推送市场快照，运行
-`npm run sync:gxfn-marketplace:push`。如果 `GxFnCodexMarketplace` 没有和本仓库
-放在同一层目录，用 `GXFN_CODEX_MARKETPLACE_DIR=/path/to/GxFnCodexMarketplace`
-指定路径。
 
 ## 排查
 

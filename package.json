@@ -12,10 +12,7 @@
     "bridge": "node ./bin/codex-lark-bridge.mjs",
     "mcp": "node ./bin/codex-lark-remote-mcp.mjs",
     "test": "node --test",
-    "fixture": "node ./scripts/lark-event-fixture.mjs",
-    "sync:gxfn-marketplace": "node ./scripts/sync-gxfn-marketplace.mjs",
-    "sync:gxfn-marketplace:commit": "node ./scripts/sync-gxfn-marketplace.mjs --commit",
-    "sync:gxfn-marketplace:push": "node ./scripts/sync-gxfn-marketplace.mjs --commit --push"
+    "fixture": "node ./scripts/lark-event-fixture.mjs"
   },
   "keywords": [
     "codex",

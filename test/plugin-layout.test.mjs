@@ -54,7 +54,7 @@ const readmePairs = [
   },
 ];
 
-test("keeps Codex marketplace metadata pointed at the plugin bundle", async () => {
+test("keeps repository-local marketplace metadata pointed at the plugin root", async () => {
   const marketplace = JSON.parse(await fs.readFile(marketplaceUrl, "utf8"));
   assert.equal(marketplace.name, "gxfn");
   assert.equal(marketplace.interface?.displayName, "GxFn");
@@ -63,7 +63,7 @@ test("keeps Codex marketplace metadata pointed at the plugin bundle", async () =
   assert.equal(marketplace.plugins[0]?.source?.path, ".");
 });
 
-test("keeps plugin metadata aligned with the GxFn marketplace conventions", async () => {
+test("keeps plugin metadata aligned with repository-local marketplace conventions", async () => {
   const manifest = JSON.parse(await fs.readFile(new URL("../.codex-plugin/plugin.json", import.meta.url), "utf8"));
   const packageJson = JSON.parse(await fs.readFile(new URL("../package.json", import.meta.url), "utf8"));
 

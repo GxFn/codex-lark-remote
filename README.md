@@ -42,9 +42,9 @@ Feishu/Lark during startup. Feishu/Lark users must be allowed before
 project/session takeover is available, and native Codex permission dialogs stay
 on the Mac.
 
-This repository is the `gxfn` Codex plugin marketplace source. The repository
-root is the installable Codex plugin root, matching the same layout style as
-Wakeflow.
+This repository is a self-contained Codex plugin marketplace source. The
+repository root is the installable Codex plugin root, matching the same layout
+style as Wakeflow.
 
 ## Install
 
@@ -92,10 +92,9 @@ Enable `codex-lark-remote` from the plugin list after installation.
 
 ### Marketplace Source
 
-This repository also includes `.agents/plugins/marketplace.json`. To add the
-whole `gxfn` marketplace instead of only this plugin, use the repository root
-with an empty sparse path. Use `main` only when you intentionally want
-unreleased changes.
+This repository includes `.agents/plugins/marketplace.json`. It declares the
+`codex-lark-remote` marketplace with a single plugin entry that points at the
+repository root. Use `main` only when you intentionally want unreleased changes.
 
 ## Getting Started
 
@@ -294,7 +293,6 @@ finishes.
 | `skills/` | Codex skill instructions bundled with the plugin. |
 | `config/example.config.json` | Example private runtime config shape. |
 | `test/` | Node test suite. |
-| `scripts/sync-gxfn-marketplace.mjs` | Marketplace snapshot sync helper. |
 
 ## Development
 
@@ -315,17 +313,6 @@ Run tests before publishing:
 npm test
 ```
 
-After publishing or refreshing the plugin, sync its installable plugin root into
-the aggregate `GxFn/GxFnCodexMarketplace` repository:
-
-```bash
-npm run sync:gxfn-marketplace
-```
-
-Use `npm run sync:gxfn-marketplace:push` to copy, commit, and push the
-marketplace snapshot. Set
-`GXFN_CODEX_MARKETPLACE_DIR=/path/to/GxFnCodexMarketplace` if the marketplace
-repository is not checked out next to this repository.
 
 ## Troubleshooting
 
