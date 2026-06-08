@@ -86,6 +86,16 @@ paths, cache layouts, MCP loading internals, local scripts, internal ids,
 queues, repo keys, worktrees, approval commands, or alternate routes only when
 the user asks for diagnostics or plugin development debugging.
 
+Keep the semantic boundary explicit. `控制:` / `control:` forces the rest of the
+message to be interpreted as a Lark Remote control command. `派发:` /
+`dispatch:` forces the rest of the message to be delivered as a dispatch prompt
+for the selected target. In thread-dispatch mode, ordinary bilingual text is a
+dispatch prompt unless it is an exact control command such as `控制台`,
+`status`, `observe off`, or `close Lark connection`. In console mode,
+project/session selection phrases stay control commands, while coding/work
+prompts such as `修复项目列表组件`, `fix the project list component`, or
+`帮我实现会话列表分页` should go to the current dispatch target when one exists.
+
 When a Feishu/Lark turn is completed, answer in the same concise style you would
 use in Codex chat. Include changed files and validation only when they matter to
 the user's request.

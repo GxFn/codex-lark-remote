@@ -213,6 +213,15 @@ directly to the target thread; the control Codex window performs real thread
 dispatch with Codex host thread tools. They no longer go through
 project/session intent routing until you return to the console or exit handoff.
 
+Semantic routing is bilingual and prefix-aware. `control:` / `控制:` forces the
+rest of the message to be parsed as a Lark Remote control command, while
+`dispatch:` / `派发:` forces it to be delivered as a selected-target dispatch
+prompt. In thread-dispatch mode, ordinary text is treated as dispatch unless it
+is an exact control command such as `console`, `status`, `observe off`, or
+`close Lark connection`. In console mode, project/session phrases remain
+controls, but task-like text such as "fix the project list component" or
+"帮我实现项目列表分页" is dispatched when a target is active.
+
 ## Start From Codex
 
 From a trusted Codex conversation, ask:

@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { routeChatTextAction, classifyHandoffDirectText, intentToAction } from "../src/intent-router.mjs";
+import { activateHandoff } from "../src/handoff.mjs";
 import { setIntentSessionMode } from "../src/intent-state.mjs";
 
 test("handoff direct mode sends ordinary control-looking text to Codex", () => {
@@ -25,6 +26,14 @@ test("handoff direct mode sends ordinary control-looking text to Codex", () => {
   assert.deepEqual(classifyHandoffDirectText("exit handoff", {}), { kind: "handoff_disable" });
   assert.deepEqual(classifyHandoffDirectText("关闭飞书连接", {}), { kind: "bridge_stop_confirm" });
   assert.deepEqual(classifyHandoffDirectText("close Lark connection", {}), { kind: "bridge_stop_confirm" });
+  assert.deepEqual(classifyHandoffDirectText("控制: 项目列表", {}), { kind: "takeover_list" });
+  assert.deepEqual(classifyHandoffDirectText("control: show projects", {}), { kind: "takeover_list" });
+  assert.deepEqual(classifyHandoffDirectText("派发: 项目列表", { defaultRepo: "main", repos: { main: {} } }), {
+    kind: "task",
+    forced: false,
+    repoKey: "main",
+    taskText: "项目列表",
+  });
 });
 
 test("console route uses Codex intent translator for unrecognized natural language", async () => {
@@ -117,6 +126,59 @@ test("console route recognizes common project and window phrases without transla
   assert.deepEqual(
     await routeChatTextAction(ctx, { ...baseEvent, text: "close Lark connection" }, { kind: "bridge_stop_confirm" }),
     { kind: "bridge_stop_confirm" },
+  );
+});
+
+test("console route separates control commands from dispatch prompts when a target is active", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-intent-router-dispatch-"));
+  const baseEvent = { chatId: "oc_chat", chatIdHash: "c_chat", userIdHash: "u_user" };
+  await setIntentSessionMode({ dataDir, event: baseEvent, mode: "console", reason: "test" });
+  await activateHandoff({
+    dataDir,
+    threadId: "control-thread",
+    cwd: "/workspace",
+    activatedBy: "test",
+  });
+  await fs.writeFile(path.join(dataDir, "takeover.json"), `${JSON.stringify({
+    version: 1,
+    state: "active",
+    mode: "dispatch",
+    target: { threadId: "target-thread", name: "Target", cwd: "/workspace" },
+  }, null, 2)}\n`);
+  const ctx = {
+    config: { dataDir, defaultRepo: "main", repos: { main: {} }, intent: { mode: "hybrid", translator: { minConfidence: 0.75 } } },
+    intentTranslator: async () => {
+      throw new Error("translator should not be called for clear command/dispatch boundaries");
+    },
+  };
+
+  assert.deepEqual(
+    await routeChatTextAction(ctx, { ...baseEvent, text: "帮我实现项目列表分页" }, { kind: "task", taskText: "帮我实现项目列表分页" }),
+    { kind: "task", forced: false, repoKey: "main", taskText: "帮我实现项目列表分页" },
+  );
+  assert.deepEqual(
+    await routeChatTextAction(ctx, { ...baseEvent, text: "fix the project list component" }, { kind: "task", taskText: "fix the project list component" }),
+    { kind: "task", forced: false, repoKey: "main", taskText: "fix the project list component" },
+  );
+  assert.deepEqual(
+    await routeChatTextAction(ctx, { ...baseEvent, text: "分析第 2 个窗口为什么闪烁" }, { kind: "task", taskText: "分析第 2 个窗口为什么闪烁" }),
+    { kind: "task", forced: false, repoKey: "main", taskText: "分析第 2 个窗口为什么闪烁" },
+  );
+  assert.deepEqual(
+    await routeChatTextAction(ctx, { ...baseEvent, text: "控制: 项目列表" }, { kind: "task", taskText: "控制: 项目列表" }),
+    { kind: "takeover_list" },
+  );
+  assert.deepEqual(
+    await routeChatTextAction(ctx, { ...baseEvent, text: "派发: 项目列表" }, { kind: "takeover_list" }),
+    { kind: "task", forced: false, repoKey: "main", taskText: "项目列表" },
+  );
+  assert.deepEqual(
+    await routeChatTextAction(ctx, { ...baseEvent, text: "please enter project two" }, { kind: "task", taskText: "please enter project two" }),
+    { kind: "takeover_project_select", selector: "2" },
+  );
+  assert.deepEqual(
+    await routeChatTextAction(ctx, { ...baseEvent, text: "check status" }, { kind: "task", taskText: "check status" }),
+    { kind: "status" },
   );
 });
 

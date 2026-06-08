@@ -7,8 +7,11 @@ import {
   isBridgeStopText,
   isConsoleModeText,
   isHandoffModeText,
+  isLikelyDispatchPrompt,
   normalizeControlText,
+  parseControlDirective,
   parseControlSemanticAction,
+  parseDispatchDirective,
   parseForwardToHandoff,
 } from "./control-semantics.mjs";
 
@@ -26,9 +29,21 @@ export async function routeChatTextAction(ctx, event, initialAction) {
   const mode = hasDataDir
     ? await resolveIntentSessionMode({ dataDir: ctx.config.dataDir, event, config: ctx.config })
     : "handoff";
+  const state = { handoff, takeover, session };
+
+  const forcedControlText = parseControlDirective(text);
+  if (forcedControlText) {
+    return parseControlSemanticAction(forcedControlText, { mode: "console", state })
+      || { kind: "intent_clarify", reason: "我还没识别出这条控制指令。" };
+  }
+
+  const forcedDispatchText = parseDispatchDirective(text);
+  if (forcedDispatchText && hasDispatchTarget(state)) {
+    return buildDispatchTask(forcedDispatchText, ctx.config);
+  }
 
   if (mode === "console") {
-    return routeConsoleText(ctx, event, initialAction, { handoff, takeover, session });
+    return routeConsoleText(ctx, event, initialAction, state);
   }
 
   if (takeover?.state === "pending") {
@@ -46,6 +61,13 @@ export async function routeChatTextAction(ctx, event, initialAction) {
 export function classifyHandoffDirectText(text, config = {}) {
   const normalized = normalizeControlText(text);
   if (!normalized) return { kind: "empty" };
+  const forcedDispatchText = parseDispatchDirective(normalized);
+  if (forcedDispatchText) return buildDispatchTask(forcedDispatchText, config);
+  const forcedControlText = parseControlDirective(normalized);
+  if (forcedControlText) {
+    return parseControlSemanticAction(forcedControlText, { mode: "console" })
+      || { kind: "intent_clarify", reason: "我还没识别出这条控制指令。" };
+  }
   if (isConsoleModeText(normalized)) return { kind: "intent_console_enable" };
   if (isHandoffModeText(normalized)) return { kind: "intent_handoff_mode" };
   if (isBridgeStopText(normalized)) return { kind: "bridge_stop_confirm" };
@@ -62,10 +84,7 @@ export function classifyHandoffDirectText(text, config = {}) {
   if (/^(observe\s+off|watch\s+off|stop observing|stop observe|停止观察|关闭观察)[。.!！]?$/.test(normalized.toLowerCase())) return { kind: "observe_disable" };
 
   return {
-    kind: "task",
-    forced: false,
-    repoKey: config.defaultRepo || Object.keys(config.repos || {})[0] || "current",
-    taskText: normalized,
+    ...buildDispatchTask(normalized, config),
   };
 }
 
@@ -76,6 +95,10 @@ async function routeConsoleText(ctx, event, initialAction, state = {}) {
   const localAction = parseControlSemanticAction(event.text, { mode: "console", state });
   if (localAction) return localAction;
 
+  if (hasDispatchTarget(state) && isLikelyDispatchPrompt(event.text)) {
+    return buildDispatchTask(event.text, ctx.config);
+  }
+
   const ruleIntent = actionToIntent(initialAction);
   const intent = ruleIntent || await translateTextToIntent({
     text: event.text,
@@ -84,6 +107,24 @@ async function routeConsoleText(ctx, event, initialAction, state = {}) {
     translator: ctx.intentTranslator,
   });
   return intentToAction(intent);
+}
+
+function hasDispatchTarget(state = {}) {
+  return Boolean(
+    state.handoff?.active
+    || state.takeover?.state === "active"
+    || state.takeover?.state === "pending"
+    || state.session?.mode === "handoff",
+  );
+}
+
+function buildDispatchTask(text, config = {}) {
+  return {
+    kind: "task",
+    forced: false,
+    repoKey: config.defaultRepo || Object.keys(config.repos || {})[0] || "current",
+    taskText: normalizeControlText(text),
+  };
 }
 
 function actionToIntent(action = {}) {
