@@ -3,7 +3,7 @@
   "version": "0.2.6",
   "description": "Control, observe, and take over local Codex sessions from Feishu/Lark.",
   "author": {
-    "name": "GxFn",
+    "name": "gaoxuefeng",
     "url": "https://github.com/GxFn"
   },
   "homepage": "https://github.com/GxFn/codex-lark-remote#readme",

@@ -67,7 +67,7 @@ test("keeps plugin metadata aligned with repository-local marketplace convention
   const manifest = JSON.parse(await fs.readFile(new URL("../.codex-plugin/plugin.json", import.meta.url), "utf8"));
   const packageJson = JSON.parse(await fs.readFile(new URL("../package.json", import.meta.url), "utf8"));
 
-  assert.equal(manifest.author?.name, "GxFn");
+  assert.equal(manifest.author?.name, "gaoxuefeng");
   assert.equal(manifest.author?.url, "https://github.com/GxFn");
   assert.equal(manifest.homepage, "https://github.com/GxFn/codex-lark-remote#readme");
   assert.equal(manifest.repository, "https://github.com/GxFn/codex-lark-remote");
@@ -114,7 +114,7 @@ test("keeps full plugin-root READMEs", async () => {
 
 test("keeps startup guidance on the plugin MCP path", async () => {
   const skill = await fs.readFile(
-    new URL("../skills/codex-lark-remote/SKILL.md", import.meta.url),
+    new URL("../skills/lark-remote/SKILL.md", import.meta.url),
     "utf8",
   );
   assert.match(skill, /Use the plugin MCP tools only/);
@@ -126,7 +126,7 @@ test("keeps startup guidance on the plugin MCP path", async () => {
 
 test("declares a plugin-root cwd for the MCP server", async () => {
   const config = JSON.parse(await fs.readFile(new URL("../.mcp.json", import.meta.url), "utf8"));
-  const server = config.mcpServers?.["codex-lark-remote"];
+  const server = config.mcpServers?.["lark-remote"];
 
   assert.equal(server?.command, "node");
   assert.deepEqual(server?.args, [

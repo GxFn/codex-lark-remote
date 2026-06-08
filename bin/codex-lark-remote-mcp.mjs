@@ -296,7 +296,7 @@ async function handleRequest(request) {
     return response(request.id, {
       protocolVersion: request.params?.protocolVersion || "2024-11-05",
       capabilities: { tools: {} },
-      serverInfo: { name: "codex-lark-remote", version },
+      serverInfo: { name: "lark-remote", version },
     });
   }
   if (request.method === "tools/list") return response(request.id, { tools });

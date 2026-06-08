@@ -3,7 +3,7 @@ import { shortHash } from "./config.mjs";
 export function buildRunnerPrompt(command, config) {
   const context = buildRemoteContext(command, config);
   return [
-    "Use the codex-lark-remote skill.",
+    "Use the Lark Remote skill.",
     "",
     "If the skill is unavailable, follow these rules: work only in the provided worktree, keep the final report concise for a mobile chat, do not expose secrets or long logs, and do not commit, push, merge, or publish unless approval is explicitly present.",
     "",

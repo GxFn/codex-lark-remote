@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "codex-lark-remote": {
+    "lark-remote": {
       "command": "node",
       "args": [
         "./bin/codex-lark-remote-mcp.mjs"

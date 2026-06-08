@@ -1,6 +1,6 @@
 ---
-name: codex-lark-remote
-description: Use when the user asks to start, configure, diagnose, or use Lark Remote, or when Codex is responding to a Feishu/Lark message through codex-lark-remote. Defaults to connecting Feishu/Lark to the local Codex project/session console.
+name: lark-remote
+description: Use when the user asks to start, configure, diagnose, or use Lark Remote, or when Codex is responding to a Feishu/Lark message through Lark Remote. Defaults to connecting Feishu/Lark to the local Codex project/session console.
 ---
 
 # Lark Remote
