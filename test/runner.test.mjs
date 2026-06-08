@@ -91,6 +91,7 @@ test("buildCodexResumeArgs can keep the git repo check when explicitly requested
 
 test("buildHandoffPrompt sends Feishu input as direct Codex conversation text by default", () => {
   const prompt = buildHandoffPrompt({
+    id: "rcmd_note",
     userName: "ou_user",
     userIdHash: "u_hash",
     prompt: "fix README",
@@ -98,6 +99,9 @@ test("buildHandoffPrompt sends Feishu input as direct Codex conversation text by
   });
 
   assert.match(prompt, /^fix README/);
+  assert.match(prompt, /remoteCommandId: rcmd_note/);
+  assert.match(prompt, /Lark Remote Control Window skill/);
+  assert.match(prompt, /available skills, and available MCP tools/);
   assert.match(prompt, /Feishu\/Lark cannot click native Codex Desktop permission dialogs/);
   assert.match(prompt, /Reply with a concise prompt explaining what permission is needed/);
 });
@@ -130,6 +134,7 @@ test("buildHandoffPrompt can still annotate Feishu input when configured", () =>
 
 test("buildHandoffPrompt wraps target dispatch for the control window", () => {
   const prompt = buildHandoffPrompt({
+    id: "rcmd_dispatch",
     userName: "ou_user",
     userIdHash: "u_hash",
     prompt: "优先处理这个变更",
@@ -143,8 +148,10 @@ test("buildHandoffPrompt wraps target dispatch for the control window", () => {
   });
 
   assert.match(prompt, /\[Codex Lark Remote thread dispatch\]/);
+  assert.match(prompt, /Lark Remote Control Window skill/);
   assert.match(prompt, /JavaScript has not sent this message to the target thread/);
   assert.match(prompt, /higher-priority dispatch\/interrupt request/);
+  assert.match(prompt, /remoteCommandId: rcmd_dispatch/);
   assert.match(prompt, /target-thread-1/);
   assert.match(prompt, /修复 lark 远程派发/);
   assert.match(prompt, /优先处理这个变更/);

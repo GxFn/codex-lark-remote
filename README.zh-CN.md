@@ -187,15 +187,14 @@ commands off
 `enter project 1`, `observe session 2`, `takeover 1`, `status`, and
 `close Lark connection`.
 
-接管后，飞书会话会进入任务直通模式。后续普通消息会直接发送给目标 Codex 会话，
-作为新任务或补充指令处理，不再判断项目/会话操作，直到你回到控制台或退出接管。
+接管后，飞书会话会进入线程派发模式。后续普通消息会发送给专用 Codex 控制窗口，
+作为所选目标会话的派发请求。JavaScript 不会直接把普通消息发送到目标线程；真正
+的线程派发由控制窗口通过 Codex 宿主线程工具和 Lark Remote MCP 工具完成。
 
-语义路由支持中英文混用，也支持显式前缀。`控制:` / `control:` 会强制把后半句
-识别为 Lark Remote 控制命令；`派发:` / `dispatch:` 会强制把后半句作为目标会话
-的派发提示词。线程派发模式下，普通文本默认是派发，除非它是 `控制台`、`status`、
-`observe off`、`关闭飞书连接` 这类明确控制命令。控制台模式下，`项目列表`、
-`进入项目 1` 仍是控制命令；但当前已有目标时，`修复项目列表组件`、`fix the
-project list component`、`帮我实现会话列表分页` 这类任务型文本会进入派发。
+控制窗口连接后，JavaScript 只拦截 `控制台`、`status`、`observe off`、
+`exit handoff`、`关闭飞书连接`、`控制:` / `control:` 这类明确控制关键词。
+其他内容，包括项目/会话语义和 `派发:` / `dispatch:` 文本，都会原样交给控制
+Codex 窗口，由 agent 基于 skill 和 MCP 工具自行判断。
 
 ## 从 Codex 启动
 
@@ -248,6 +247,14 @@ LLM 输出在聊天里连成一段。
 飞书来源的新提示词，例如自动化或本地 Codex 输入，会作为 `用户提示：` 分隔消息
 同步到飞书。
 
+控制 Codex 窗口可以通过 `codex_lark_context`、
+`codex_lark_takeover_projects`、`codex_lark_takeover_project`、
+`codex_lark_takeover_targets`、`codex_lark_takeover`、
+`codex_lark_takeover_clear`、`codex_lark_observation_targets`、
+`codex_lark_observe` 和 `codex_lark_observe_stop` 等 MCP 工具检查和改变
+Lark Remote 状态。随插件发布的 Lark Remote Control Window skill 会提示控制窗口
+优先结合这些工具和 Codex 宿主线程工具判断，而不是只靠 JS 侧猜语义。
+
 ## 行为与边界
 
 远程回复会按聊天里的编程场景精简：
@@ -265,8 +272,9 @@ Lark Remote 接管的是对话输入输出链路，不是 Codex Desktop 的原�
 不能点击权限弹窗、MCP 审批、沙箱提权、联网/安装依赖审批，或其他 Codex 原生 UI
 弹窗。遇到这些边界时，Codex 应发回清晰的飞书/Lark 提示，说明需要什么权限以及在哪里批准。
 
-如果目标 Codex Desktop 会话仍在执行，Lark Remote 不会把文本热注入正在运行的进程。
-这条飞书/Lark 消息不会排队；请等接管生效提示出现，或当前 Codex 轮次结束后重新发送。
+如果所选目标 Codex 会话仍在执行，Lark Remote 仍会把飞书/Lark 消息发送给专用
+Codex 控制窗口。控制窗口应把它当成目标线程的更高优先级派发/打断请求处理；只有
+宿主线程工具不可用、目标线程无法定位，或无法验证投递/读回时才 fail closed。
 
 ## 仓库结构
 

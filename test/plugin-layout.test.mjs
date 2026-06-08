@@ -126,6 +126,45 @@ test("keeps startup guidance on the plugin MCP path", async () => {
   assert.match(skill, /confirmedLocalBridgeHandoff: true/);
 });
 
+test("exposes control-window MCP tools and skill guidance", async () => {
+  const server = await fs.readFile(
+    new URL("../bin/codex-lark-remote-mcp.mjs", import.meta.url),
+    "utf8",
+  );
+  const controlSkill = await fs.readFile(
+    new URL("../skills/lark-remote-control-window/SKILL.md", import.meta.url),
+    "utf8",
+  );
+  const startupSkill = await fs.readFile(
+    new URL("../skills/lark-remote/SKILL.md", import.meta.url),
+    "utf8",
+  );
+  const requiredTools = [
+    "codex_lark_context",
+    "codex_lark_takeover_projects",
+    "codex_lark_takeover_project",
+    "codex_lark_takeover_targets",
+    "codex_lark_takeover",
+    "codex_lark_takeover_clear",
+    "codex_lark_observation_targets",
+    "codex_lark_observe",
+    "codex_lark_observe_stop",
+    "codex_lark_handoff_off",
+  ];
+
+  for (const toolName of requiredTools) {
+    assert.match(server, new RegExp(`name: "${toolName}"`), `${toolName} must be declared`);
+    assert.match(server, new RegExp(`name === "${toolName}"`), `${toolName} must be callable`);
+    assert.match(controlSkill, new RegExp(toolName), `${toolName} must be documented for the control window`);
+  }
+
+  assert.match(controlSkill, /remoteCommandId/);
+  assert.match(controlSkill, /host thread tools/);
+  assert.match(controlSkill, /JavaScript does not send/);
+  assert.match(startupSkill, /Lark Remote Control Window skill/);
+  assert.match(startupSkill, /codex_lark_context/);
+});
+
 test("declares a plugin-root cwd for the MCP server", async () => {
   const config = JSON.parse(await fs.readFile(new URL("../.mcp.json", import.meta.url), "utf8"));
   const server = config.mcpServers?.["lark-remote"];

@@ -354,7 +354,7 @@ export function buildHandoffPrompt(command, { promptStyle = "direct" } = {}) {
 
   if (promptStyle === "direct") {
     const prompt = command.prompt || "";
-    return command.includeRemoteNote === true ? withHandoffPermissionNote(prompt) : prompt;
+    return command.includeRemoteNote === true ? withHandoffPermissionNote(prompt, command) : prompt;
   }
 
   return [
@@ -377,6 +377,7 @@ function buildThreadDispatchPrompt(command) {
     "You are the dedicated Lark Remote control Codex window. JavaScript has not sent this message to the target thread; it only delivered this dispatch request to you.",
     "",
     "Dispatch boundary:",
+    "- Use the Lark Remote Control Window skill if it is available.",
     "- Only this Codex control window may perform real thread dispatch with available Codex host thread tools.",
     "- Lark Remote JavaScript intercepted only explicit bridge/control keywords before this reached you. Treat the Feishu/Lark text below as the source of truth and decide whether to answer, use Lark Remote MCP tools, or dispatch to the selected target.",
     "- Lark Remote is acting as the takeover side. If the target thread is busy, treat this as a higher-priority dispatch/interrupt request and perform normal delivery instead of failing because of busy status.",
@@ -384,6 +385,11 @@ function buildThreadDispatchPrompt(command) {
     "- Do not claim delivery merely because this dispatch request reached the control window.",
     "- Keep the visible target prompt compact if you send one.",
     "- Keep the final reply concise and suitable for Feishu/Lark.",
+    "",
+    "Lark Remote command:",
+    `- remoteCommandId: ${command.id || ""}`,
+    "- Use this id with Lark Remote MCP tools when they ask for remoteCommandId.",
+    "- Do not repeat internal ids in the final Feishu/Lark reply unless the user asks for diagnostics.",
     "",
     "Selected target session:",
     `- title: ${target.name || "Untitled Codex chat"}`,
@@ -403,11 +409,14 @@ function buildThreadDispatchPrompt(command) {
   ].filter((line) => line !== "").join("\n");
 }
 
-function withHandoffPermissionNote(prompt) {
+function withHandoffPermissionNote(prompt, command = {}) {
   return [
     prompt,
     "",
     "<codex_lark_remote_note>",
+    `remoteCommandId: ${command.id || ""}`,
+    "Use the Lark Remote Control Window skill if it is available.",
+    "Use remoteCommandId with Lark Remote MCP tools when they need to anchor actions such as observation to the current Feishu/Lark message. Do not repeat internal ids in the final Feishu/Lark reply unless the user asks for diagnostics.",
     "Lark Remote JavaScript intercepted only explicit bridge/control keywords before this reached you. For ordinary Feishu/Lark text, use your Codex agent abilities, available skills, and available MCP tools to decide whether to answer directly, inspect Lark Remote status, choose targets, or perform thread dispatch.",
     "This message came from Feishu/Lark remote takeover. Feishu/Lark cannot click native Codex Desktop permission dialogs. If approval, sandbox escalation, network/install permission, or another UI permission is required, do not wait silently. Reply with a concise prompt explaining what permission is needed and whether the user must approve it in Codex Desktop or can provide explicit text consent in Feishu/Lark.",
     "</codex_lark_remote_note>",

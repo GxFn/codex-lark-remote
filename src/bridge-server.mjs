@@ -67,6 +67,8 @@ import {
   clearTakeover,
   detectSessionStatus,
   executeTakeoverTarget,
+  listTakeoverProjects,
+  listTakeoverTargets,
   prepareTakeoverScope,
   readTakeover,
   refreshTakeoverProjectSelection,
@@ -208,6 +210,50 @@ async function route(ctx) {
     });
   }
 
+  if (req.method === "GET" && url.pathname === "/bridge/context") {
+    const limit = Number(url.searchParams.get("limit") || 10);
+    const includeProjects = url.searchParams.get("projects") !== "false";
+    const includeTargets = url.searchParams.get("targets") !== "false";
+    const status = {
+      version: await readPackageVersion(),
+      counts: await ctx.queue.counts(),
+      workerBusy: ctx.runner.busy,
+      handoff: await readHandoff({ dataDir: ctx.config.dataDir }),
+      observation: await readObservation({ dataDir: ctx.config.dataDir }),
+      takeover: await readTakeover({ dataDir: ctx.config.dataDir }),
+      observer: ctx.observer?.status(),
+      keepAwake: ctx.keepAwake?.status(),
+      larkWs: ctx.larkWs?.status(),
+      repos: Object.keys(ctx.config.repos || {}),
+    };
+    const recent = typeof ctx.queue.list === "function" ? await ctx.queue.list({ limit }) : [];
+    const projects = includeProjects
+      ? await listTakeoverProjects({
+          dataDir: ctx.config.dataDir,
+          limit: ctx.config.takeover?.projectLimit || 20,
+          idleDebounceMs: ctx.config.takeover?.idleDebounceMs,
+        }).catch((error) => ({ error: error.message }))
+      : null;
+    const cwd = url.searchParams.get("cwd") || status.takeover?.project?.cwd || status.takeover?.target?.cwd || status.handoff?.cwd || "";
+    const targets = includeTargets
+      ? await listTakeoverTargets({
+          dataDir: ctx.config.dataDir,
+          cwd,
+          limit: 10,
+          idleDebounceMs: ctx.config.takeover?.idleDebounceMs,
+        }).catch((error) => ({ error: error.message }))
+      : null;
+    return sendJson(res, 200, {
+      success: true,
+      data: {
+        status,
+        recent,
+        projects,
+        targets,
+      },
+    });
+  }
+
   if (req.method === "POST" && ["/bridge/stop", "/bridge/lark/stop"].includes(url.pathname)) {
     sendJson(res, 200, { success: true, message: "Stopping bridge" });
     ctx.larkWs?.stop();
@@ -268,6 +314,57 @@ async function route(ctx) {
     return sendJson(res, 200, { success: true, data: await readTakeover({ dataDir: ctx.config.dataDir }) });
   }
 
+  if (req.method === "GET" && url.pathname === "/bridge/observation/targets") {
+    const limit = Number(url.searchParams.get("limit") || 10);
+    const cwd = url.searchParams.get("cwd") || "";
+    const targets = await listObservationTargets({ cwd, limit });
+    const observation = await readObservation({ dataDir: ctx.config.dataDir });
+    return sendJson(res, 200, {
+      success: true,
+      data: { targets, observation },
+      text: formatObservationList(targets, observation),
+    });
+  }
+
+  if (req.method === "POST" && url.pathname === "/bridge/observation/start") {
+    const { body } = await readJson(req);
+    const command = body.commandId && typeof ctx.queue.get === "function" ? await ctx.queue.get(body.commandId).catch(() => null) : null;
+    const observation = await activateObservation({
+      dataDir: ctx.config.dataDir,
+      selector: body.selector || body.threadId,
+      threadId: body.threadId,
+      cwd: body.cwd || command?.projectRoot || "",
+      messageId: body.messageId || command?.messageId || "",
+      chatIdHash: body.chatIdHash || command?.chatIdHash || "",
+      userIdHash: body.userIdHash || command?.userIdHash || "",
+      language: body.language || "",
+      activatedBy: body.activatedBy || "mcp",
+    });
+    let delivered = { observation, delivery: null };
+    if (observation.messageId) {
+      delivered = await deliverObservationStatus(
+        ctx,
+        { messageId: observation.messageId, chatIdHash: observation.chatIdHash, userIdHash: observation.userIdHash },
+        observation,
+        { language: observation.language || body.language || "zh" },
+      );
+    }
+    await ctx.observer?.start(delivered.observation);
+    return sendJson(res, 200, {
+      success: true,
+      data: delivered.observation,
+      text: observation.messageId
+        ? formatObservationStatus(delivered.observation, { language: observation.language || body.language || "zh" })
+        : `${formatObservationStatus(delivered.observation, { language: observation.language || body.language || "zh" })}\n\nNo Feishu/Lark message id was provided, so streaming may not be anchored to a chat reply.`,
+    });
+  }
+
+  if (req.method === "DELETE" && url.pathname === "/bridge/observation") {
+    const data = await clearObservation({ dataDir: ctx.config.dataDir });
+    await ctx.observer?.stop();
+    return sendJson(res, 200, { success: true, data, text: formatObservationStatus(data) });
+  }
+
   if (req.method === "GET" && url.pathname === "/bridge/takeover/projects") {
     const limit = Number(url.searchParams.get("limit") || ctx.config.takeover?.projectLimit || 20);
     const page = Number(url.searchParams.get("page") || 0);
@@ -300,6 +397,29 @@ async function route(ctx) {
       startedBy: body.startedBy || "bridge",
     });
     return sendJson(res, 200, { success: true, data, text: formatTakeoverStatus(data) });
+  }
+
+  if (req.method === "POST" && url.pathname === "/bridge/takeover/project/select") {
+    const { body } = await readJson(req);
+    const selected = await selectTakeoverProject({
+      dataDir: ctx.config.dataDir,
+      selector: body.selector,
+      projectIndex: body.projectIndex,
+      cwd: body.cwd,
+      limit: Number(body.limit || 10),
+      pageSize: Number(body.pageSize || TAKEOVER_DISPLAY_PAGE_SIZE),
+      idleDebounceMs: ctx.config.takeover?.idleDebounceMs,
+      selectionTtlMs: ctx.config.takeover?.selectionTtlMs,
+    });
+    return sendJson(res, 200, {
+      success: true,
+      data: selected,
+      text: formatTakeoverList(selected.targets, {
+        cwd: selected.project?.cwd || body.cwd || "",
+        page: selected.state.selection?.page || 0,
+        pageSize: selected.state.selection?.pageSize || TAKEOVER_DISPLAY_PAGE_SIZE,
+      }),
+    });
   }
 
   if (req.method === "GET" && url.pathname === "/bridge/takeover/targets") {

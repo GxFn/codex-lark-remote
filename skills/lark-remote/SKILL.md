@@ -93,10 +93,14 @@ connection`, and `控制:` / `control:`. Everything else is delivered to this
 control Codex window. You, the Codex agent, should decide whether the Feishu/Lark
 text is asking for a Lark Remote control action, a project/window listing, a
 direct answer, or a dispatch to the selected target. Use the Lark Remote skill,
-available Lark Remote MCP tools such as `codex_lark_status`,
-`codex_lark_takeover_projects`, `codex_lark_takeover_targets`, and
-`codex_lark_takeover`, and host thread tools when they are available. Do not
-expect JavaScript to perform natural-language intent routing for ordinary text.
+the Lark Remote Control Window skill when available, Lark Remote MCP tools such
+as `codex_lark_context`, `codex_lark_status`,
+`codex_lark_takeover_projects`, `codex_lark_takeover_project`,
+`codex_lark_takeover_targets`, `codex_lark_takeover`,
+`codex_lark_observation_targets`, `codex_lark_observe`, and
+`codex_lark_observe_stop`, and host thread tools when they are available. Do
+not expect JavaScript to perform natural-language intent routing for ordinary
+text.
 
 When a Feishu/Lark turn is completed, answer in the same concise style you would
 use in Codex chat. Include changed files and validation only when they matter to

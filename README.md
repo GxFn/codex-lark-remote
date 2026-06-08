@@ -274,6 +274,15 @@ Remote itself sent from Feishu/Lark are not echoed back; prompts appended by
 other sources, such as automation or local Codex input, are echoed as `User
 prompt:` separators.
 
+The control Codex window can inspect and change Lark Remote state with MCP
+tools such as `codex_lark_context`, `codex_lark_takeover_projects`,
+`codex_lark_takeover_project`, `codex_lark_takeover_targets`,
+`codex_lark_takeover`, `codex_lark_takeover_clear`,
+`codex_lark_observation_targets`, `codex_lark_observe`, and
+`codex_lark_observe_stop`. The bundled Lark Remote Control Window skill tells
+the control window to use these tools together with Codex host thread tools
+before guessing from prose.
+
 ## Behavior And Boundaries
 
 Remote replies are optimized for coding in chat:
@@ -294,10 +303,12 @@ prompts, network/install approvals, or other native Codex UI popups. When Codex
 hits one of those boundaries, it should send a clear Feishu/Lark message
 explaining what approval is needed and where to approve it.
 
-If the selected Codex Desktop session is already working, Lark Remote does not
-hot-inject text into the running process. The Feishu/Lark message is not queued;
-send it again after the takeover-active notice or after the current Codex turn
-finishes.
+If the selected target Codex session is already working, Lark Remote still sends
+the Feishu/Lark message to the dedicated control Codex window. The control
+window should treat it as a higher-priority dispatch or interrupt request for
+the target thread, and fail closed only when the host thread tool is
+unavailable, the target cannot be addressed, or delivery/readback cannot be
+verified.
 
 ## Repository Layout
 
