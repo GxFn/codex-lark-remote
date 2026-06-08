@@ -1,6 +1,6 @@
 {
   "name": "codex-lark-remote",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "private": true,
   "description": "Control Codex sessions from Feishu/Lark chat.",
   "type": "module",
@@ -9,8 +9,10 @@
     "codex-lark-remote-mcp": "./bin/codex-lark-remote-mcp.mjs"
   },
   "scripts": {
+    "prepare:codex-plugin-runtime": "node ./scripts/prepare-codex-plugin-runtime.mjs",
     "bridge": "node ./bin/codex-lark-bridge.mjs",
     "mcp": "node ./bin/codex-lark-remote-mcp.mjs",
+    "mcp:wrapper": "node ./bin/codex-lark-remote-mcp-wrapper.mjs",
     "test": "node --test",
     "fixture": "node ./scripts/lark-event-fixture.mjs"
   },

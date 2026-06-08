@@ -3,7 +3,7 @@
     "lark-remote": {
       "command": "node",
       "args": [
-        "./bin/codex-lark-remote-mcp.mjs"
+        "./bin/codex-lark-remote-mcp-wrapper.mjs"
       ],
       "cwd": "."
     }

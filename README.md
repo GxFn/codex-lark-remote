@@ -61,7 +61,7 @@ npx codex-marketplace add GxFn/codex-lark-remote --plugin
 To pin the reviewed release:
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.6 --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.7 --plugin
 ```
 
 Then restart or refresh Codex if the plugin list does not update immediately.
@@ -72,7 +72,7 @@ If Codex asks for a GitHub target or direct artifact path, use the repository
 root:
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.2.6
+https://github.com/GxFn/codex-lark-remote/tree/v0.2.7
 ```
 
 If the Codex dialog separates source, ref, and sparse path, fill it like this:
@@ -82,7 +82,7 @@ Source:
 https://github.com/GxFn/codex-lark-remote.git
 
 Git ref:
-v0.2.6
+v0.2.7
 
 Sparse path:
 (leave empty)
@@ -310,8 +310,15 @@ enabled = true
 Run tests before publishing:
 
 ```text
+npm run prepare:codex-plugin-runtime
 npm test
 ```
+
+The Codex plugin root starts MCP through a small wrapper and `runtime.tgz`.
+That runtime package bundles npm dependencies such as
+`@larksuiteoapi/node-sdk`, so installed plugin caches do not need a checked-in
+`node_modules/` directory. Rebuild `runtime.tgz` after dependency or runtime
+entrypoint changes.
 
 
 ## Troubleshooting

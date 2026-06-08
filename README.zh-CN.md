@@ -56,7 +56,7 @@ npx codex-marketplace add GxFn/codex-lark-remote --plugin
 如果要固定到当前审核版本：
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.6 --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.7 --plugin
 ```
 
 安装后如果 Codex 插件列表没有立刻刷新，重启或刷新 Codex。
@@ -66,7 +66,7 @@ npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.6 
 如果 Codex 要求填写 GitHub target 或直接 artifact path，请填写仓库根目录：
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.2.6
+https://github.com/GxFn/codex-lark-remote/tree/v0.2.7
 ```
 
 如果 Codex 弹窗把来源、Git 引用、稀疏路径拆开填写，请这样填：
@@ -76,7 +76,7 @@ https://github.com/GxFn/codex-lark-remote/tree/v0.2.6
 https://github.com/GxFn/codex-lark-remote.git
 
 Git 引用：
-v0.2.6
+v0.2.7
 
 稀疏路径：
 留空
@@ -278,8 +278,14 @@ enabled = true
 发布前运行测试：
 
 ```text
+npm run prepare:codex-plugin-runtime
 npm test
 ```
+
+Codex 插件根目录会通过一个小 wrapper 和 `runtime.tgz` 启动 MCP。
+这个 runtime 包会把 `@larksuiteoapi/node-sdk` 这类 npm 依赖一起封进去，
+因此已安装的插件缓存不需要直接带一个展开的 `node_modules/` 目录。依赖或运行
+入口变化后，需要重新生成 `runtime.tgz`。
 
 
 ## 排查

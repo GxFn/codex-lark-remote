@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
@@ -15,6 +16,7 @@ const rootPluginEntries = [
   "bin",
   "config",
   "package.json",
+  "runtime.tgz",
   "skills",
   "src",
 ];
@@ -130,9 +132,34 @@ test("declares a plugin-root cwd for the MCP server", async () => {
 
   assert.equal(server?.command, "node");
   assert.deepEqual(server?.args, [
-    "./bin/codex-lark-remote-mcp.mjs",
+    "./bin/codex-lark-remote-mcp-wrapper.mjs",
   ]);
   assert.equal(server?.cwd, ".");
+});
+
+test("ships a self-contained runtime package for Node dependencies", async () => {
+  const packageJson = JSON.parse(await fs.readFile(new URL("../package.json", import.meta.url), "utf8"));
+  const wrapper = await fs.readFile(
+    new URL("../bin/codex-lark-remote-mcp-wrapper.mjs", import.meta.url),
+    "utf8",
+  );
+  const runtimeUrl = new URL("../runtime.tgz", import.meta.url);
+  const runtimeStat = await fs.lstat(runtimeUrl);
+  const tar = spawnSync("tar", ["-tzf", runtimeUrl.pathname], { encoding: "utf8" });
+
+  assert.equal(packageJson.scripts?.["prepare:codex-plugin-runtime"], "node ./scripts/prepare-codex-plugin-runtime.mjs");
+  assert.equal(packageJson.scripts?.["mcp:wrapper"], "node ./bin/codex-lark-remote-mcp-wrapper.mjs");
+  assert.equal(runtimeStat.isFile(), true, "runtime.tgz must ship with the plugin root");
+  assert.equal(tar.status, 0, tar.stderr);
+  assert.match(tar.stdout, /package\/node_modules\/@larksuiteoapi\/node-sdk\/package\.json/);
+  assert.match(tar.stdout, /package\/node_modules\/@larksuiteoapi\/node-sdk\/lib\/index\.js/);
+  assert.match(wrapper, /runtime\.tgz/);
+  assert.match(wrapper, /codex-lark-remote-mcp/);
+  assert.match(wrapper, /"--offline"/);
+  assert.match(wrapper, /npm_config_offline/);
+  assert.match(wrapper, /npm_config_ignore_scripts/);
+  assert.match(wrapper, /lockScope/);
+  assert.match(wrapper, /CODEX_LARK_REMOTE_NPM_CACHE/);
 });
 
 test("requires explicit consent for conversation handoff", async () => {
