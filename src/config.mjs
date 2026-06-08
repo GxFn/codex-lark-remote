@@ -109,7 +109,7 @@ export function defaultConfig(dataDir = resolveDataDir()) {
     runner: {
       sandbox: "workspace-write",
       askForApproval: "never",
-      ignoreUserConfig: true,
+      ignoreUserConfig: false,
       skipGitRepoCheck: true,
       model: "",
       codexPath: "codex",

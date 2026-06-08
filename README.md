@@ -210,17 +210,14 @@ After takeover, the chat switches to thread-dispatch mode. Ordinary
 Feishu/Lark messages go to the dedicated control Codex window as dispatch
 requests for the selected Codex session. JavaScript does not send those messages
 directly to the target thread; the control Codex window performs real thread
-dispatch with Codex host thread tools. They no longer go through
-project/session intent routing until you return to the console or exit handoff.
+dispatch with Codex host thread tools and available Lark Remote MCP tools.
 
-Semantic routing is bilingual and prefix-aware. `control:` / `控制:` forces the
-rest of the message to be parsed as a Lark Remote control command, while
-`dispatch:` / `派发:` forces it to be delivered as a selected-target dispatch
-prompt. In thread-dispatch mode, ordinary text is treated as dispatch unless it
-is an exact control command such as `console`, `status`, `observe off`, or
-`close Lark connection`. In console mode, project/session phrases remain
-controls, but task-like text such as "fix the project list component" or
-"帮我实现项目列表分页" is dispatched when a target is active.
+Once the control Codex window is connected, JavaScript only intercepts explicit
+control keywords such as `console`, `status`, `observe off`, `exit handoff`,
+`close Lark connection`, and the `control:` / `控制:` prefix. Everything else,
+including project/session wording and `dispatch:` / `派发:` text, is passed
+through to the control Codex window so the agent can decide with its skills and
+MCP tools.
 
 ## Start From Codex
 

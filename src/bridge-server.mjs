@@ -268,6 +268,28 @@ async function route(ctx) {
     return sendJson(res, 200, { success: true, data: await readTakeover({ dataDir: ctx.config.dataDir }) });
   }
 
+  if (req.method === "GET" && url.pathname === "/bridge/takeover/projects") {
+    const limit = Number(url.searchParams.get("limit") || ctx.config.takeover?.projectLimit || 20);
+    const page = Number(url.searchParams.get("page") || 0);
+    const pageSize = Number(url.searchParams.get("pageSize") || TAKEOVER_DISPLAY_PAGE_SIZE);
+    const refreshed = await refreshTakeoverProjectSelection({
+      dataDir: ctx.config.dataDir,
+      limit,
+      page,
+      pageSize,
+      idleDebounceMs: ctx.config.takeover?.idleDebounceMs,
+      selectionTtlMs: ctx.config.takeover?.selectionTtlMs,
+    });
+    return sendJson(res, 200, {
+      success: true,
+      data: refreshed,
+      text: formatTakeoverProjectList(refreshed.projects, {
+        page: refreshed.state.projectSelection?.page || 0,
+        pageSize: refreshed.state.projectSelection?.pageSize || TAKEOVER_DISPLAY_PAGE_SIZE,
+      }),
+    });
+  }
+
   if (req.method === "POST" && url.pathname === "/bridge/takeover/scope") {
     const { body } = await readJson(req);
     const data = await prepareTakeoverScope({

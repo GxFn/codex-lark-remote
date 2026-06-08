@@ -37,13 +37,13 @@ export async function routeChatTextAction(ctx, event, initialAction) {
       || { kind: "intent_clarify", reason: "我还没识别出这条控制指令。" };
   }
 
+  if (hasConnectedControlWindow(state)) {
+    return classifyHandoffDirectText(text, ctx.config, { mode, state });
+  }
+
   const forcedDispatchText = parseDispatchDirective(text);
   if (forcedDispatchText && hasDispatchTarget(state)) {
     return buildDispatchTask(forcedDispatchText, ctx.config);
-  }
-
-  if (mode === "console") {
-    return routeConsoleText(ctx, event, initialAction, state);
   }
 
   if (takeover?.state === "pending") {
@@ -51,18 +51,20 @@ export async function routeChatTextAction(ctx, event, initialAction) {
     if (pendingAction) return pendingAction;
   }
 
+  if (mode === "console") {
+    return routeConsoleText(ctx, event, initialAction, state);
+  }
+
   if (handoff?.active || takeover?.state === "pending" || session?.mode === "handoff") {
-    return classifyHandoffDirectText(text, ctx.config);
+    return classifyHandoffDirectText(text, ctx.config, { mode, state });
   }
 
   return initialAction;
 }
 
-export function classifyHandoffDirectText(text, config = {}) {
+export function classifyHandoffDirectText(text, config = {}, options = {}) {
   const normalized = normalizeControlText(text);
   if (!normalized) return { kind: "empty" };
-  const forcedDispatchText = parseDispatchDirective(normalized);
-  if (forcedDispatchText) return buildDispatchTask(forcedDispatchText, config);
   const forcedControlText = parseControlDirective(normalized);
   if (forcedControlText) {
     return parseControlSemanticAction(forcedControlText, { mode: "console" })
@@ -72,20 +74,31 @@ export function classifyHandoffDirectText(text, config = {}) {
   if (isHandoffModeText(normalized)) return { kind: "intent_handoff_mode" };
   if (isBridgeStopText(normalized)) return { kind: "bridge_stop_confirm" };
 
-  if (/^\/codex\b/i.test(normalized)) return classifyChatText(normalized, config);
-  if (/^(whoami|我是谁|我的id|我的 id)[。.!！]?$/.test(normalized.toLowerCase())) return { kind: "whoami" };
-  if (/^(help|帮助|命令|命令列表)[。.!！]?$/.test(normalized.toLowerCase())) return { kind: "help" };
-  if (/^(status|状态|查看状态|看下状态|现在状态|当前状态)[。.?？!！]?$/.test(normalized.toLowerCase())) return { kind: "status" };
-  if (/^(commands|command)\s+(on|show|enable|enabled|true)$/i.test(normalized)) return { kind: "command_visibility", enabled: true };
-  if (/^(commands|command)\s+(off|hide|disable|disabled|false)$/i.test(normalized)) return { kind: "command_visibility", enabled: false };
-  if (/^(handoff\s+off|exit handoff|stop handoff|end handoff|leave handoff|exit takeover|stop takeover|end takeover|退出接管|断开接管|关闭接管|停止接管)[。.!！]?$/.test(normalized.toLowerCase())) {
-    return { kind: "handoff_disable" };
-  }
-  if (/^(observe\s+off|watch\s+off|stop observing|stop observe|停止观察|关闭观察)[。.!！]?$/.test(normalized.toLowerCase())) return { kind: "observe_disable" };
+  const connectedControl = parseConnectedControlText(normalized, { ...options, config });
+  if (connectedControl) return connectedControl;
 
   return {
     ...buildDispatchTask(normalized, config),
   };
+}
+
+function parseConnectedControlText(text, options = {}) {
+  const normalized = normalizeControlText(text);
+  const lower = normalized.toLowerCase();
+  if (/^\/codex\b/i.test(normalized)) {
+    const action = classifyChatText(normalized, options.config || {});
+    return action.kind === "task" || action.kind === "rejected" ? null : action;
+  }
+  if (/^(whoami|我是谁|我的id|我的 id)[。.!！]?$/.test(lower)) return { kind: "whoami" };
+  if (/^(help|帮助|命令|命令列表)[。.!！]?$/.test(lower)) return { kind: "help" };
+  if (/^(status|状态)[。.?？!！]?$/.test(lower)) return { kind: "status" };
+  if (/^(commands|command)\s+(on|show|enable|enabled|true)$/i.test(normalized)) return { kind: "command_visibility", enabled: true };
+  if (/^(commands|command)\s+(off|hide|disable|disabled|false)$/i.test(normalized)) return { kind: "command_visibility", enabled: false };
+  if (/^(handoff\s+off|exit handoff|stop handoff|end handoff|leave handoff|exit takeover|stop takeover|end takeover|退出接管|断开接管|关闭接管|停止接管)[。.!！]?$/.test(lower)) {
+    return { kind: "handoff_disable" };
+  }
+  if (/^(observe\s+off|watch\s+off|stop observing|stop observe|停止观察|关闭观察)[。.!！]?$/.test(lower)) return { kind: "observe_disable" };
+  return null;
 }
 
 async function routeConsoleText(ctx, event, initialAction, state = {}) {
@@ -116,6 +129,10 @@ function hasDispatchTarget(state = {}) {
     || state.takeover?.state === "pending"
     || state.session?.mode === "handoff",
   );
+}
+
+function hasConnectedControlWindow(state = {}) {
+  return Boolean(state.handoff?.active);
 }
 
 function buildDispatchTask(text, config = {}) {

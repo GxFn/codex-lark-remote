@@ -378,6 +378,7 @@ function buildThreadDispatchPrompt(command) {
     "",
     "Dispatch boundary:",
     "- Only this Codex control window may perform real thread dispatch with available Codex host thread tools.",
+    "- Lark Remote JavaScript intercepted only explicit bridge/control keywords before this reached you. Treat the Feishu/Lark text below as the source of truth and decide whether to answer, use Lark Remote MCP tools, or dispatch to the selected target.",
     "- Lark Remote is acting as the takeover side. If the target thread is busy, treat this as a higher-priority dispatch/interrupt request and perform normal delivery instead of failing because of busy status.",
     "- If the host thread tool is unavailable, the target thread cannot be addressed, or readback cannot be verified, fail closed and tell the Feishu/Lark user what is blocked.",
     "- Do not claim delivery merely because this dispatch request reached the control window.",
@@ -407,6 +408,7 @@ function withHandoffPermissionNote(prompt) {
     prompt,
     "",
     "<codex_lark_remote_note>",
+    "Lark Remote JavaScript intercepted only explicit bridge/control keywords before this reached you. For ordinary Feishu/Lark text, use your Codex agent abilities, available skills, and available MCP tools to decide whether to answer directly, inspect Lark Remote status, choose targets, or perform thread dispatch.",
     "This message came from Feishu/Lark remote takeover. Feishu/Lark cannot click native Codex Desktop permission dialogs. If approval, sandbox escalation, network/install permission, or another UI permission is required, do not wait silently. Reply with a concise prompt explaining what permission is needed and whether the user must approve it in Codex Desktop or can provide explicit text consent in Feishu/Lark.",
     "</codex_lark_remote_note>",
   ]

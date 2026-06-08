@@ -158,6 +158,20 @@ const tools = [
     },
   },
   {
+    name: "codex_lark_takeover_projects",
+    description: "List Codex projects discovered from local Codex session records so the control Codex window can decide project/window routing itself.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dataDir: { type: "string" },
+        configPath: { type: "string" },
+        limit: { type: "number", default: 20 },
+        page: { type: "number", default: 0 },
+        pageSize: { type: "number", default: 3 },
+      },
+    },
+  },
+  {
     name: "codex_lark_takeover_targets",
     description: "List Codex windows for a chosen project cwd. Feishu/Lark normally starts from the project list, then enters a project before choosing a window.",
     inputSchema: {
@@ -428,6 +442,15 @@ async function callTool(name, args, request = {}) {
         }),
       ),
     );
+  }
+  if (name === "codex_lark_takeover_projects") {
+    const queryParams = new URLSearchParams();
+    if (args.limit) queryParams.set("limit", String(Number(args.limit)));
+    if (args.page) queryParams.set("page", String(Number(args.page)));
+    if (args.pageSize) queryParams.set("pageSize", String(Number(args.pageSize)));
+    const query = queryParams.toString() ? `?${queryParams}` : "";
+    const result = await bridgeFetch(state, `/bridge/takeover/projects${query}`);
+    return textContent(result.text || formatJson(result.data));
   }
   if (name === "codex_lark_takeover_targets") {
     const queryParams = new URLSearchParams();

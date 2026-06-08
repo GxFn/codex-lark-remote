@@ -28,11 +28,12 @@ test("handoff direct mode sends ordinary control-looking text to Codex", () => {
   assert.deepEqual(classifyHandoffDirectText("close Lark connection", {}), { kind: "bridge_stop_confirm" });
   assert.deepEqual(classifyHandoffDirectText("控制: 项目列表", {}), { kind: "takeover_list" });
   assert.deepEqual(classifyHandoffDirectText("control: show projects", {}), { kind: "takeover_list" });
+  assert.deepEqual(classifyHandoffDirectText("status", {}), { kind: "status" });
   assert.deepEqual(classifyHandoffDirectText("派发: 项目列表", { defaultRepo: "main", repos: { main: {} } }), {
     kind: "task",
     forced: false,
     repoKey: "main",
-    taskText: "项目列表",
+    taskText: "派发: 项目列表",
   });
 });
 
@@ -170,14 +171,22 @@ test("console route separates control commands from dispatch prompts when a targ
   );
   assert.deepEqual(
     await routeChatTextAction(ctx, { ...baseEvent, text: "派发: 项目列表" }, { kind: "takeover_list" }),
+    { kind: "task", forced: false, repoKey: "main", taskText: "派发: 项目列表" },
+  );
+  assert.deepEqual(
+    await routeChatTextAction(ctx, { ...baseEvent, text: "项目列表" }, { kind: "takeover_list" }),
     { kind: "task", forced: false, repoKey: "main", taskText: "项目列表" },
   );
   assert.deepEqual(
     await routeChatTextAction(ctx, { ...baseEvent, text: "please enter project two" }, { kind: "task", taskText: "please enter project two" }),
-    { kind: "takeover_project_select", selector: "2" },
+    { kind: "task", forced: false, repoKey: "main", taskText: "please enter project two" },
   );
   assert.deepEqual(
     await routeChatTextAction(ctx, { ...baseEvent, text: "check status" }, { kind: "task", taskText: "check status" }),
+    { kind: "task", forced: false, repoKey: "main", taskText: "check status" },
+  );
+  assert.deepEqual(
+    await routeChatTextAction(ctx, { ...baseEvent, text: "status" }, { kind: "task", taskText: "status" }),
     { kind: "status" },
   );
 });

@@ -86,15 +86,17 @@ paths, cache layouts, MCP loading internals, local scripts, internal ids,
 queues, repo keys, worktrees, approval commands, or alternate routes only when
 the user asks for diagnostics or plugin development debugging.
 
-Keep the semantic boundary explicit. `控制:` / `control:` forces the rest of the
-message to be interpreted as a Lark Remote control command. `派发:` /
-`dispatch:` forces the rest of the message to be delivered as a dispatch prompt
-for the selected target. In thread-dispatch mode, ordinary bilingual text is a
-dispatch prompt unless it is an exact control command such as `控制台`,
-`status`, `observe off`, or `close Lark connection`. In console mode,
-project/session selection phrases stay control commands, while coding/work
-prompts such as `修复项目列表组件`, `fix the project list component`, or
-`帮我实现会话列表分页` should go to the current dispatch target when one exists.
+Keep the semantic boundary explicit. After the control Codex window is
+connected, Lark Remote JavaScript only intercepts exact bridge/control keywords
+such as `控制台`, `status`, `observe off`, `exit handoff`, `close Lark
+connection`, and `控制:` / `control:`. Everything else is delivered to this
+control Codex window. You, the Codex agent, should decide whether the Feishu/Lark
+text is asking for a Lark Remote control action, a project/window listing, a
+direct answer, or a dispatch to the selected target. Use the Lark Remote skill,
+available Lark Remote MCP tools such as `codex_lark_status`,
+`codex_lark_takeover_projects`, `codex_lark_takeover_targets`, and
+`codex_lark_takeover`, and host thread tools when they are available. Do not
+expect JavaScript to perform natural-language intent routing for ordinary text.
 
 When a Feishu/Lark turn is completed, answer in the same concise style you would
 use in Codex chat. Include changed files and validation only when they matter to
