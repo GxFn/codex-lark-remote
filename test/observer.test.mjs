@@ -34,13 +34,20 @@ test("CodexSessionObserver forwards observed progress without per-message title"
   await observer.start(state);
   await fs.appendFile(
     sessionPath,
-    `${JSON.stringify({ type: "event_msg", payload: { type: "agent_message", phase: "commentary", message: "正在检查输出逻辑。" } })}\n`,
+    [
+      JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: "请检查观察输出" } }),
+      JSON.stringify({ type: "event_msg", payload: { type: "agent_message", phase: "commentary", message: "正在检查输出逻辑。" } }),
+      "",
+    ].join("\n"),
   );
-  await waitFor(() => replies.length > 0);
+  await waitFor(() => replies.length >= 2);
   await observer.stop();
 
-  assert.deepEqual(replies, [{ messageId: "om_observe", text: "正在检查输出逻辑。" }]);
-  assert.doesNotMatch(replies[0].text, /Title:|标题:/);
+  assert.deepEqual(replies, [
+    { messageId: "om_observe", text: "用户提示：\n请检查观察输出" },
+    { messageId: "om_observe", text: "正在检查输出逻辑。" },
+  ]);
+  assert.doesNotMatch(replies.map((reply) => reply.text).join("\n"), /Title:|标题:/);
 });
 
 async function waitFor(predicate, timeoutMs = 1500) {

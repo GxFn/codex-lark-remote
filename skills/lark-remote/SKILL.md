@@ -129,7 +129,15 @@ Observation is separate from takeover. Use `observe` in Feishu/Lark to
 list observable Codex sessions, `observe <number or thread prefix>` to
 stream read-only progress from a selected session, and `observe off` to
 stop. Observation must never route Feishu/Lark user messages into the observed
-session.
+session. Observation progress must include newly appended user prompts as
+`用户提示：` / `User prompt:` separator messages before subsequent assistant
+progress, otherwise multiple Codex turns visually merge together in Feishu/Lark.
+
+During takeover, do not echo the prompt that Feishu/Lark just sent through Lark
+Remote to the Codex control window. If the watched Codex session receives a new
+prompt from another source, such as local Codex input or automation, echo that
+prompt as a `用户提示：` / `User prompt:` separator so Feishu/Lark can see a new
+turn has started.
 
 Cross-thread takeover is controlled from Feishu/Lark. Full-project takeover
 requires a non-empty `lark.allowedUsers` allowlist. The user can use Chinese or

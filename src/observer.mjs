@@ -28,6 +28,7 @@ export async function activateObservation(options = {}) {
     messageId: options.messageId || "",
     chatIdHash: options.chatIdHash || "",
     userIdHash: options.userIdHash || "",
+    language: options.language || "",
     activatedAt: nowIso(),
     activatedBy: options.activatedBy || "lark",
   };
@@ -127,6 +128,8 @@ export class CodexSessionObserver {
     this.watcher = createSessionProgressWatcher({
       sessionPath: state.threadPath,
       onEvent: async (_event, summary) => this.#notify(summary),
+      includeUserPrompts: true,
+      eventOptions: { language: state.language || this.config.intent?.language || "zh" },
     });
     await this.watcher.start();
     return this.status();
@@ -144,6 +147,8 @@ export class CodexSessionObserver {
     this.temporaryWatcher = createSessionProgressWatcher({
       sessionPath: state.threadPath,
       onEvent: async (_event, summary) => this.#notifyTemporary(summary),
+      includeUserPrompts: true,
+      eventOptions: { language: state.language || this.config.intent?.language || "zh" },
     });
     await this.temporaryWatcher.start();
     return this.status();

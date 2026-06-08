@@ -15,6 +15,7 @@ import {
   readSessionLastTurnSummary,
   summarizeCodexEvent,
   summarizeSessionProgressEvent,
+  summarizeSessionUserPromptEvent,
 } from "../src/runner.mjs";
 import { activateHandoff } from "../src/handoff.mjs";
 
@@ -332,6 +333,75 @@ test("CodexCliRunner suppresses handoff notifications after handoff is off", asy
 
   assert.equal(command.status, "completed");
   assert.deepEqual(replies, []);
+});
+
+test("CodexCliRunner only echoes non-Lark user prompts during handoff progress", async () => {
+  async function runCase({ source, prompt }) {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `codex-lark-runner-user-prompt-${source}-`));
+    const sessionPath = path.join(dataDir, "rollout-thread-1.jsonl");
+    const fakeCodex = path.join(dataDir, "fake-codex");
+    await fs.writeFile(sessionPath, "");
+    const stableTime = new Date(Date.now() - 10_000);
+    await fs.utimes(sessionPath, stableTime, stableTime);
+    await fs.writeFile(fakeCodex, [
+      "#!/usr/bin/env node",
+      "const fs = require('fs');",
+      `const sessionPath = ${JSON.stringify(sessionPath)};`,
+      `const prompt = ${JSON.stringify(prompt)};`,
+      "fs.appendFileSync(sessionPath, JSON.stringify({ type: 'event_msg', payload: { type: 'user_message', message: prompt } }) + '\\n');",
+      "fs.appendFileSync(sessionPath, JSON.stringify({ type: 'event_msg', payload: { type: 'agent_message', phase: 'commentary', message: '正在继续处理。' } }) + '\\n');",
+      "console.log(JSON.stringify({ type: 'turn.completed' }));",
+      "",
+    ].join("\n"));
+    await fs.chmod(fakeCodex, 0o755);
+    await activateHandoff({ dataDir, threadId: "thread-1", threadPath: sessionPath, cwd: dataDir });
+
+    let command = {
+      id: `rcmd_${source}`,
+      source,
+      mode: "thread_handoff",
+      status: "pending",
+      notifyStarted: false,
+      messageId: "om_1",
+      projectRoot: dataDir,
+      prompt,
+      codexSessionId: "thread-1",
+      codexSessionPath: sessionPath,
+    };
+    const replies = [];
+    const queue = {
+      claimNext: async () => {
+        if (command.status !== "pending") return null;
+        command = { ...command, status: "running" };
+        return command;
+      },
+      update: async (_id, patch) => {
+        command = { ...command, ...patch };
+        return command;
+      },
+      get: async () => command,
+    };
+    const runner = new CodexCliRunner({
+      queue,
+      config: {
+        dataDir,
+        runner: { codexPath: fakeCodex },
+        handoff: { notifyProgress: true, idleDebounceMs: 0 },
+      },
+      notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+    });
+
+    await runner.processAll();
+    return replies.map((reply) => reply.text);
+  }
+
+  const larkReplies = await runCase({ source: "lark", prompt: "飞书发起的接管输入" });
+  assert.equal(larkReplies.some((text) => /用户提示：/.test(text)), false);
+  assert.equal(larkReplies.some((text) => /正在继续处理。/.test(text)), true);
+
+  const automationReplies = await runCase({ source: "automation", prompt: "自动化发起的新一轮输入" });
+  assert.equal(automationReplies.some((text) => text === "用户提示：\n自动化发起的新一轮输入"), true);
+  assert.equal(automationReplies.some((text) => /正在继续处理。/.test(text)), true);
 });
 
 test("CodexCliRunner discards a handoff command if the desktop session became busy before resume", async () => {
@@ -689,7 +759,7 @@ test("summarizeCodexEvent reports useful background progress", () => {
   );
 });
 
-test("summarizeSessionProgressEvent only forwards assistant progress messages", () => {
+test("summarizeSessionProgressEvent separates assistant progress from user prompts", () => {
   assert.equal(
     summarizeSessionProgressEvent({
       type: "event_msg",
@@ -710,6 +780,27 @@ test("summarizeSessionProgressEvent only forwards assistant progress messages", 
       payload: { type: "agent_message", phase: "final_answer", message: "done" },
     }),
     "",
+  );
+  assert.equal(
+    summarizeSessionProgressEvent({
+      type: "event_msg",
+      payload: { type: "user_message", message: "请检查观察输出" },
+    }),
+    "",
+  );
+  assert.equal(
+    summarizeSessionUserPromptEvent({
+      type: "event_msg",
+      payload: { type: "user_message", message: "请检查观察输出" },
+    }),
+    "用户提示：\n请检查观察输出",
+  );
+  assert.equal(
+    summarizeSessionUserPromptEvent({
+      type: "response_item",
+      payload: { type: "message", role: "user", content: [{ type: "input_text", text: "check observation output" }] },
+    }, { language: "en" }),
+    "User prompt:\ncheck observation output",
   );
 });
 
@@ -740,6 +831,61 @@ test("createSessionProgressWatcher tails appended assistant commentary", async (
   await watcher.stop();
 
   assert.deepEqual(summaries, ["我找到触发点了。"]);
+});
+
+test("createSessionProgressWatcher can include appended user prompts as turn separators", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-session-user-prompt-"));
+  const sessionPath = path.join(dir, "rollout-test.jsonl");
+  await fs.writeFile(sessionPath, "");
+  const summaries = [];
+  const watcher = createSessionProgressWatcher({
+    sessionPath,
+    intervalMs: 10,
+    includeUserPrompts: true,
+    eventOptions: { language: "en" },
+    onEvent: async (_event, summary) => summaries.push(summary),
+  });
+  await watcher.start();
+  await fs.appendFile(
+    sessionPath,
+    [
+      JSON.stringify({ type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "check observation output" }] } }),
+      JSON.stringify({ type: "event_msg", payload: { type: "agent_message", phase: "commentary", message: "我找到触发点了。" } }),
+      "",
+    ].join("\n"),
+  );
+  await watcher.stop();
+
+  assert.deepEqual(summaries, [
+    "User prompt:\ncheck observation output",
+    "我找到触发点了。",
+  ]);
+});
+
+test("createSessionProgressWatcher can suppress or rewrite user prompt notifications", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-session-user-prompt-filter-"));
+  const sessionPath = path.join(dir, "rollout-test.jsonl");
+  await fs.writeFile(sessionPath, "");
+  const summaries = [];
+  const watcher = createSessionProgressWatcher({
+    sessionPath,
+    intervalMs: 10,
+    includeUserPrompts: true,
+    userPromptText: (_event, prompt) => prompt.includes("Codex Lark Remote") ? "" : `external: ${prompt}`,
+    onEvent: async (_event, summary) => summaries.push(summary),
+  });
+  await watcher.start();
+  await fs.appendFile(
+    sessionPath,
+    [
+      JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: "[Codex Lark Remote handoff]\n来自飞书" } }),
+      JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: "自动化继续执行" } }),
+      "",
+    ].join("\n"),
+  );
+  await watcher.stop();
+
+  assert.deepEqual(summaries, ["用户提示：\nexternal: 自动化继续执行"]);
 });
 
 test("extractProgressSummary collects non-chat Codex JSONL events", () => {

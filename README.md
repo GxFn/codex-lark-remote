@@ -263,14 +263,19 @@ records, not macOS window handles.
 
 Observation is read-only. Use `observe`, `observe <number>`, and `observe off`
 to stream progress from another Codex session without routing Feishu/Lark input
-into that session.
+into that session. Observation replies include each newly appended user prompt
+as a short `User prompt:` separator before later Codex progress, so separate
+turns do not collapse into one continuous assistant stream.
 
 Takeover is write-capable after confirmation. Full-project takeover requires a
 non-empty `lark.allowedUsers` allowlist. Ordinary Feishu/Lark messages are sent
 to the dedicated control Codex window as thread-dispatch requests for the
 selected target. If the target session is active, the control window should
 treat the dispatch as a higher-priority interrupt/delivery request instead of
-waiting for the target to become idle.
+waiting for the target to become idle. During takeover, prompts that Lark
+Remote itself sent from Feishu/Lark are not echoed back; prompts appended by
+other sources, such as automation or local Codex input, are echoed as `User
+prompt:` separators.
 
 ## Behavior And Boundaries
 

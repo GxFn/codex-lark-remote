@@ -202,6 +202,7 @@ export class CodexCliRunner {
     const resultsDir = path.join(this.config.dataDir, "results");
     await fs.mkdir(resultsDir, { recursive: true });
     const outputFile = path.join(resultsDir, `${safeFileName(command.id)}.txt`);
+    const language = await resolveCommandLanguage(this.config, command);
     const args = buildCodexResumeArgs({
       runner,
       threadId: command.codexSessionId,
@@ -214,8 +215,10 @@ export class CodexCliRunner {
       onEvent,
       eventOptions: {
         showCommands: this.config.handoff?.showCommands === true,
-        language: await resolveCommandLanguage(this.config, command),
+        language,
       },
+      includeUserPrompts: true,
+      userPromptText: (_event, promptText) => handoffVisibleUserPrompt(promptText, { command, submittedPrompt: prompt }),
     });
     await sessionWatcher.start();
     let result;
@@ -226,7 +229,7 @@ export class CodexCliRunner {
         onEvent,
         eventOptions: {
           showCommands: this.config.handoff?.showCommands === true,
-          language: await resolveCommandLanguage(this.config, command),
+          language,
         },
       });
     } finally {
@@ -634,7 +637,20 @@ export function summarizeSessionProgressEvent(event, options = {}) {
   return summarizeCodexEvent(event, options);
 }
 
-export function createSessionProgressWatcher({ sessionPath, onEvent, intervalMs = 500, eventOptions = {} } = {}) {
+export function summarizeSessionUserPromptEvent(event, options = {}) {
+  const prompt = userPromptFromEvent(event);
+  if (!prompt) return "";
+  return formatSessionUserPrompt(prompt, options);
+}
+
+export function createSessionProgressWatcher({
+  sessionPath,
+  onEvent,
+  intervalMs = 500,
+  eventOptions = {},
+  includeUserPrompts = false,
+  userPromptText,
+} = {}) {
   let offset = 0;
   let buffer = "";
   let timer = null;
@@ -671,7 +687,8 @@ export function createSessionProgressWatcher({ sessionPath, onEvent, intervalMs 
     if (!line.trim()) return;
     try {
       const event = JSON.parse(line);
-      const summary = summarizeSessionProgressEvent(event, eventOptions);
+      const summary = summarizeSessionProgressEvent(event, eventOptions)
+        || summarizeWatcherUserPrompt(event, { eventOptions, includeUserPrompts, userPromptText });
       if (!summary || summary === lastSummary) return;
       lastSummary = summary;
       chain = chain.then(() => onEvent(event, summary)).catch(() => {});
@@ -700,6 +717,14 @@ export function createSessionProgressWatcher({ sessionPath, onEvent, intervalMs 
   };
 }
 
+function summarizeWatcherUserPrompt(event, { eventOptions = {}, includeUserPrompts = false, userPromptText } = {}) {
+  if (!includeUserPrompts) return "";
+  const prompt = userPromptFromEvent(event);
+  if (!prompt) return "";
+  const visible = typeof userPromptText === "function" ? userPromptText(event, prompt) : prompt;
+  return visible ? formatSessionUserPrompt(visible, eventOptions) : "";
+}
+
 function createProgressNotifier({ command, config, notify }) {
   const handoff = config.handoff || {};
   if (handoff.notifyProgress === false || command.mode !== "thread_handoff") return async () => {};
@@ -710,6 +735,42 @@ function createProgressNotifier({ command, config, notify }) {
     lastText = summary;
     await notify(formatProgress(command, summary));
   };
+}
+
+function handoffVisibleUserPrompt(promptText, { command = {}, submittedPrompt = "" } = {}) {
+  const text = progressText(promptText);
+  if (!text) return "";
+  const submitted = isSubmittedHandoffPrompt(text, { command, submittedPrompt });
+  if (isFeishuLarkSource(command)) return submitted ? "" : text;
+  if (submitted) return command.prompt || extractThreadDispatchUserMessage(text) || text;
+  return text;
+}
+
+function isFeishuLarkSource(command = {}) {
+  const source = String(command.source || "lark").trim().toLowerCase();
+  return !source || source === "lark" || source === "feishu" || source === "feishu/lark";
+}
+
+function isSubmittedHandoffPrompt(text, { command = {}, submittedPrompt = "" } = {}) {
+  const normalized = comparablePrompt(text);
+  const submitted = comparablePrompt(submittedPrompt);
+  const raw = comparablePrompt(command.prompt || "");
+  return Boolean(
+    (submitted && normalized === submitted)
+    || (raw && normalized === raw)
+    || /\[Codex Lark Remote (?:handoff|thread dispatch)\]/i.test(text)
+    || /<codex_lark_remote_note>/i.test(text)
+    || /Feishu\/Lark user message to dispatch:/i.test(text)
+  );
+}
+
+function extractThreadDispatchUserMessage(text) {
+  const match = String(text || "").match(/Feishu\/Lark user message to dispatch:\s*([\s\S]+)$/i);
+  return match?.[1]?.trim() || "";
+}
+
+function comparablePrompt(text) {
+  return progressText(text).replace(/\s+/g, " ").trim();
 }
 
 function formatUsage(usage) {
@@ -840,6 +901,40 @@ function textFromEvent(event) {
   if (typeof item.text === "string") return item.text;
   if (typeof item.message === "string") return item.message;
   return event?.message || event?.text || event?.content || event?.delta || "";
+}
+
+function userPromptFromEvent(event) {
+  const payload = event?.payload || {};
+  const item = event?.item || event?.params?.item || payload.item || {};
+  const role = String(payload.role || item.role || event?.role || "").toLowerCase();
+  const eventType = String(event?.type || event?.method || "");
+  const payloadType = String(payload.type || "");
+  const itemType = String(item.type || "");
+  const isUser = role === "user"
+    || payloadType === "user_message"
+    || itemType === "user_message"
+    || /user_message/i.test(`${eventType} ${payloadType} ${itemType}`);
+  if (!isUser) return "";
+  return progressText(textFromEvent(event));
+}
+
+function formatSessionUserPrompt(prompt, options = {}) {
+  const language = options.language === "en" ? "en" : "zh";
+  const max = Number(options.maxUserPromptChars || 1600);
+  const text = clipUserPrompt(redactSensitiveText(progressText(prompt)), max, language);
+  if (!text) return "";
+  return language === "en"
+    ? `User prompt:\n${text}`
+    : `用户提示：\n${text}`;
+}
+
+function clipUserPrompt(text, max, language) {
+  const value = String(text || "").trim();
+  if (!value) return "";
+  if (!Number.isFinite(max) || max <= 0 || value.length <= max) return value;
+  const suffix = language === "en" ? "\n...[truncated]" : "\n...[已截断]";
+  const budget = Math.max(80, max - suffix.length);
+  return `${value.slice(0, budget).trimEnd()}${suffix}`;
 }
 
 async function readFileTail(filePath, maxBytes) {

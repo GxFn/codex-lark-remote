@@ -623,6 +623,7 @@ async function handleChatAction(ctx, event, action) {
         messageId: event.messageId,
         chatIdHash: event.chatIdHash,
         userIdHash: event.userIdHash,
+        language,
         activatedBy: "lark",
       });
       const delivered = await deliverObservationStatus(ctx, event, observation, { language });
@@ -962,6 +963,7 @@ async function handleTakeoverObserve(ctx, event, action) {
       messageId: event.messageId,
       chatIdHash: event.chatIdHash,
       userIdHash: event.userIdHash,
+      language,
       activatedBy: "lark-intent",
     });
     const delivered = await deliverObservationStatus(ctx, event, observation, { language });
@@ -1024,6 +1026,7 @@ async function handleCardAction(ctx, event) {
         messageId: event.messageId,
         chatIdHash: event.chatIdHash,
         userIdHash: event.userIdHash,
+        language,
         activatedBy: "lark-card",
       });
       const delivered = await deliverObservationStatus(ctx, event, observation, { language });
