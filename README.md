@@ -206,10 +206,12 @@ close Lark connection
 The same controls also work in Chinese: `控制台`, `项目列表`, `会话列表`,
 `进入项目 1`, `观察会话 2`, `接管 1`, `状态`, and `关闭飞书连接`.
 
-After takeover, the chat switches to direct task mode. Ordinary Feishu/Lark
-messages go straight to the selected Codex session as new tasks or follow-up
-instructions. They no longer go through project/session intent routing until you
-return to the console or exit handoff.
+After takeover, the chat switches to thread-dispatch mode. Ordinary
+Feishu/Lark messages go to the dedicated control Codex window as dispatch
+requests for the selected Codex session. JavaScript does not send those messages
+directly to the target thread; the control Codex window performs real thread
+dispatch with Codex host thread tools. They no longer go through
+project/session intent routing until you return to the console or exit handoff.
 
 ## Start From Codex
 
@@ -255,8 +257,11 @@ to stream progress from another Codex session without routing Feishu/Lark input
 into that session.
 
 Takeover is write-capable after confirmation. Full-project takeover requires a
-non-empty `lark.allowedUsers` allowlist. Active sessions enter pending takeover
-and attach only after the selected Codex turn becomes idle.
+non-empty `lark.allowedUsers` allowlist. Ordinary Feishu/Lark messages are sent
+to the dedicated control Codex window as thread-dispatch requests for the
+selected target. If the target session is active, the control window should
+treat the dispatch as a higher-priority interrupt/delivery request instead of
+waiting for the target to become idle.
 
 ## Behavior And Boundaries
 

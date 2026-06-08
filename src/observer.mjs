@@ -35,6 +35,24 @@ export async function activateObservation(options = {}) {
   return state;
 }
 
+export async function updateObservationMessageId(options = {}) {
+  const messageId = String(options.messageId || "").trim();
+  if (!messageId) return readObservation(options);
+  const dataDir = resolveDataDir(options.dataDir);
+  const state = await readObservation({ dataDir });
+  if (!state?.active) return state;
+  if (options.threadId && state.threadId !== options.threadId) return state;
+  if (state.messageId === messageId) return state;
+  const next = {
+    ...state,
+    messageId,
+    updatedAt: nowIso(),
+  };
+  await ensureDir(dataDir);
+  await fs.writeFile(observationFilePath(dataDir), `${JSON.stringify(next, null, 2)}\n`);
+  return next;
+}
+
 export async function clearObservation(options = {}) {
   const dataDir = resolveDataDir(options.dataDir);
   const previous = await readObservation({ dataDir });

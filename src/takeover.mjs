@@ -1,6 +1,5 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { activateHandoff } from "./handoff.mjs";
 import { ensureDir, nowIso, resolveDataDir, takeoverFilePath } from "./config.mjs";
 import { listCodexThreads, findCodexThreadById } from "./handoff.mjs";
 
@@ -308,47 +307,31 @@ export async function executeTakeoverTarget(options = {}) {
   }
   const fresh = await refreshTargetStatus(target, options);
   const updatedTarget = { ...target, ...fresh };
-
-  if (updatedTarget.status === "running" || updatedTarget.status === "unknown") {
-    const pendingAt = state.pendingAt || nowIso();
-    const pending = {
-      ...state,
-      state: "pending",
-      pendingAt,
-      target: {
-        ...updatedTarget,
-        selectedAt: state.target?.selectedAt || nowIso(),
-        selectedBy: state.target?.selectedBy || options.selectedBy || "lark",
-      },
-      lark: mergeLarkState(state.lark, options),
-      lastSeenStatus: updatedTarget.status,
-      lastSeenAt: nowIso(),
-    };
-    await writeTakeover({ dataDir }, pending);
-    return { state: pending, target: pending.target, handoff: null, pending: true };
-  }
-
-  const handoff = await activateHandoff({
-    dataDir,
-    threadId: updatedTarget.threadId,
-    threadPath: updatedTarget.threadPath,
-    cwd: updatedTarget.cwd,
-    name: updatedTarget.name,
-    requireExplicitThread: true,
-    activatedBy: options.activatedBy || "takeover",
-  });
   const active = {
     ...state,
     state: "active",
-    target: updatedTarget,
+    mode: "dispatch",
+    target: {
+      ...updatedTarget,
+      selectedAt: state.target?.selectedAt || nowIso(),
+      selectedBy: state.target?.selectedBy || options.selectedBy || "lark",
+    },
+    dispatch: {
+      mode: options.dispatchMode || "controller",
+      controllerThreadId: options.controllerThreadId || "",
+      controllerThreadPath: options.controllerThreadPath || "",
+      controllerCwd: options.controllerCwd || "",
+      controllerName: options.controllerName || "",
+      activatedBy: options.activatedBy || "takeover",
+    },
     lark: mergeLarkState(state.lark, options),
     activatedAt: nowIso(),
     pendingAt: "",
-    lastSeenStatus: "idle",
+    lastSeenStatus: updatedTarget.status || "",
     lastSeenAt: nowIso(),
   };
   await writeTakeover({ dataDir }, active);
-  return { state: active, target: updatedTarget, handoff, pending: false };
+  return { state: active, target: active.target, handoff: null, pending: false, dispatch: active.dispatch };
 }
 
 export async function activatePendingTakeoverIfIdle(options = {}) {

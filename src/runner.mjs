@@ -149,7 +149,7 @@ export class CodexCliRunner {
       }
       if (shouldNotifyStarted(this.config, command)) {
         const language = await resolveCommandLanguage(this.config, command);
-        await this.#notify(command, formatHandoffStarted({ language }));
+        await this.#notify(command, formatHandoffStarted({ language, dispatchTarget: command.dispatchTarget }));
       }
       const progressNotifier = createProgressNotifier({
         command,
@@ -290,9 +290,14 @@ function shouldNotifyStarted(config, command) {
 }
 
 function formatHandoffStarted(options = {}) {
+  if (options.dispatchTarget?.threadId) {
+    return options.language === "en"
+      ? "Received. The control Codex window is preparing thread dispatch."
+      : "已收到，控制 Codex 窗口正在准备线程派发。";
+  }
   return options.language === "en"
-    ? "Received. Codex is thinking through this message."
-    : "已收到，Codex 正在思考并处理这条消息。";
+    ? "Received. The control Codex window is handling this message."
+    : "已收到，控制 Codex 窗口正在处理这条消息。";
 }
 
 async function detectBusyHandoffSession(config = {}, command = {}) {
@@ -340,6 +345,10 @@ export function buildCodexResumeArgs({ runner = {}, threadId, prompt, outputFile
 }
 
 export function buildHandoffPrompt(command, { promptStyle = "direct" } = {}) {
+  if (command.dispatchTarget?.threadId) {
+    return buildThreadDispatchPrompt(command);
+  }
+
   if (promptStyle === "direct") {
     const prompt = command.prompt || "";
     return command.includeRemoteNote === true ? withHandoffPermissionNote(prompt) : prompt;
@@ -356,6 +365,38 @@ export function buildHandoffPrompt(command, { promptStyle = "direct" } = {}) {
     "User message:",
     command.prompt,
   ].join("\n");
+}
+
+function buildThreadDispatchPrompt(command) {
+  const target = command.dispatchTarget || {};
+  return [
+    "[Codex Lark Remote thread dispatch]",
+    "You are the dedicated Lark Remote control Codex window. JavaScript has not sent this message to the target thread; it only delivered this dispatch request to you.",
+    "",
+    "Dispatch boundary:",
+    "- Only this Codex control window may perform real thread dispatch with available Codex host thread tools.",
+    "- Lark Remote is acting as the takeover side. If the target thread is busy, treat this as a higher-priority dispatch/interrupt request and perform normal delivery instead of failing because of busy status.",
+    "- If the host thread tool is unavailable, the target thread cannot be addressed, or readback cannot be verified, fail closed and tell the Feishu/Lark user what is blocked.",
+    "- Do not claim delivery merely because this dispatch request reached the control window.",
+    "- Keep the visible target prompt compact if you send one.",
+    "- Keep the final reply concise and suitable for Feishu/Lark.",
+    "",
+    "Selected target session:",
+    `- title: ${target.name || "Untitled Codex chat"}`,
+    `- threadId: ${target.threadId || ""}`,
+    target.cwd ? `- cwd: ${target.cwd}` : "",
+    target.status ? `- status: ${target.status}${target.statusReason ? ` (${target.statusReason})` : ""}` : "",
+    target.threadPath ? `- localSessionPath: ${target.threadPath}` : "",
+    "",
+    "Sender:",
+    `${command.userName || "lark_user"}${command.userIdHash ? ` (${command.userIdHash})` : ""}`,
+    "",
+    "Permission boundary:",
+    "Feishu/Lark cannot click native Codex Desktop permission dialogs. If approval, sandbox escalation, network/install permission, or another UI permission is required, do not wait silently. Reply with a concise prompt explaining what permission is needed and whether the user must approve it in Codex Desktop or can provide explicit text consent in Feishu/Lark.",
+    "",
+    "Feishu/Lark user message to dispatch:",
+    command.prompt || "",
+  ].filter((line) => line !== "").join("\n");
 }
 
 function withHandoffPermissionNote(prompt) {

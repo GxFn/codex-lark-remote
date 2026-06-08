@@ -49,7 +49,7 @@ test("formatStartupIntro explains conversational Feishu controls", () => {
   assert.match(text, /外层是自然语言控制台/);
   assert.match(text, /看看有哪些项目/);
   assert.match(text, /接管第 2 个会话/);
-  assert.match(text, /任务直通模式/);
+  assert.match(text, /线程派发模式/);
   assert.match(text, /不再解析项目\/会话操作/);
   assert.match(text, /退出接管/);
   assert.doesNotMatch(text, /project list|enter project|takeover 2|exit handoff|\bwindows\b/);
@@ -71,7 +71,7 @@ test("buildStartupIntroCard exposes clickable startup actions", () => {
   const rendered = JSON.stringify(card);
   assert.match(rendered, /Codex 已连接飞书/);
   assert.match(rendered, /外层是自然语言控制台/);
-  assert.match(rendered, /任务直通模式/);
+  assert.match(rendered, /线程派发模式/);
   assert.doesNotMatch(rendered, /project list|close Lark connection|exit handoff/);
   assert.match(rendered, /按钮只是快捷入口/);
   assert.match(rendered, /状态/);
@@ -102,11 +102,11 @@ test("console mode intro is a natural-language control card", () => {
   const rendered = JSON.stringify(buildConsoleModeCard());
 
   assert.match(text, /已进入外层自然语言控制台/);
-  assert.match(text, /任务直通模式/);
-  assert.match(text, /直接发送给目标 Codex 会话/);
+  assert.match(text, /线程派发模式/);
+  assert.match(text, /专用 Codex 控制窗口/);
   assert.match(text, /进入项目 1/);
   assert.match(rendered, /自然语言控制台/);
-  assert.match(rendered, /直接发送给目标 Codex 会话/);
+  assert.match(rendered, /专用 Codex 控制窗口/);
   assert.match(rendered, /接管 1/);
   assert.match(rendered, /关闭飞书连接/);
   assert.match(rendered, /startup_windows/);
@@ -134,7 +134,7 @@ test("handoff disabled message distinguishes takeover exit from bridge disconnec
   assert.match(text, /已退出当前接管/);
   assert.match(text, /飞书连接仍然保持/);
   assert.match(rendered, /已退出当前接管/);
-  assert.match(rendered, /不会再直通刚才的 Codex 会话/);
+  assert.match(rendered, /不会再派发到刚才的 Codex 会话/);
   assert.match(rendered, /项目列表/);
   assert.match(rendered, /接管 2/);
   assert.match(rendered, /startup_windows/);
@@ -196,8 +196,7 @@ test("buildBridgeStatusCard explains mode and next message route", () => {
     workerBusy: true,
     larkWs: { enabled: true, connected: true },
     takeover: {
-      state: "pending",
-      pendingInputs: [{ text: "继续" }],
+      state: "active",
       target: {
         threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
         name: "Running target",
@@ -207,8 +206,8 @@ test("buildBridgeStatusCard explains mode and next message route", () => {
   });
   const rendered = JSON.stringify(card);
   assert.match(rendered, /Lark Remote 状态/);
-  assert.match(rendered, /接管等待中/);
-  assert.match(rendered, /等待目标会话空闲；当前不会发送或暂存/);
+  assert.match(rendered, /线程派发/);
+  assert.match(rendered, /交给控制 Codex 窗口作为线程派发请求/);
   assert.match(rendered, /Running target/);
   assert.match(rendered, /配置验证/);
 });
@@ -231,7 +230,7 @@ test("formatObservationList and status describe read-only session streaming", ()
 
   assert.match(list, /可观察的 Codex 会话/);
   assert.match(list, /observe <序号或线程前缀>/);
-  assert.match(active, /标题: Current migration/);
+  assert.equal(active.split("\n")[0], "Current migration");
   assert.match(active, /只读进度串流/);
 });
 
@@ -334,9 +333,9 @@ test("takeover fallback text is explicit and localized", () => {
   const discarded = formatPendingTakeoverInputDiscarded({}, { language: "zh" });
 
   assert.match(formatTakeoverStatus(null), /已关闭/);
-  assert.match(status, /等待目标会话空闲/);
+  assert.match(status, /线程派发待处理/);
   assert.match(status, /线程: 019e0ffb/);
-  assert.match(discarded, /没有发送，也不会暂存/);
+  assert.match(discarded, /没有已连接的专用 Codex 控制窗口/);
   assert.doesNotMatch(`${status}\n${discarded}`, /Queued|Pending messages|Target thread|待发送消息/);
 });
 
@@ -357,7 +356,8 @@ test("formatTakeoverActive includes an idle session recap when available", () =>
     { recap: { finalMessage: "上个任务已经完成，并通过了 npm test。" } },
   );
 
-  assert.match(rendered, /接管已生效/);
+  assert.match(rendered, /线程派发已启用/);
+  assert.match(rendered, /JS 不会把消息直接发送到目标线程/);
   assert.match(rendered, /上个任务同步/);
   assert.match(rendered, /上个任务已经完成/);
 });
@@ -373,9 +373,9 @@ test("takeover cancellation and timeout messages separate preparation from activ
   assert.match(formatHandoffModeUnavailable(), /当前没有正在接管/);
   assert.match(formatTakeoverPreparationCancelled({ takeover, handoff }), /已取消当前接管选择\/等待/);
   assert.match(formatTakeoverPreparationCancelled({ takeover, handoff }), /暂存的消息不会发送/);
-  assert.match(formatTakeoverPreparationCancelled({ takeover, handoff }), /原来的接管会话/);
+  assert.match(formatTakeoverPreparationCancelled({ takeover, handoff }), /原来的控制窗口派发状态/);
   assert.match(formatTakeoverTimedOut({ takeover, handoff }), /接管等待已超时/);
-  assert.match(formatTakeoverTimedOut({ takeover, handoff }), /已回到原来的接管会话/);
+  assert.match(formatTakeoverTimedOut({ takeover, handoff }), /已回到原来的控制窗口派发状态/);
 });
 
 test("formatTask exposes the last notification delivery error", () => {

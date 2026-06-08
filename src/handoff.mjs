@@ -90,7 +90,8 @@ export async function resolveCodexThread(options = {}) {
   const sessionsRoot = path.join(codexHome, "sessions");
   const requestedCwd = options.cwd ? path.resolve(options.cwd) : "";
   const candidates = await listSessionFiles(sessionsRoot);
-  const exact = await findSession(candidates, requestedCwd, archivedIds);
+  const indexNames = await readSessionIndexNames(codexHome);
+  const exact = await findSession(candidates, requestedCwd, archivedIds, indexNames);
   if (exact) return exact;
   throw new Error("No Codex session found for handoff. Pass threadId explicitly.");
 }
@@ -101,10 +102,11 @@ export async function listCodexThreads(options = {}) {
   const requestedCwd = options.cwd ? path.resolve(options.cwd) : "";
   const limit = Number(options.limit || 10);
   const archivedIds = await readArchivedSessionIds(codexHome);
+  const indexNames = await readSessionIndexNames(codexHome);
   const candidates = [];
   for (const file of await listSessionFiles(sessionsRoot)) {
     if (candidates.length >= limit) break;
-    const meta = await readSessionMeta(file.path);
+    const meta = await readSessionMeta(file.path, { indexNames });
     if (!meta?.id || isArchivedSession(meta, archivedIds) || isHiddenSession(meta)) continue;
     const candidate = {
       threadId: meta.id,
@@ -127,8 +129,9 @@ export async function findCodexThreadById(threadId, options = {}) {
   const archivedIds = await readArchivedSessionIds(codexHome);
   if (archivedIds.has(target)) return null;
   const sessionsRoot = path.join(codexHome, "sessions");
+  const indexNames = await readSessionIndexNames(codexHome);
   for (const file of await listSessionFiles(sessionsRoot)) {
-    const meta = await readSessionMeta(file.path);
+    const meta = await readSessionMeta(file.path, { indexNames });
     if (!meta?.id || isArchivedSession(meta, archivedIds) || isHiddenSession(meta)) continue;
     if (String(meta.id).toLowerCase() !== target) continue;
     return {
@@ -143,10 +146,10 @@ export async function findCodexThreadById(threadId, options = {}) {
   return null;
 }
 
-async function findSession(files, requestedCwd, archivedIds = new Set()) {
+async function findSession(files, requestedCwd, archivedIds = new Set(), indexNames = new Map()) {
   let fallback = null;
   for (const file of files) {
-    const meta = await readSessionMeta(file.path);
+    const meta = await readSessionMeta(file.path, { indexNames });
     if (!meta?.id) continue;
     if (isArchivedSession(meta, archivedIds)) continue;
     if (isHiddenSession(meta)) continue;
@@ -203,15 +206,17 @@ async function walk(dir, files) {
   }
 }
 
-async function readSessionMeta(filePath) {
+async function readSessionMeta(filePath, options = {}) {
   const firstLine = await readFirstLine(filePath);
   try {
     const record = JSON.parse(firstLine);
     if (record.type !== "session_meta") return null;
     const payload = record.payload || {};
-    const name = await inferSessionTitle(filePath, payload.name || payload.title || "");
+    const id = payload.id || idFromPath(filePath);
+    const indexedName = cleanTitle(options.indexNames?.get(String(id).toLowerCase()) || "");
+    const name = indexedName || await inferSessionTitle(filePath, payload.name || payload.title || "");
     return {
-      id: payload.id || idFromPath(filePath),
+      id,
       cwd: payload.cwd || "",
       name,
       source: payload.source || "",
@@ -221,8 +226,36 @@ async function readSessionMeta(filePath) {
       baseInstructions: payload.base_instructions?.text || "",
     };
   } catch {
-    return { id: idFromPath(filePath), cwd: "" };
+    const id = idFromPath(filePath);
+    return {
+      id,
+      cwd: "",
+      name: cleanTitle(options.indexNames?.get(String(id).toLowerCase()) || ""),
+    };
   }
+}
+
+async function readSessionIndexNames(codexHome) {
+  const names = new Map();
+  try {
+    const lines = (await fs.readFile(path.join(codexHome, "session_index.jsonl"), "utf8"))
+      .split(/\r?\n/)
+      .filter(Boolean);
+    for (const line of lines) {
+      let record = null;
+      try {
+        record = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      const id = String(record?.id || "").trim().toLowerCase();
+      const title = cleanTitle(record?.thread_name || record?.name || record?.title || "");
+      if (id && title) names.set(id, title);
+    }
+  } catch {
+    // Older Codex installs and test fixtures may not have a session index.
+  }
+  return names;
 }
 
 async function readFirstLine(filePath) {

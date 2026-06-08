@@ -77,12 +77,14 @@ intro repeatedly.
 
 ## Remote Replies
 
-After a session is taken over, Feishu/Lark text should be treated as the next
-normal Codex user message for that selected session. Continue naturally and
-avoid queue/task boilerplate. Mention skill paths, cache layouts, MCP loading
-internals, local scripts, internal ids, queues, repo keys, worktrees, approval
-commands, or alternate routes only when the user asks for diagnostics or plugin
-development debugging.
+After a session is taken over, Feishu/Lark text is a thread-dispatch request
+for the selected session, delivered to the dedicated Lark Remote control Codex
+window. JavaScript does not send the message directly to the selected target.
+The control Codex window must perform any real thread dispatch with Codex host
+thread tools. Continue naturally and avoid queue/task boilerplate. Mention skill
+paths, cache layouts, MCP loading internals, local scripts, internal ids,
+queues, repo keys, worktrees, approval commands, or alternate routes only when
+the user asks for diagnostics or plugin development debugging.
 
 When a Feishu/Lark turn is completed, answer in the same concise style you would
 use in Codex chat. Include changed files and validation only when they matter to
@@ -100,16 +102,18 @@ Turn it into a clear Feishu/Lark prompt that says what permission is needed and
 whether the user must approve it in Codex Desktop or can reply with explicit
 text consent in Feishu/Lark.
 
-`退出接管` / `exit handoff` / `handoff off` exits the current Codex session
-handoff only and keeps the Feishu/Lark bridge connected. `关闭飞书连接` /
-`close Lark connection` is the explicit command to stop the local bridge and
-disconnect the Feishu/Lark WebSocket; it must ask for confirmation before
-stopping because replies cannot continue after shutdown.
+`退出接管` / `exit handoff` / `handoff off` exits the current dispatch target
+only and keeps both the Feishu/Lark bridge and the dedicated control Codex
+window connected. `关闭飞书连接` / `close Lark connection` is the explicit command
+to stop the local bridge and disconnect the Feishu/Lark WebSocket; it must ask
+for confirmation before stopping because replies cannot continue after shutdown.
 
-If another Feishu/Lark message arrives while the selected Codex Desktop session
-is already running, do not queue or reinterpret it. Tell the user the selected
-session is busy, the message was not sent, and they should resend it after the
-current turn finishes or after takeover becomes active.
+If the selected target Codex session is already running, do not fail, discard,
+or wait for local idle state. Lark Remote is the takeover side and has higher
+priority: treat the Feishu/Lark message as a normal dispatch/interrupt request
+for the control Codex window to deliver with host thread tools. Fail closed only
+if the host thread tool is unavailable, the target thread cannot be addressed,
+or delivery/readback cannot be verified.
 
 Observation is separate from takeover. Use `observe` in Feishu/Lark to
 list observable Codex sessions, `observe <number or thread prefix>` to

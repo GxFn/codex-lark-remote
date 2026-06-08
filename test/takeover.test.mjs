@@ -93,6 +93,35 @@ test("takeover project selection groups windows by project before listing window
   assert.deepEqual(selected.targets.map((target) => target.name), ["Beta C", "Beta B"]);
 });
 
+test("takeover project and session lists use Codex sidebar titles", async () => {
+  const { dataDir, codexHome, sessions } = await fixture();
+  const targetId = "019e0000-0000-7000-8000-000000000020";
+  await writeSession({
+    file: path.join(sessions, `rollout-2026-05-13T10-02-00-${targetId}.jsonl`),
+    id: targetId,
+    cwd: "/workspace/project",
+    name: "负责 codex-lark-remote 仓库的功能，检查这个问题并修复",
+    mtime: new Date("2026-05-13T10:02:00Z"),
+  });
+  await fs.writeFile(
+    path.join(codexHome, "session_index.jsonl"),
+    `${JSON.stringify({
+      id: targetId,
+      thread_name: "检查并修复 codex-lark-remote 功能",
+      updated_at: "2026-05-13T10:02:00Z",
+    })}\n`,
+  );
+
+  const projects = await listTakeoverProjects({ codexHome });
+  assert.equal(projects[0].latestWindowName, "检查并修复 codex-lark-remote 功能");
+
+  await prepareTakeoverScope({ dataDir, codexHome, cwd: "/workspace/project" });
+  const { targets, state } = await refreshTakeoverSelection({ dataDir, codexHome, cwd: "/workspace/project" });
+
+  assert.equal(targets[0].name, "检查并修复 codex-lark-remote 功能");
+  assert.equal(state.selection.options[0].name, "检查并修复 codex-lark-remote 功能");
+});
+
 test("takeover project and window lists prioritize active sessions", async () => {
   const { dataDir, codexHome, sessions } = await fixture();
   await writeSession({
@@ -192,7 +221,7 @@ test("selecting a takeover target only stores selected state", async () => {
   assert.equal(await readHandoff({ dataDir }), null);
 });
 
-test("executing an idle takeover target activates handoff", async () => {
+test("executing an idle takeover target enables controller dispatch", async () => {
   const { dataDir, codexHome, sessions } = await fixture();
   await writeSession({
     file: path.join(sessions, "rollout-2026-05-13T10-01-00-019e0000-0000-7000-8000-000000000004.jsonl"),
@@ -208,11 +237,15 @@ test("executing an idle takeover target activates handoff", async () => {
   const executed = await executeTakeoverTarget({ dataDir, codexHome, selector: "1" });
 
   assert.equal(executed.pending, false);
-  assert.equal(executed.handoff.threadId, "019e0000-0000-7000-8000-000000000004");
-  assert.equal((await readHandoff({ dataDir })).threadId, "019e0000-0000-7000-8000-000000000004");
+  assert.equal(executed.handoff, null);
+  assert.equal(executed.state.state, "active");
+  assert.equal(executed.state.mode, "dispatch");
+  assert.equal(executed.target.threadId, "019e0000-0000-7000-8000-000000000004");
+  assert.equal(executed.dispatch.mode, "controller");
+  assert.equal(await readHandoff({ dataDir }), null);
 });
 
-test("executing a running takeover target enters pending without input queueing", async () => {
+test("executing a running takeover target still enables controller dispatch", async () => {
   const { dataDir, codexHome, sessions } = await fixture();
   await writeSession({
     file: path.join(sessions, "rollout-2026-05-13T10-01-00-019e0000-0000-7000-8000-000000000005.jsonl"),
@@ -227,10 +260,13 @@ test("executing a running takeover target enters pending without input queueing"
 
   const executed = await executeTakeoverTarget({ dataDir, codexHome, selector: "1", idleDebounceMs: 60_000 });
 
-  assert.equal(executed.pending, true);
-  assert.match((await readTakeover({ dataDir })).pendingAt, /^\d{4}-\d{2}-\d{2}T/);
-  assert.equal((await readTakeover({ dataDir })).state, "pending");
-  assert.deepEqual((await readTakeover({ dataDir })).pendingInputs, []);
+  assert.equal(executed.pending, false);
+  const takeover = await readTakeover({ dataDir });
+  assert.equal(takeover.pendingAt, "");
+  assert.equal(takeover.state, "active");
+  assert.equal(takeover.mode, "dispatch");
+  assert.equal(takeover.target.status, "running");
+  assert.deepEqual(takeover.pendingInputs, []);
 
   const cleared = await clearPendingTakeoverInputs({ dataDir });
   assert.deepEqual(cleared.pendingInputs, []);
@@ -252,6 +288,7 @@ test("pending takeover times out when the target never becomes idle", async () =
 
   const takeoverPath = path.join(dataDir, "takeover.json");
   const state = JSON.parse(await fs.readFile(takeoverPath, "utf8"));
+  state.state = "pending";
   state.pendingAt = "2000-01-01T00:00:00.000Z";
   await fs.writeFile(takeoverPath, `${JSON.stringify(state, null, 2)}\n`);
 

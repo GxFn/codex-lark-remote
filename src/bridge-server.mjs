@@ -57,7 +57,7 @@ import {
 } from "./presenter.mjs";
 import { RemoteCommandQueue } from "./queue.mjs";
 import { CodexCliRunner, readSessionLastTurnSummary } from "./runner.mjs";
-import { activateObservation, clearObservation, CodexSessionObserver, listObservationTargets, readObservation } from "./observer.mjs";
+import { activateObservation, clearObservation, CodexSessionObserver, listObservationTargets, readObservation, updateObservationMessageId } from "./observer.mjs";
 import { assertLarkAppCredentials } from "./setup-guide.mjs";
 import { buildLarkSetupVerificationReport } from "./setup-verification.mjs";
 import { sendStartupIntroIfNeeded } from "./startup-notice.mjs";
@@ -625,8 +625,9 @@ async function handleChatAction(ctx, event, action) {
         userIdHash: event.userIdHash,
         activatedBy: "lark",
       });
-      await ctx.observer?.start(observation);
-      return ctx.notifier.reply(event.messageId, formatObservationStatus(observation, { language }));
+      const delivered = await deliverObservationStatus(ctx, event, observation, { language });
+      await ctx.observer?.start(delivered.observation);
+      return delivered.delivery;
     } catch (error) {
       const targets = await listObservationTargets({ cwd: handoff?.cwd || "", limit: 10 });
       return ctx.notifier.reply(event.messageId, `${error.message}\n\n${formatObservationList(targets, null, { language })}`);
@@ -668,7 +669,7 @@ async function handleChatAction(ctx, event, action) {
   if (action.kind !== "task") return;
 
   const takeover = await readTakeover({ dataDir: ctx.config.dataDir });
-  if (takeover?.state === "pending") {
+  if (takeover?.state === "pending" && !handoff?.active) {
     return ctx.notifier.reply(event.messageId, formatPendingTakeoverInputDiscarded(takeover, { language }));
   }
 
@@ -681,6 +682,8 @@ async function handleChatAction(ctx, event, action) {
   const created = handoff
     ? await enqueueHandoffTask(ctx, {
         handoff,
+        dispatchTarget: ["active", "pending"].includes(takeover?.state || "") ? takeover.target : null,
+        takeover,
         text: event.text,
         messageId: event.messageId,
         chatIdHash: event.chatIdHash,
@@ -961,8 +964,9 @@ async function handleTakeoverObserve(ctx, event, action) {
       userIdHash: event.userIdHash,
       activatedBy: "lark-intent",
     });
-    await ctx.observer?.start(observation);
-    return ctx.notifier.reply(event.messageId, formatObservationStatus(observation, { language }));
+    const delivered = await deliverObservationStatus(ctx, event, observation, { language });
+    await ctx.observer?.start(delivered.observation);
+    return delivered.delivery;
   } catch (error) {
     return ctx.notifier.reply(event.messageId, error.message);
   }
@@ -1022,8 +1026,9 @@ async function handleCardAction(ctx, event) {
         userIdHash: event.userIdHash,
         activatedBy: "lark-card",
       });
-      await ctx.observer?.start(observation);
-      return replyMaybe(ctx, event.messageId, formatObservationStatus(observation, { language }));
+      const delivered = await deliverObservationStatus(ctx, event, observation, { language });
+      await ctx.observer?.start(delivered.observation);
+      return delivered.delivery;
     }
     if (action === "takeover_confirm") {
       const selected = await selectTakeoverTarget({
@@ -1075,6 +1080,7 @@ async function enqueueHandoffTask(ctx, input) {
     dataDir: ctx.config.dataDir,
     threadId: input.handoff.threadId,
   });
+  const dispatchTarget = normalizeDispatchTarget(input.dispatchTarget);
   return ctx.queue.enqueue({
     source: "lark",
     mode: "thread_handoff",
@@ -1083,6 +1089,9 @@ async function enqueueHandoffTask(ctx, input) {
     notifyStarted: ctx.config.handoff?.notifyStarted !== false,
     includeRemoteNote,
     handoffGuidance: guidance,
+    handoffDispatch: Boolean(dispatchTarget),
+    dispatchTarget,
+    takeoverState: input.takeover?.state || "",
     guidanceForCommandId: input.runningCommand?.id || "",
     repoKey: "current",
     projectRoot: input.handoff.cwd || "",
@@ -1095,6 +1104,19 @@ async function enqueueHandoffTask(ctx, input) {
     codexSessionId: input.handoff.threadId,
     codexSessionPath: input.handoff.threadPath || "",
   });
+}
+
+function normalizeDispatchTarget(target = {}) {
+  if (!target?.threadId) return null;
+  return {
+    threadId: target.threadId || "",
+    threadPath: target.threadPath || "",
+    cwd: target.cwd || "",
+    name: target.name || "",
+    status: target.status || "",
+    statusReason: target.statusReason || "",
+    lastEventAtMs: target.lastEventAtMs || target.updatedAtMs || 0,
+  };
 }
 
 async function findRunningHandoffTask(ctx, handoff) {
@@ -1144,12 +1166,9 @@ async function cancelInactiveHandoffTasks(ctx) {
 }
 
 async function handleHandoffDisable(ctx, event, { handoff, language } = {}) {
-  const activeHandoff = handoff || await readHandoff({ dataDir: ctx.config.dataDir });
-  const handoffState = await clearHandoff({ dataDir: ctx.config.dataDir });
   const cleared = await clearTakeover({ dataDir: ctx.config.dataDir });
   await stopPendingTakeoverObservation(ctx, cleared?.previous);
   await setIntentSessionModeForEvent(ctx, event, "console", "handoff_disabled");
-  await cancelHandoffTasks(ctx, activeHandoff?.threadId || handoffState?.previous?.threadId);
   ctx.keepAwake?.stop();
   return replyCardOrText(ctx, event.messageId, buildHandoffDisabledCard({ language }), formatHandoffDisabled({ language }));
 }
@@ -1224,6 +1243,10 @@ async function withTakeoverSelectionContext(ctx, event, action) {
 }
 
 async function executeTakeoverForBridge(ctx, input = {}) {
+  const controller = await readHandoff({ dataDir: ctx.config.dataDir });
+  if (!controller?.active) {
+    throw new Error("线程派发需要先通过专用 Codex 控制窗口开启 Lark Remote 连接。");
+  }
   const executed = await executeTakeoverTarget({
     dataDir: ctx.config.dataDir,
     selector: input.selector,
@@ -1234,6 +1257,11 @@ async function executeTakeoverForBridge(ctx, input = {}) {
     userIdHash: input.userIdHash,
     idleDebounceMs: ctx.config.takeover?.idleDebounceMs,
     activatedBy: input.activatedBy || "lark",
+    dispatchMode: "controller",
+    controllerThreadId: controller?.threadId || "",
+    controllerThreadPath: controller?.threadPath || "",
+    controllerCwd: controller?.cwd || "",
+    controllerName: controller?.name || "",
   });
   if (!executed.pending) {
     await stopPendingTakeoverObservation(ctx, executed.state);
@@ -1362,6 +1390,31 @@ async function replyCardOrText(ctx, messageId, card, text) {
     if (delivered?.ok) return delivered;
   }
   return replyMaybe(ctx, messageId, text);
+}
+
+async function deliverObservationStatus(ctx, event, observation, options = {}) {
+  const text = formatObservationStatus(observation, options);
+  const delivery = await sendSessionAnchoredText(ctx, event, text);
+  const messageId = deliveredMessageId(delivery);
+  if (!messageId) return { delivery, observation };
+  const updated = await updateObservationMessageId({
+    dataDir: ctx.config.dataDir,
+    threadId: observation.threadId,
+    messageId,
+  });
+  return { delivery, observation: updated || { ...observation, messageId } };
+}
+
+async function sendSessionAnchoredText(ctx, event, text) {
+  if (event.chatId && ctx.notifier?.send) {
+    const delivered = await ctx.notifier.send(event.chatId, text, { receiveIdType: "chat_id" });
+    if (delivered?.ok) return delivered;
+  }
+  return replyMaybe(ctx, event.messageId, text);
+}
+
+function deliveredMessageId(delivery) {
+  return delivery?.messageId || delivery?.messageIds?.find(Boolean) || "";
 }
 
 async function replyMaybe(ctx, messageId, text) {

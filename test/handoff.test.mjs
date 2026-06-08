@@ -172,6 +172,32 @@ test("listCodexThreads infers title from the first user message", async () => {
   assert.equal(thread.name, "分析说明 BiliDili 项目架构");
 });
 
+test("listCodexThreads prefers Codex sidebar titles from the session index", async () => {
+  const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-home-index-title-"));
+  const sessions = path.join(codexHome, "sessions", "2026", "05", "11");
+  const id = "019e0000-0000-7000-8000-000000000106";
+  await fs.mkdir(sessions, { recursive: true });
+  await writeSession({
+    file: path.join(sessions, `rollout-2026-05-11T10-00-00-${id}.jsonl`),
+    id,
+    cwd: "/workspace/project",
+    userMessage: "负责 codex-lark-remote 仓库的功能，检查这个问题并修复",
+    mtime: new Date("2026-05-11T10:00:00Z"),
+  });
+  await fs.writeFile(
+    path.join(codexHome, "session_index.jsonl"),
+    `${JSON.stringify({
+      id,
+      thread_name: "检查并修复 codex-lark-remote 功能",
+      updated_at: "2026-05-11T10:00:00Z",
+    })}\n`,
+  );
+
+  const [thread] = await listCodexThreads({ codexHome, cwd: "/workspace/project" });
+
+  assert.equal(thread.name, "检查并修复 codex-lark-remote 功能");
+});
+
 test("listCodexThreads skips AGENTS bootstrap messages when inferring title", async () => {
   const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-home-title-agents-"));
   const sessions = path.join(codexHome, "sessions", "2026", "05", "11");

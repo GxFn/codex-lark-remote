@@ -127,6 +127,28 @@ test("buildHandoffPrompt can still annotate Feishu input when configured", () =>
   assert.match(prompt, /fix README/);
 });
 
+test("buildHandoffPrompt wraps target dispatch for the control window", () => {
+  const prompt = buildHandoffPrompt({
+    userName: "ou_user",
+    userIdHash: "u_hash",
+    prompt: "优先处理这个变更",
+    dispatchTarget: {
+      threadId: "target-thread-1",
+      name: "修复 lark 远程派发",
+      cwd: "/workspace",
+      status: "running",
+      statusReason: "last event running",
+    },
+  });
+
+  assert.match(prompt, /\[Codex Lark Remote thread dispatch\]/);
+  assert.match(prompt, /JavaScript has not sent this message to the target thread/);
+  assert.match(prompt, /higher-priority dispatch\/interrupt request/);
+  assert.match(prompt, /target-thread-1/);
+  assert.match(prompt, /修复 lark 远程派发/);
+  assert.match(prompt, /优先处理这个变更/);
+});
+
 test("CodexCliRunner sends a handoff started acknowledgement by default", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-started-"));
   const fakeCodex = path.join(dataDir, "fake-codex");
@@ -168,9 +190,9 @@ test("CodexCliRunner sends a handoff started acknowledgement by default", async 
 
   await runner.processAll();
 
-  assert.deepEqual(replies.find((reply) => reply.text === "已收到，Codex 正在思考并处理这条消息。"), {
+  assert.deepEqual(replies.find((reply) => reply.text === "已收到，控制 Codex 窗口正在处理这条消息。"), {
     messageId: "om_1",
-    text: "已收到，Codex 正在思考并处理这条消息。",
+    text: "已收到，控制 Codex 窗口正在处理这条消息。",
   });
 });
 
@@ -216,9 +238,9 @@ test("CodexCliRunner localizes the handoff started acknowledgement in English", 
 
   await runner.processAll();
 
-  assert.deepEqual(replies.find((reply) => reply.text === "Received. Codex is thinking through this message."), {
+  assert.deepEqual(replies.find((reply) => reply.text === "Received. The control Codex window is handling this message."), {
     messageId: "om_1",
-    text: "Received. Codex is thinking through this message.",
+    text: "Received. The control Codex window is handling this message.",
   });
 });
 
@@ -263,8 +285,8 @@ test("CodexCliRunner suppresses the handoff started acknowledgement when explici
 
   await runner.processAll();
 
-  assert.equal(replies.some((reply) => reply.text === "已收到，Codex 正在思考并处理这条消息。"), false);
-  assert.equal(replies.some((reply) => reply.text === "Received. Codex is thinking through this message."), false);
+  assert.equal(replies.some((reply) => reply.text === "已收到，控制 Codex 窗口正在处理这条消息。"), false);
+  assert.equal(replies.some((reply) => reply.text === "Received. The control Codex window is handling this message."), false);
 });
 
 test("CodexCliRunner suppresses handoff notifications after handoff is off", async () => {
