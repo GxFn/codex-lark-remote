@@ -1136,6 +1136,98 @@ test("processLarkEvent dispatches normal messages even when the selected target 
   assert.equal(replies.some((reply) => /没有发送，也不会暂存/.test(reply.text)), false);
 });
 
+test("processLarkEvent keeps dispatch target after takeover list refreshes", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-active-list-refresh-"));
+  const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-home-active-list-refresh-"));
+  const sessions = path.join(codexHome, "sessions", "2026", "05", "13");
+  const targetThreadId = "019e0000-0000-7000-8000-000000000033";
+  const controlThreadId = "019e0000-0000-7000-8000-000000000034";
+  await fs.mkdir(sessions, { recursive: true });
+  await writeSession({
+    file: path.join(sessions, `rollout-2026-05-13T10-01-00-${targetThreadId}.jsonl`),
+    id: targetThreadId,
+    cwd: "/workspace",
+    name: "Taken over target",
+    events: [{ type: "turn.completed", payload: {} }],
+    mtime: new Date("2026-05-13T10:01:00Z"),
+  });
+  await writeSession({
+    file: path.join(sessions, `rollout-2026-05-13T10-02-00-${controlThreadId}.jsonl`),
+    id: controlThreadId,
+    cwd: "/workspace",
+    name: "Lark control window",
+    events: [{ type: "turn.completed", payload: {} }],
+    mtime: new Date("2026-05-13T10:02:00Z"),
+  });
+  await activateHandoff({
+    dataDir,
+    threadId: controlThreadId,
+    cwd: "/workspace",
+    activatedBy: "test",
+  });
+  await prepareTakeoverScope({ dataDir, codexHome, cwd: "/workspace" });
+  const originalCodexHome = process.env.CODEX_HOME;
+  process.env.CODEX_HOME = codexHome;
+  const replies = [];
+  const cards = [];
+  const enqueued = [];
+  const ctx = {
+    config: {
+      dataDir,
+      lark: { allowedUsers: ["ou_allowed"] },
+      takeover: { idleDebounceMs: 1 },
+    },
+    queue: {
+      findByMessageId: async () => null,
+      enqueue: async (input) => {
+        enqueued.push(input);
+        return { id: `rcmd_${enqueued.length}`, status: "pending", ...input };
+      },
+    },
+    notifier: {
+      reply: async (messageId, text) => replies.push({ messageId, text }),
+      replyCard: async (messageId, card) => {
+        cards.push({ messageId, card });
+        return { ok: true };
+      },
+    },
+    observer: { startTemporary: async () => {} },
+    runner: { processAll: () => {} },
+  };
+
+  try {
+    await processLarkEvent(ctx, cardActionEvent({
+      action: "takeover_execute",
+      threadId: targetThreadId,
+      userId: "ou_allowed",
+      messageId: "om_takeover",
+    }));
+    await processLarkEvent(ctx, textEvent({
+      text: "/codex windows",
+      userId: "ou_allowed",
+      messageId: "om_windows",
+    }));
+    await processLarkEvent(ctx, textEvent({
+      text: "继续检查并修复链路问题",
+      userId: "ou_allowed",
+      messageId: "om_followup",
+    }));
+  } finally {
+    if (originalCodexHome === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = originalCodexHome;
+  }
+
+  const takeover = await readTakeover({ dataDir });
+  assert.equal(takeover.state, "active");
+  assert.equal(takeover.target.threadId, targetThreadId);
+  assert.equal(cards.length, 1);
+  assert.equal(enqueued.length, 1);
+  assert.equal(enqueued[0].mode, "thread_handoff");
+  assert.equal(enqueued[0].handoffDispatch, true);
+  assert.equal(enqueued[0].dispatchTarget.threadId, targetThreadId);
+  assert.match(enqueued[0].prompt, /继续检查并修复链路问题/);
+});
+
 test("processLarkEvent cancels the active dispatch target without exiting the control window", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-pending-cancel-"));
   const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-home-pending-cancel-"));

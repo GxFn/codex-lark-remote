@@ -17,6 +17,8 @@ import {
   refreshTakeoverSelection,
   selectTakeoverProject,
   selectTakeoverTarget,
+  setTakeoverProjectPage,
+  setTakeoverSelectionPage,
 } from "../src/takeover.mjs";
 
 test("takeover scope lists every project window including the starter thread", async () => {
@@ -270,6 +272,98 @@ test("executing a running takeover target still enables controller dispatch", as
 
   const cleared = await clearPendingTakeoverInputs({ dataDir });
   assert.deepEqual(cleared.pendingInputs, []);
+});
+
+test("takeover list refreshes preserve the active dispatch target", async () => {
+  const { dataDir, codexHome, sessions } = await fixture();
+  const activeThreadId = "019e0000-0000-7000-8000-000000000006";
+  await writeSession({
+    file: path.join(sessions, `rollout-2026-05-13T10-01-00-${activeThreadId}.jsonl`),
+    id: activeThreadId,
+    cwd: "/workspace/project",
+    name: "Active dispatch target",
+    events: [{ type: "turn.completed", payload: {} }],
+    mtime: new Date("2026-05-13T10:01:00Z"),
+  });
+  await writeSession({
+    file: path.join(sessions, "rollout-2026-05-13T10-02-00-019e0000-0000-7000-8000-000000000007.jsonl"),
+    id: "019e0000-0000-7000-8000-000000000007",
+    cwd: "/workspace/project",
+    name: "Other target",
+    events: [{ type: "turn.completed", payload: {} }],
+    mtime: new Date("2026-05-13T10:02:00Z"),
+  });
+  await prepareTakeoverScope({ dataDir, codexHome, cwd: "/workspace/project", threadId: "control-thread" });
+  await refreshTakeoverSelection({ dataDir, codexHome, cwd: "/workspace/project" });
+  await executeTakeoverTarget({ dataDir, codexHome, threadId: activeThreadId });
+
+  await prepareTakeoverScope({ dataDir, codexHome, cwd: "/workspace/project", threadId: "new-control-thread" });
+  assert.equal((await readTakeover({ dataDir })).target.threadId, activeThreadId);
+
+  await refreshTakeoverProjectSelection({ dataDir, codexHome, pageSize: 1 });
+  let takeover = await readTakeover({ dataDir });
+  assert.equal(takeover.state, "active");
+  assert.equal(takeover.target.threadId, activeThreadId);
+
+  await setTakeoverProjectPage({ dataDir, page: 0, pageSize: 1 });
+  takeover = await readTakeover({ dataDir });
+  assert.equal(takeover.state, "active");
+  assert.equal(takeover.target.threadId, activeThreadId);
+
+  await selectTakeoverProject({ dataDir, codexHome, selector: "1", pageSize: 1 });
+  takeover = await readTakeover({ dataDir });
+  assert.equal(takeover.state, "active");
+  assert.equal(takeover.target.threadId, activeThreadId);
+
+  await refreshTakeoverSelection({ dataDir, codexHome, cwd: "/workspace/project", pageSize: 1 });
+  takeover = await readTakeover({ dataDir });
+  assert.equal(takeover.state, "active");
+  assert.equal(takeover.target.threadId, activeThreadId);
+
+  await setTakeoverSelectionPage({ dataDir, page: 0, pageSize: 1 });
+  takeover = await readTakeover({ dataDir });
+  assert.equal(takeover.state, "active");
+  assert.equal(takeover.target.threadId, activeThreadId);
+});
+
+test("selecting a new target during active takeover stores only a candidate until execute", async () => {
+  const { dataDir, codexHome, sessions } = await fixture();
+  const activeThreadId = "019e0000-0000-7000-8000-000000000008";
+  const candidateThreadId = "019e0000-0000-7000-8000-000000000009";
+  await writeSession({
+    file: path.join(sessions, `rollout-2026-05-13T10-01-00-${activeThreadId}.jsonl`),
+    id: activeThreadId,
+    cwd: "/workspace/project",
+    name: "Current active target",
+    events: [{ type: "turn.completed", payload: {} }],
+    mtime: new Date("2026-05-13T10:01:00Z"),
+  });
+  await writeSession({
+    file: path.join(sessions, `rollout-2026-05-13T10-02-00-${candidateThreadId}.jsonl`),
+    id: candidateThreadId,
+    cwd: "/workspace/project",
+    name: "Candidate target",
+    events: [{ type: "turn.completed", payload: {} }],
+    mtime: new Date("2026-05-13T10:02:00Z"),
+  });
+  await prepareTakeoverScope({ dataDir, codexHome, cwd: "/workspace/project" });
+  await refreshTakeoverSelection({ dataDir, codexHome, cwd: "/workspace/project" });
+  await executeTakeoverTarget({ dataDir, codexHome, threadId: activeThreadId });
+
+  const selected = await selectTakeoverTarget({ dataDir, codexHome, threadId: candidateThreadId });
+  assert.equal(selected.target.threadId, candidateThreadId);
+
+  let takeover = await readTakeover({ dataDir });
+  assert.equal(takeover.state, "active");
+  assert.equal(takeover.target.threadId, activeThreadId);
+  assert.equal(takeover.candidateTarget.threadId, candidateThreadId);
+
+  const executed = await executeTakeoverTarget({ dataDir, codexHome });
+  assert.equal(executed.target.threadId, candidateThreadId);
+  takeover = await readTakeover({ dataDir });
+  assert.equal(takeover.state, "active");
+  assert.equal(takeover.target.threadId, candidateThreadId);
+  assert.equal(takeover.candidateTarget, null);
 });
 
 test("pending takeover times out when the target never becomes idle", async () => {

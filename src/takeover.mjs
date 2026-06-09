@@ -6,6 +6,7 @@ import { listCodexThreads, findCodexThreadById } from "./handoff.mjs";
 const FINAL_EVENT_RE = /(?:turn[./_-]?completed|response[./_-]?completed|final_answer|agent_message)/i;
 const RUNNING_EVENT_RE = /(?:tool_call|command|exec|turn[./_-]?started|response[./_-]?started|agent_reasoning|agent_progress)/i;
 const DEFAULT_DISPLAY_PAGE_SIZE = 3;
+const LIVE_DISPATCH_STATES = new Set(["active", "pending"]);
 
 export async function readTakeover(options = {}) {
   const dataDir = resolveDataDir(options.dataDir);
@@ -22,6 +23,24 @@ export async function prepareTakeoverScope(options = {}) {
   const dataDir = resolveDataDir(options.dataDir);
   await ensureDir(dataDir);
   const now = nowIso();
+  const previous = await readTakeover({ dataDir });
+  if (hasLiveDispatchTarget(previous)) {
+    const updated = {
+      ...previous,
+      scope: {
+        ...(previous.scope || {}),
+        cwd: options.cwd || previous.scope?.cwd || previous.target?.cwd || "",
+        startedByThreadId: options.threadId || previous.scope?.startedByThreadId || "",
+        startedByThreadPath: options.threadPath || previous.scope?.startedByThreadPath || "",
+        startedAt: previous.scope?.startedAt || now,
+        startedBy: options.startedBy || previous.scope?.startedBy || "mcp",
+        lastPreparedAt: now,
+      },
+      lastSeenAt: now,
+    };
+    await writeTakeover({ dataDir }, updated);
+    return updated;
+  }
   const state = {
     version: 1,
     state: "selecting",
@@ -140,9 +159,10 @@ export async function refreshTakeoverProjectSelection(options = {}) {
   const now = Date.now();
   const pageSize = normalizePageSize(options.pageSize || DEFAULT_DISPLAY_PAGE_SIZE);
   const page = clampPage(options.page, projects.length, pageSize);
+  const live = hasLiveDispatchTarget(state);
   const updated = {
     ...state,
-    state: "selecting_project",
+    state: live ? state.state : "selecting_project",
     projectSelection: {
       listedAt: nowIso(),
       expiresAt: new Date(now + Number(options.selectionTtlMs || 10 * 60 * 1000)).toISOString(),
@@ -150,8 +170,9 @@ export async function refreshTakeoverProjectSelection(options = {}) {
       pageSize,
       options: projects.map((project, index) => optionForProject(project, index + 1)),
     },
-    selection: emptySelection(),
-    target: null,
+    selection: live ? (state.selection || emptySelection()) : emptySelection(),
+    target: live ? state.target : null,
+    candidateTarget: null,
     lastSeenAt: nowIso(),
   };
   await writeTakeover({ dataDir }, updated);
@@ -162,16 +183,18 @@ export async function selectTakeoverProject(options = {}) {
   const dataDir = resolveDataDir(options.dataDir);
   const state = await ensureTakeoverState(options);
   const project = await resolveTakeoverProject({ ...options, dataDir, state });
+  const live = hasLiveDispatchTarget(state);
   const updated = {
     ...state,
-    state: "selecting",
+    state: live ? state.state : "selecting",
     scope: {
       ...(state.scope || {}),
       cwd: project.cwd,
     },
     project,
     selection: emptySelection(),
-    target: null,
+    target: live ? state.target : null,
+    candidateTarget: null,
     lastSeenAt: nowIso(),
   };
   await writeTakeover({ dataDir }, updated);
@@ -202,9 +225,10 @@ export async function refreshTakeoverSelection(options = {}) {
   const now = Date.now();
   const pageSize = normalizePageSize(options.pageSize || DEFAULT_DISPLAY_PAGE_SIZE);
   const page = clampPage(options.page, targets.length, pageSize);
+  const live = hasLiveDispatchTarget(state);
   const updated = {
     ...state,
-    state: "selecting",
+    state: live ? state.state : "selecting",
     selection: {
       listedAt: nowIso(),
       expiresAt: new Date(now + Number(options.selectionTtlMs || 10 * 60 * 1000)).toISOString(),
@@ -212,7 +236,8 @@ export async function refreshTakeoverSelection(options = {}) {
       pageSize,
       options: targets.map((target, index) => optionForTarget(target, index + 1)),
     },
-    target: null,
+    target: live ? state.target : null,
+    candidateTarget: null,
     lastSeenAt: nowIso(),
   };
   await writeTakeover({ dataDir }, updated);
@@ -228,16 +253,18 @@ export async function setTakeoverProjectPage(options = {}) {
 
   const pageSize = normalizePageSize(options.pageSize || projectSelection.pageSize || DEFAULT_DISPLAY_PAGE_SIZE);
   const page = clampPage(options.page, projects.length, pageSize);
+  const live = hasLiveDispatchTarget(state);
   const updated = {
     ...state,
-    state: "selecting_project",
+    state: live ? state.state : "selecting_project",
     projectSelection: {
       ...projectSelection,
       page,
       pageSize,
     },
-    selection: emptySelection(),
-    target: null,
+    selection: live ? (state.selection || emptySelection()) : emptySelection(),
+    target: live ? state.target : null,
+    candidateTarget: null,
     lastSeenAt: nowIso(),
   };
   await writeTakeover({ dataDir }, updated);
@@ -253,15 +280,17 @@ export async function setTakeoverSelectionPage(options = {}) {
 
   const pageSize = normalizePageSize(options.pageSize || selection.pageSize || DEFAULT_DISPLAY_PAGE_SIZE);
   const page = clampPage(options.page, targets.length, pageSize);
+  const live = hasLiveDispatchTarget(state);
   const updated = {
     ...state,
-    state: "selecting",
+    state: live ? state.state : "selecting",
     selection: {
       ...selection,
       page,
       pageSize,
     },
-    target: null,
+    target: live ? state.target : null,
+    candidateTarget: null,
     lastSeenAt: nowIso(),
   };
   await writeTakeover({ dataDir }, updated);
@@ -276,14 +305,26 @@ export async function selectTakeoverTarget(options = {}) {
     dataDir,
     state,
   });
+  const selectedTarget = {
+    ...target,
+    selectedAt: nowIso(),
+    selectedBy: options.selectedBy || "lark",
+  };
+  if (hasLiveDispatchTarget(state)) {
+    const updated = {
+      ...state,
+      candidateTarget: selectedTarget,
+      lark: mergeLarkState(state.lark, options),
+      lastSeenAt: nowIso(),
+    };
+    await writeTakeover({ dataDir }, updated);
+    return { state: updated, target: selectedTarget };
+  }
   const updated = {
     ...state,
     state: "selected",
-    target: {
-      ...target,
-      selectedAt: nowIso(),
-      selectedBy: options.selectedBy || "lark",
-    },
+    target: selectedTarget,
+    candidateTarget: null,
     lark: mergeLarkState(state.lark, options),
     lastSeenStatus: target.status || "",
     lastSeenAt: nowIso(),
@@ -295,7 +336,8 @@ export async function selectTakeoverTarget(options = {}) {
 export async function executeTakeoverTarget(options = {}) {
   const dataDir = resolveDataDir(options.dataDir);
   let state = await ensureTakeoverState(options);
-  let target = options.target || state.target;
+  const shouldUseCandidate = !options.target && !options.selector && !options.threadId && !options.optionIndex;
+  let target = options.target || (shouldUseCandidate && state.candidateTarget?.threadId ? state.candidateTarget : state.target);
   if (!target || options.selector || options.threadId || options.optionIndex) {
     const selected = await selectTakeoverTarget({
       ...options,
@@ -307,15 +349,18 @@ export async function executeTakeoverTarget(options = {}) {
   }
   const fresh = await refreshTargetStatus(target, options);
   const updatedTarget = { ...target, ...fresh };
+  const selectedAt = updatedTarget.selectedAt || nowIso();
+  const selectedBy = updatedTarget.selectedBy || options.selectedBy || "lark";
   const active = {
     ...state,
     state: "active",
     mode: "dispatch",
     target: {
       ...updatedTarget,
-      selectedAt: state.target?.selectedAt || nowIso(),
-      selectedBy: state.target?.selectedBy || options.selectedBy || "lark",
+      selectedAt,
+      selectedBy,
     },
+    candidateTarget: null,
     dispatch: {
       mode: options.dispatchMode || "controller",
       controllerThreadId: options.controllerThreadId || "",
@@ -507,6 +552,10 @@ async function writeTakeover(options, state) {
 
 function emptySelection() {
   return { listedAt: "", expiresAt: "", page: 0, pageSize: DEFAULT_DISPLAY_PAGE_SIZE, options: [] };
+}
+
+function hasLiveDispatchTarget(state) {
+  return LIVE_DISPATCH_STATES.has(state?.state || "") && Boolean(state?.target?.threadId);
 }
 
 function optionForTarget(target, index) {
