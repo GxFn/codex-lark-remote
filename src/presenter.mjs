@@ -974,13 +974,13 @@ export function buildTakeoverSelectedCard(target, options = {}) {
 export function buildTakeoverConfirmCard(target, options = {}) {
   const language = languageOf(options);
   return baseCard({
-    title: language === "en" ? "Confirm Takeover" : "确认接管",
+    title: takeoverTargetTitle(target, language),
     elements: [
       {
         tag: "markdown",
         content: language === "en"
-          ? `${takeoverTargetMarkdown(target, language)}\n\nAfter confirmation, future Lark messages route to this Codex thread.`
-          : `${takeoverTargetMarkdown(target, language)}\n\n确认后，飞书后续消息会路由到这个 Codex 线程。`,
+          ? `**Confirm Takeover**\n${takeoverTargetDetailsMarkdown(target, language)}\n\nAfter confirmation, future Lark messages route to this Codex thread.`
+          : `**确认接管**\n${takeoverTargetDetailsMarkdown(target, language)}\n\n确认后，飞书后续消息会路由到这个 Codex 线程。`,
       },
       {
         tag: "action",
@@ -1380,6 +1380,27 @@ function takeoverTargetMarkdown(target = {}, language = "zh") {
   }
   return [
     `**${escapeCardText(target.name || "未命名 Codex 对话")}**`,
+    `状态: ${formatWindowStatus(target.status, language)}`,
+    `线程: ${String(target.threadId || "").slice(0, 8) || "unknown"}`,
+    target.cwd ? `目录: ${escapeCardText(target.cwd)}` : "",
+  ].filter(Boolean).join("\n");
+}
+
+function takeoverTargetTitle(target = {}, language = "zh") {
+  return String(target.name || (language === "en" ? "Untitled Codex chat" : "未命名 Codex 对话"))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function takeoverTargetDetailsMarkdown(target = {}, language = "zh") {
+  if (language === "en") {
+    return [
+      `Status: ${formatWindowStatus(target.status, language)}`,
+      `Thread: ${String(target.threadId || "").slice(0, 8) || "unknown"}`,
+      target.cwd ? `Folder: ${escapeCardText(target.cwd)}` : "",
+    ].filter(Boolean).join("\n");
+  }
+  return [
     `状态: ${formatWindowStatus(target.status, language)}`,
     `线程: ${String(target.threadId || "").slice(0, 8) || "unknown"}`,
     target.cwd ? `目录: ${escapeCardText(target.cwd)}` : "",

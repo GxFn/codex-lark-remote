@@ -256,6 +256,7 @@ test("takeover cards use Chinese labels", () => {
     buildTakeoverSelectedCard(target),
     buildTakeoverConfirmCard(target),
   ]);
+  const confirmCard = buildTakeoverConfirmCard(target);
   const projectList = formatTakeoverProjectList([{
     index: 1,
     name: "demo",
@@ -275,6 +276,9 @@ test("takeover cards use Chinese labels", () => {
   assert.match(rendered, /接管/);
   assert.match(rendered, /确认接管/);
   assert.match(rendered, /取消/);
+  assert.equal(confirmCard.header.title.content, "当前会话");
+  assert.match(confirmCard.elements[0].content, /^\*\*确认接管\*\*/);
+  assert.doesNotMatch(confirmCard.elements[0].content, /^\*\*当前会话\*\*/);
   assert.doesNotMatch(rendered, /查看|列表|View|Observe|Takeover|List|Confirm takeover|Cancel/);
 });
 
