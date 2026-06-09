@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { LarkNotifier, splitForLarkText } from "../src/notifier.mjs";
+import { LarkNotifier, splitForLarkText, stripInternalCodexMetadata } from "../src/notifier.mjs";
 
 test("LarkNotifier.checkAuth reports missing credentials without throwing", async () => {
   const notifier = new LarkNotifier({ appId: "", appSecret: "" });
@@ -197,6 +197,52 @@ test("LarkNotifier.reply splits long text replies without truncating content", a
   assert.equal(result.messageId, "om_reply_1");
 });
 
+test("LarkNotifier.reply strips internal Codex memory citations before sending", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const sentTexts = [];
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes("/auth/v3/tenant_access_token/internal")) {
+      return Response.json({ code: 0, tenant_access_token: "token", expire: 3600 });
+    }
+    const body = JSON.parse(init.body);
+    sentTexts.push(JSON.parse(body.content).text);
+    return Response.json({ code: 0, data: { message_id: "om_reply" } });
+  };
+
+  const text = [
+    "已完成。",
+    "",
+    "<oai-mem-citation>",
+    "<citation_entries>",
+    "MEMORY.md:143-190|note=[internal]",
+    "</citation_entries>",
+    "<rollout_ids>",
+    "019ea241-0602-7f20-959b-3f2888998db0",
+    "</rollout_ids>",
+    "</oai-mem-citation>",
+  ].join("\n");
+  const notifier = new LarkNotifier({ appId: "cli_test", appSecret: "secret" });
+  const result = await notifier.reply("om_test", text);
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(sentTexts, ["已完成。"]);
+});
+
 test("splitForLarkText prefers newline boundaries", () => {
   assert.deepEqual(splitForLarkText("a\nb\nc", 4), ["a\nb\n", "c"]);
+});
+
+test("stripInternalCodexMetadata removes complete and partial memory citation blocks", () => {
+  assert.equal(
+    stripInternalCodexMetadata("A\n<oai-mem-citation>\nsecret\n</oai-mem-citation>\nB"),
+    "A\nB",
+  );
+  assert.equal(
+    stripInternalCodexMetadata("A\n<oai-mem-citation>\nsecret"),
+    "A",
+  );
 });

@@ -151,6 +151,7 @@ test("buildHandoffPrompt wraps target dispatch for the control window", () => {
   assert.match(prompt, /Lark Remote Control Window skill/);
   assert.match(prompt, /JavaScript has not sent this message to the target thread/);
   assert.match(prompt, /higher-priority dispatch\/interrupt request/);
+  assert.match(prompt, /\[Lark Remote dispatch\]/);
   assert.match(prompt, /remoteCommandId: rcmd_dispatch/);
   assert.match(prompt, /target-thread-1/);
   assert.match(prompt, /修复 lark 远程派发/);

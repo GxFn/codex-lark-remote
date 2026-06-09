@@ -383,6 +383,7 @@ function buildThreadDispatchPrompt(command) {
     "- Lark Remote is acting as the takeover side. If the target thread is busy, treat this as a higher-priority dispatch/interrupt request and perform normal delivery instead of failing because of busy status.",
     "- If the host thread tool is unavailable, the target thread cannot be addressed, or readback cannot be verified, fail closed and tell the Feishu/Lark user what is blocked.",
     "- Do not claim delivery merely because this dispatch request reached the control window.",
+    "- When you deliver this Feishu/Lark-origin request to the target thread, put `[Lark Remote dispatch]` on the first line of the target prompt so target observation does not echo that prompt back to Feishu/Lark. Do not use that marker for Mac-local or automation prompts.",
     "- Keep the visible target prompt compact if you send one.",
     "- Keep the final reply concise and suitable for Feishu/Lark.",
     "",

@@ -148,6 +148,7 @@ export class CodexSessionObserver {
       sessionPath: state.threadPath,
       onEvent: async (_event, summary) => this.#notifyTemporary(summary),
       includeUserPrompts: true,
+      userPromptText: (_event, prompt) => takeoverVisibleUserPrompt(prompt),
       eventOptions: { language: state.language || this.config.intent?.language || "zh" },
     });
     await this.temporaryWatcher.start();
@@ -199,11 +200,21 @@ export class CodexSessionObserver {
   async #notifyTemporary(summary) {
     if (!summary || !this.temporaryState?.active) return;
     const takeover = await readTakeover({ dataDir: this.config.dataDir });
-    if (takeover?.state !== "pending" || takeover.target?.threadId !== this.temporaryState.threadId) return;
+    if (!["pending", "active"].includes(takeover?.state || "") || takeover.target?.threadId !== this.temporaryState.threadId) return;
     try {
       await this.notifier.reply(this.temporaryState.messageId, summary);
     } catch (error) {
       this.logger.warn?.(`Codex Lark Remote temporary observer notify failed: ${error.message}`);
     }
   }
+}
+
+function takeoverVisibleUserPrompt(prompt) {
+  const text = String(prompt || "").trim();
+  if (!text) return "";
+  if (/^\[Lark Remote dispatch\]/i.test(text)) return "";
+  if (/\[Codex Lark Remote (?:handoff|thread dispatch)\]/i.test(text)) return "";
+  if (/<codex_lark_remote_note>/i.test(text)) return "";
+  if (/Feishu\/Lark user message to dispatch:/i.test(text)) return "";
+  return text;
 }

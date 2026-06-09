@@ -1409,12 +1409,12 @@ async function executeTakeoverForBridge(ctx, input = {}) {
     controllerName: controller?.name || "",
   });
   if (!executed.pending) {
-    await stopPendingTakeoverObservation(ctx, executed.state);
     ctx.keepAwake?.start();
+    await startTakeoverTargetObservation(ctx, executed, { mode: "takeover_active_observe" });
     executed.recap = await readTakeoverActivationRecap(ctx, executed);
     await discardPendingTakeoverInputs(ctx, executed);
   } else {
-    await startPendingTakeoverObservation(ctx, executed);
+    await startTakeoverTargetObservation(ctx, executed, { mode: "takeover_pending_observe" });
   }
   return executed;
 }
@@ -1439,8 +1439,8 @@ async function processPendingTakeover(ctx) {
       return;
     }
     if (!result?.activated || result.pending) return;
-    await stopPendingTakeoverObservation(ctx, result.state);
     ctx.keepAwake?.start();
+    await startTakeoverTargetObservation(ctx, result, { mode: "takeover_active_observe" });
     const recap = await readTakeoverActivationRecap(ctx, result);
     await discardPendingTakeoverInputs(ctx, result);
     const messageId = result.state?.lark?.messageId || result.state?.pendingInputs?.at?.(-1)?.messageId || "";
@@ -1456,13 +1456,13 @@ async function processPendingTakeover(ctx) {
   }
 }
 
-async function startPendingTakeoverObservation(ctx, result) {
+async function startTakeoverTargetObservation(ctx, result, options = {}) {
   const state = result?.state || {};
   const target = result?.target || state.target || {};
-  if (!ctx.observer?.startTemporary || state.state !== "pending" || !target.threadPath) return;
+  if (!ctx.observer?.startTemporary || !["pending", "active"].includes(state.state || "") || !target.threadPath) return;
   await ctx.observer.startTemporary({
     active: true,
-    mode: "takeover_pending_observe",
+    mode: options.mode || (state.state === "active" ? "takeover_active_observe" : "takeover_pending_observe"),
     threadId: target.threadId || "",
     threadPath: target.threadPath || "",
     cwd: target.cwd || "",
@@ -1470,8 +1470,8 @@ async function startPendingTakeoverObservation(ctx, result) {
     messageId: state.lark?.messageId || "",
     chatIdHash: state.lark?.chatIdHash || "",
     userIdHash: state.lark?.userIdHash || "",
-    activatedAt: state.pendingAt || nowIso(),
-    activatedBy: "takeover-pending",
+    activatedAt: state.activatedAt || state.pendingAt || nowIso(),
+    activatedBy: state.state === "active" ? "takeover-active" : "takeover-pending",
   });
 }
 

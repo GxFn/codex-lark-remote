@@ -200,13 +200,13 @@ async function larkDeliveryResult(response, { messageIds = [], totalParts = 1 } 
 }
 
 export function truncateForLark(text, max = 3000) {
-  const value = String(text || "");
+  const value = stripInternalCodexMetadata(text);
   if (value.length <= max) return value;
   return `${value.slice(0, max)}\n\n... truncated`;
 }
 
 export function splitForLarkText(text, max = 2800) {
-  const value = String(text || "");
+  const value = stripInternalCodexMetadata(text);
   if (!value) return [""];
   if (value.length <= max) return [value];
 
@@ -233,6 +233,16 @@ export function splitForLarkText(text, max = 2800) {
   }
   pushCurrent();
   return chunks.length ? chunks : [""];
+}
+
+export function stripInternalCodexMetadata(text) {
+  const value = String(text || "");
+  if (!/<oai-mem-citation\b/i.test(value)) return value;
+  return value
+    .replace(/\n*<oai-mem-citation\b[^>]*>[\s\S]*?<\/oai-mem-citation>\n*/gi, "\n")
+    .replace(/\n*<oai-mem-citation\b[^>]*>[\s\S]*$/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 async function readJsonSafe(response) {

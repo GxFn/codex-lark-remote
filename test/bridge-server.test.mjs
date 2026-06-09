@@ -806,7 +806,10 @@ test("processLarkEvent executes takeover from a card action", async () => {
   }
 
   assert.equal(keepAwakeStarted, 1);
-  assert.equal(temporaryObservations.length, 0);
+  assert.equal(temporaryObservations.length, 1);
+  assert.equal(temporaryObservations[0].mode, "takeover_active_observe");
+  assert.equal(temporaryObservations[0].threadId, "019e0000-0000-7000-8000-000000000012");
+  assert.equal(temporaryObservations[0].messageId, "om_card");
   assert.match(replies[0].text, /线程派发已启用/);
   assert.match(replies[0].text, /上个任务同步/);
   assert.match(replies[0].text, /上轮已经完成插件状态卡片优化/);
@@ -1121,7 +1124,10 @@ test("processLarkEvent dispatches normal messages even when the selected target 
   assert.equal(takeover.state, "active");
   assert.equal(takeover.mode, "dispatch");
   assert.equal(takeover.target.status, "running");
-  assert.equal(temporaryObservations.length, 0);
+  assert.equal(temporaryObservations.length, 1);
+  assert.equal(temporaryObservations[0].mode, "takeover_active_observe");
+  assert.equal(temporaryObservations[0].threadId, "019e0000-0000-7000-8000-000000000030");
+  assert.equal(temporaryObservations[0].messageId, "om_card");
   assert.deepEqual(takeover.pendingInputs, []);
   assert.equal(enqueued.length, 1);
   assert.equal(enqueued[0].mode, "thread_handoff");
@@ -1194,7 +1200,7 @@ test("processLarkEvent cancels the active dispatch target without exiting the co
   assert.equal(await readTakeover({ dataDir }), null);
   assert.equal((await readHandoff({ dataDir })).threadId, "019e0000-0000-7000-8000-000000000041");
   assert.equal(enqueued.length, 0);
-  assert.equal(temporaryStops.length, 2);
+  assert.equal(temporaryStops.length, 1);
   assert.match(replies.at(-1).text, /Current takeover ended|已退出当前接管/);
   assert.match(replies.at(-1).text, /Lark stays connected|飞书连接仍然保持/);
 });

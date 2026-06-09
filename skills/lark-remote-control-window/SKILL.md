@@ -60,7 +60,10 @@ trying to fully classify it in JavaScript.
   `remoteCommandId`.
 - For ordinary coding/work requests while a target is active, use host thread
   tools to deliver to the selected target thread. Keep the delivered prompt
-  compact and include enough Feishu/Lark context.
+  compact and include enough Feishu/Lark context. Put `[Lark Remote dispatch]`
+  on the first line of Feishu/Lark-origin target prompts so target observation
+  does not echo that prompt back to Feishu/Lark; do not use that marker for
+  Mac-local or automation prompts.
 - For direct questions about Lark Remote state, prefer `codex_lark_context` or
   `codex_lark_status` and answer concisely.
 
