@@ -8,6 +8,7 @@ import { configFilePath, stateFilePath } from "../src/config.mjs";
 import { activateHandoff, readHandoff } from "../src/handoff.mjs";
 import { readIntentSession } from "../src/intent-state.mjs";
 import { readObservation } from "../src/observer.mjs";
+import { RemoteCommandQueue } from "../src/queue.mjs";
 import { prepareTakeoverScope, readTakeover } from "../src/takeover.mjs";
 
 test("startBridge refuses to run before Feishu app credentials are configured", async () => {
@@ -1226,6 +1227,69 @@ test("processLarkEvent keeps dispatch target after takeover list refreshes", asy
   assert.equal(enqueued[0].handoffDispatch, true);
   assert.equal(enqueued[0].dispatchTarget.threadId, targetThreadId);
   assert.match(enqueued[0].prompt, /继续检查并修复链路问题/);
+});
+
+test("processLarkEvent persists takeover dispatch target into the real queue", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-real-queue-dispatch-"));
+  const codexHome = await fs.mkdtemp(path.join(os.tmpdir(), "codex-home-real-queue-dispatch-"));
+  const sessions = path.join(codexHome, "sessions", "2026", "05", "13");
+  const targetThreadId = "019e0000-0000-7000-8000-000000000035";
+  const controlThreadId = "019e0000-0000-7000-8000-000000000036";
+  await fs.mkdir(sessions, { recursive: true });
+  await writeSession({
+    file: path.join(sessions, `rollout-2026-05-13T10-01-00-${targetThreadId}.jsonl`),
+    id: targetThreadId,
+    cwd: "/workspace",
+    name: "Real queue target",
+    events: [{ type: "turn.completed", payload: {} }],
+    mtime: new Date("2026-05-13T10:01:00Z"),
+  });
+  await activateHandoff({
+    dataDir,
+    threadId: controlThreadId,
+    cwd: "/workspace",
+    activatedBy: "test",
+  });
+  await prepareTakeoverScope({ dataDir, codexHome, cwd: "/workspace" });
+  const originalCodexHome = process.env.CODEX_HOME;
+  process.env.CODEX_HOME = codexHome;
+  const queue = new RemoteCommandQueue({ dataDir });
+  const replies = [];
+  const ctx = {
+    config: {
+      dataDir,
+      lark: { allowedUsers: ["ou_allowed"] },
+      takeover: { idleDebounceMs: 1 },
+    },
+    queue,
+    notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+    observer: { startTemporary: async () => {} },
+    runner: { processAll: () => {} },
+  };
+
+  try {
+    await processLarkEvent(ctx, cardActionEvent({
+      action: "takeover_execute",
+      threadId: targetThreadId,
+      userId: "ou_allowed",
+      messageId: "om_takeover",
+    }));
+    await processLarkEvent(ctx, textEvent({
+      text: "继续检查并修复链路问题",
+      userId: "ou_allowed",
+      messageId: "om_followup",
+    }));
+  } finally {
+    if (originalCodexHome === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = originalCodexHome;
+  }
+
+  const claimed = await queue.claimNext();
+  assert.equal(claimed.mode, "thread_handoff");
+  assert.equal(claimed.handoffDispatch, true);
+  assert.equal(claimed.takeoverState, "active");
+  assert.equal(claimed.dispatchTarget.threadId, targetThreadId);
+  assert.equal(claimed.dispatchTarget.name, "Real queue target");
 });
 
 test("processLarkEvent cancels the active dispatch target without exiting the control window", async () => {
