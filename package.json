@@ -1,6 +1,6 @@
 {
   "name": "codex-lark-remote",
-  "version": "0.2.16",
+  "version": "0.2.17",
   "private": true,
   "description": "Control Codex sessions from Feishu/Lark chat.",
   "type": "module",

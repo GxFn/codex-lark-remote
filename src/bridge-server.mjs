@@ -5,7 +5,7 @@ import { DEFAULT_BRIDGE_HOST, configFilePath, ensureDir, loadConfig, nowIso, rea
 import { runApprovedAction } from "./actions.mjs";
 import { decryptLarkPayload, verifyLarkSignature } from "./crypto.mjs";
 import { updateRuntimeConfig } from "./config-writer.mjs";
-import { activateHandoff, clearHandoff, markHandoffRemoteNoteSent, readHandoff } from "./handoff.mjs";
+import { activateHandoff, clearHandoff, readHandoff } from "./handoff.mjs";
 import { routeChatTextAction } from "./intent-router.mjs";
 import {
   detectIntentLanguage,
@@ -1221,10 +1221,6 @@ async function enqueueTask(ctx, input) {
 async function enqueueHandoffTask(ctx, input) {
   const guidance = Boolean(input.runningCommand);
   const text = guidance ? buildHandoffGuidancePrompt(input.text, input.runningCommand) : input.text;
-  const includeRemoteNote = await markHandoffRemoteNoteSent({
-    dataDir: ctx.config.dataDir,
-    threadId: input.handoff.threadId,
-  });
   const dispatchTarget = normalizeDispatchTarget(input.dispatchTarget);
   return ctx.queue.enqueue({
     source: "lark",
@@ -1232,7 +1228,6 @@ async function enqueueHandoffTask(ctx, input) {
     presentation: "chat",
     notifyQueued: guidance || ctx.config.handoff?.notifyQueued === true,
     notifyStarted: ctx.config.handoff?.notifyStarted !== false,
-    includeRemoteNote,
     handoffGuidance: guidance,
     handoffDispatch: Boolean(dispatchTarget),
     dispatchTarget,

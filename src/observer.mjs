@@ -236,7 +236,6 @@ function takeoverVisibleUserPrompt(prompt) {
   if (!text) return "";
   if (/^\[Lark Remote dispatch\]/i.test(text)) return "";
   if (/\[Codex Lark Remote (?:handoff|thread dispatch)\]/i.test(text)) return "";
-  if (/<codex_lark_remote_note>/i.test(text)) return "";
   if (/Feishu\/Lark user message to dispatch:/i.test(text)) return "";
   return text;
 }

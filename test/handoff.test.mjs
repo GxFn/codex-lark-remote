@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { activateHandoff, clearHandoff, findCodexThreadById, listCodexThreads, markHandoffRemoteNoteSent, readHandoff, resolveCodexThread } from "../src/handoff.mjs";
+import { activateHandoff, clearHandoff, findCodexThreadById, listCodexThreads, readHandoff, resolveCodexThread } from "../src/handoff.mjs";
 
 test("activateHandoff stores an explicit thread id", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-handoff-"));
@@ -21,26 +21,6 @@ test("activateHandoff stores an explicit thread id", async () => {
   const cleared = await clearHandoff({ dataDir });
   assert.equal(cleared.active, false);
   assert.equal(await readHandoff({ dataDir }), null);
-});
-
-test("markHandoffRemoteNoteSent only marks once per handoff activation", async () => {
-  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-handoff-note-"));
-  await activateHandoff({
-    dataDir,
-    threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
-    cwd: "/workspace",
-    activatedBy: "test",
-  });
-
-  assert.equal(await markHandoffRemoteNoteSent({
-    dataDir,
-    threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
-  }), true);
-  assert.match((await readHandoff({ dataDir })).remoteNoteSentAt, /^\d{4}-\d{2}-\d{2}T/);
-  assert.equal(await markHandoffRemoteNoteSent({
-    dataDir,
-    threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
-  }), false);
 });
 
 test("activateHandoff refuses to guess a thread when strict binding is required", async () => {
@@ -163,7 +143,7 @@ test("listCodexThreads infers title from the first user message", async () => {
     file: path.join(sessions, "rollout-2026-05-11T10-00-00-019e0000-0000-7000-8000-000000000006.jsonl"),
     id: "019e0000-0000-7000-8000-000000000006",
     cwd: "/workspace/project",
-    userMessage: "分析说明 BiliDili 项目架构\n<codex_lark_remote_note>ignore</codex_lark_remote_note>",
+    userMessage: "分析说明 BiliDili 项目架构",
     mtime: new Date("2026-05-11T10:00:00Z"),
   });
 

@@ -95,7 +95,6 @@ test("buildHandoffPrompt wraps Feishu input as a control-window message by defau
     userName: "ou_user",
     userIdHash: "u_hash",
     prompt: "fix README",
-    includeRemoteNote: true,
   });
 
   assert.match(prompt, /\[Codex Lark Remote control message\]/);
@@ -111,17 +110,15 @@ test("buildHandoffPrompt wraps Feishu input as a control-window message by defau
   assert.doesNotMatch(prompt, /<target_prompt>/);
 });
 
-test("buildHandoffPrompt keeps using the control envelope after the first handoff turn", () => {
+test("buildHandoffPrompt keeps using the control envelope for subsequent turns", () => {
   const prompt = buildHandoffPrompt({
     userName: "ou_user",
     userIdHash: "u_hash",
     prompt: "fix README",
-    includeRemoteNote: false,
   });
 
   assert.match(prompt, /\[Codex Lark Remote control message\]/);
   assert.match(prompt, /<feishu_lark_message>\nfix README\n<\/feishu_lark_message>/);
-  assert.doesNotMatch(prompt, /codex_lark_remote_note/);
 });
 
 test("buildHandoffPrompt can still annotate Feishu input when configured", () => {

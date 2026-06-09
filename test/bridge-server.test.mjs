@@ -166,7 +166,6 @@ test("processLarkEvent routes normal messages to current-thread handoff when act
   assert.equal(enqueued[0].projectRoot, "/workspace");
   assert.equal(enqueued[0].prompt, "[demo] update README from Feishu");
   assert.equal(enqueued[0].notifyStarted, true);
-  assert.equal(enqueued[0].includeRemoteNote, true);
   assert.equal(enqueued[0].codexSessionId, "019e0ffb-52e9-7ee3-bb87-42019b58eaa2");
   assert.deepEqual(replies, []);
 });
@@ -328,8 +327,8 @@ test("processLarkEvent binds console card language from English input", async ()
   assert.equal((await readIntentSession({ dataDir, event: { chatId: "oc_chat" }, config: ctx.config })).language, "en");
 });
 
-test("processLarkEvent only includes the remote note on the first handoff message", async () => {
-  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-note-once-"));
+test("processLarkEvent routes repeated handoff messages without legacy note state", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-handoff-repeat-"));
   await activateHandoff({
     dataDir,
     threadId: "019e0ffb-52e9-7ee3-bb87-42019b58eaa2",
@@ -358,8 +357,6 @@ test("processLarkEvent only includes the remote note on the first handoff messag
   await processLarkEvent(ctx, textEvent({ text: "继续分析", userId: "ou_allowed", messageId: "om_2" }));
 
   assert.equal(enqueued.length, 2);
-  assert.equal(enqueued[0].includeRemoteNote, true);
-  assert.equal(enqueued[1].includeRemoteNote, false);
 });
 
 test("processLarkEvent turns mid-run handoff messages into queued guidance", async () => {

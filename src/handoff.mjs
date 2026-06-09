@@ -22,7 +22,6 @@ export async function activateHandoff(options = {}) {
     activatedAt: nowIso(),
     activatedBy: options.activatedBy || "codex",
     source: thread.source || "",
-    remoteNoteSentAt: "",
   };
   await fs.writeFile(handoffFilePath(dataDir), `${JSON.stringify(state, null, 2)}\n`);
   return state;
@@ -47,20 +46,6 @@ export async function clearHandoff(options = {}) {
     `${JSON.stringify({ active: false, deactivatedAt: nowIso(), previousThreadId: previous?.threadId || "" }, null, 2)}\n`,
   );
   return { active: false, previous };
-}
-
-export async function markHandoffRemoteNoteSent(options = {}) {
-  const dataDir = resolveDataDir(options.dataDir);
-  const filePath = handoffFilePath(dataDir);
-  const state = await readHandoff({ dataDir });
-  if (!state) return false;
-  if (options.threadId && state.threadId !== options.threadId) return false;
-  if (state.remoteNoteSentAt) return false;
-
-  state.remoteNoteSentAt = nowIso();
-  await ensureDir(dataDir);
-  await fs.writeFile(filePath, `${JSON.stringify(state, null, 2)}\n`);
-  return true;
 }
 
 export async function resolveCodexThread(options = {}) {
@@ -342,7 +327,6 @@ function extractContentText(content) {
 function cleanTitle(value) {
   const text = String(value || "")
     .replace(/<environment_context>[\s\S]*?<\/environment_context>/g, "")
-    .replace(/<codex_lark_remote_note>[\s\S]*?<\/codex_lark_remote_note>/g, "")
     .replace(/\[@([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/\s+/g, " ")
     .trim();

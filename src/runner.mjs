@@ -767,7 +767,6 @@ function isSubmittedHandoffPrompt(text, { command = {}, submittedPrompt = "" } =
     (submitted && normalized === submitted)
     || (raw && normalized === raw)
     || /\[Codex Lark Remote (?:handoff|thread dispatch)\]/i.test(text)
-    || /<codex_lark_remote_note>/i.test(text)
     || /Feishu\/Lark user message to dispatch:/i.test(text)
   );
 }
