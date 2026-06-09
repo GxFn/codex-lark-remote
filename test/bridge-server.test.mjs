@@ -232,6 +232,58 @@ test("remote command router returns exact next actions", async () => {
   });
 });
 
+test("remote command router exposes management commands as local bridge actions", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-route-controls-"));
+  await activateHandoff({
+    dataDir,
+    threadId: "control-thread",
+    cwd: dataDir,
+    capabilities: {},
+  });
+  const queue = new RemoteCommandQueue({ dataDir });
+  const ctx = {
+    config: { dataDir },
+    queue,
+    notifier: { reply: async () => {} },
+  };
+
+  async function routeText(text) {
+    const command = await queue.enqueue({
+      source: "lark",
+      mode: "thread_handoff",
+      controlWindowCommand: true,
+      prompt: text,
+      normalizedTask: text,
+      messageId: `om_${Math.random().toString(16).slice(2)}`,
+      chatIdHash: "chat_hash",
+      codexSessionId: "control-thread",
+    });
+    return routeRemoteCommand(ctx, command.id);
+  }
+
+  const setup = await routeText("验证配置");
+  assert.equal(setup.data.action, "control");
+  assert.equal(setup.data.nextTool, "lark_verify_setup");
+
+  const commandsOff = await routeText("别刷命令了");
+  assert.equal(commandsOff.data.action, "control");
+  assert.equal(commandsOff.data.nextTool, "lark_set_command_visibility");
+  assert.deepEqual(commandsOff.data.toolInput, { enabled: false });
+
+  const exitTakeover = await routeText("退出接管");
+  assert.equal(exitTakeover.data.action, "control");
+  assert.equal(exitTakeover.data.nextTool, "lark_exit_takeover");
+
+  const stop = await routeText("确认关闭飞书连接");
+  assert.equal(stop.data.action, "control");
+  assert.equal(stop.data.nextTool, "lark_stop");
+
+  const cancel = await routeText("取消任务 rcmd_mozpql6u_e6ca8b55");
+  assert.equal(cancel.data.action, "control");
+  assert.equal(cancel.data.nextTool, "lark_cancel_remote_command");
+  assert.deepEqual(cancel.data.toolInput, { id: "rcmd_mozpql6u_e6ca8b55" });
+});
+
 test("dispatchRemoteCommand queues target delivery and records original command", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-dispatch-execute-"));
   await activateHandoff({

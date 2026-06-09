@@ -212,11 +212,10 @@ async function route(ctx) {
   }
 
   if (req.method === "POST" && ["/bridge/stop", "/bridge/lark/stop"].includes(url.pathname)) {
-    sendJson(res, 200, { success: true, message: "Stopping bridge" });
-    ctx.larkWs?.stop();
-    ctx.observer?.stop();
-    ctx.keepAwake?.stop();
-    setTimeout(() => ctx.server.close(() => process.exit(0)), 50).unref();
+    const { body } = await readJson(req);
+    const stopped = await stopBridgeForLocalRequest(ctx, body);
+    sendJson(res, 200, stopped);
+    stopBridgeSoon(ctx);
     return;
   }
 
@@ -237,6 +236,21 @@ async function route(ctx) {
   if (req.method === "GET" && url.pathname === "/bridge/tasks") {
     const limit = Number(url.searchParams.get("limit") || 20);
     return sendJson(res, 200, { success: true, data: await ctx.queue.list({ limit }) });
+  }
+
+  if (req.method === "GET" && url.pathname === "/bridge/setup/verify") {
+    const report = await buildSetupVerificationFromBridge(ctx);
+    return sendJson(res, 200, {
+      success: true,
+      data: report,
+      text: formatSetupVerification(report, { language: "zh" }),
+    });
+  }
+
+  if (req.method === "POST" && url.pathname === "/bridge/commands/visibility") {
+    const { body } = await readJson(req);
+    const updated = await setCommandVisibilityForBridge(ctx, body);
+    return sendJson(res, 200, updated);
   }
 
   if (req.method === "GET" && url.pathname === "/bridge/handoff") {
@@ -471,6 +485,18 @@ async function route(ctx) {
     });
   }
 
+  if (req.method === "POST" && url.pathname === "/bridge/takeover/exit") {
+    const { body } = await readJson(req);
+    const exited = await exitTakeoverForBridge(ctx, body);
+    return sendJson(res, 200, exited);
+  }
+
+  if (req.method === "POST" && url.pathname === "/bridge/takeover/cancel") {
+    const { body } = await readJson(req);
+    const cancelled = await cancelTakeoverForBridge(ctx, body);
+    return sendJson(res, 200, cancelled);
+  }
+
   if (req.method === "DELETE" && url.pathname === "/bridge/takeover") {
     const data = await clearTakeover({ dataDir: ctx.config.dataDir });
     await stopPendingTakeoverObservation(ctx, data?.previous);
@@ -488,20 +514,26 @@ async function route(ctx) {
   const taskMatch = url.pathname.match(/^\/bridge\/tasks\/([^/]+)(?:\/([^/]+))?$/);
   if (taskMatch) {
     const [, id, action] = taskMatch;
-    if (req.method === "GET" && !action) return sendJson(res, 200, { success: true, data: await ctx.queue.get(id) });
+    if (req.method === "GET" && !action) {
+      const task = await ctx.queue.get(id);
+      return sendJson(res, 200, { success: true, data: task, text: formatTask(task) });
+    }
     if (req.method === "POST" && action === "cancel") {
-      return sendJson(res, 200, { success: true, data: await ctx.queue.cancel(id) });
+      const task = await ctx.queue.cancel(id);
+      return sendJson(res, 200, { success: true, data: task, text: formatTask(task) });
     }
     if (req.method === "POST" && action === "approve") {
       const { body } = await readJson(req);
+      const task = await runApprovedAction({
+        queue: ctx.queue,
+        config: ctx.config,
+        commandId: id,
+        action: body.action || "review",
+      });
       return sendJson(res, 200, {
         success: true,
-        data: await runApprovedAction({
-          queue: ctx.queue,
-          config: ctx.config,
-          commandId: id,
-          action: body.action || "review",
-        }),
+        data: task,
+        text: formatTask(task),
       });
     }
   }
@@ -838,26 +870,90 @@ async function handleCommandVisibility(ctx, event, action) {
   if (typeof action.enabled !== "boolean") {
     return ctx.notifier.reply(event.messageId, formatCommandVisibility(ctx.config));
   }
-  await updateRuntimeConfig({
-    dataDir: ctx.config.dataDir,
-    configPath: ctx.config.configPath,
-    handoff: { showCommands: action.enabled },
-  });
-  ctx.config.handoff = { ...(ctx.config.handoff || {}), showCommands: action.enabled };
-  return ctx.notifier.reply(event.messageId, formatCommandVisibility(ctx.config));
+  const updated = await setCommandVisibilityForBridge(ctx, action);
+  return ctx.notifier.reply(event.messageId, updated.text);
 }
 
 async function handleBridgeStopExecute(ctx, event) {
   const language = await languageForEvent(ctx, event);
-  await clearHandoff({ dataDir: ctx.config.dataDir });
-  await clearTakeover({ dataDir: ctx.config.dataDir });
-  await clearObservation({ dataDir: ctx.config.dataDir });
+  await clearBridgeRuntimeState(ctx);
   await setIntentSessionModeForEvent(ctx, event, "console", "bridge_stopping");
-  ctx.observer?.stop();
-  ctx.keepAwake?.stop();
   const result = await ctx.notifier.reply(event.messageId, formatBridgeStopping({ language }));
   stopBridgeSoon(ctx);
   return result;
+}
+
+async function setCommandVisibilityForBridge(ctx, action = {}) {
+  if (typeof action.enabled === "boolean") {
+    await updateRuntimeConfig({
+      dataDir: ctx.config.dataDir,
+      configPath: ctx.config.configPath,
+      handoff: { showCommands: action.enabled },
+    });
+    ctx.config.handoff = { ...(ctx.config.handoff || {}), showCommands: action.enabled };
+  }
+  return { success: true, data: { handoff: ctx.config.handoff || {} }, text: formatCommandVisibility(ctx.config) };
+}
+
+async function stopBridgeForLocalRequest(ctx, input = {}) {
+  const command = await readCommandForBridgeInput(ctx, input);
+  const event = eventFromRemoteCommand(command);
+  const language = await languageForBridgeInput(ctx, input, command);
+  await clearBridgeRuntimeState(ctx);
+  if (event.chatIdHash) await setIntentSessionModeForEvent(ctx, event, "console", "bridge_stopping");
+  return { success: true, data: { stopped: true }, text: formatBridgeStopping({ language }) };
+}
+
+async function clearBridgeRuntimeState(ctx) {
+  await clearHandoff({ dataDir: ctx.config.dataDir });
+  const cleared = await clearTakeover({ dataDir: ctx.config.dataDir });
+  await stopPendingTakeoverObservation(ctx, cleared?.previous);
+  await clearObservation({ dataDir: ctx.config.dataDir });
+  ctx.observer?.stop();
+  ctx.keepAwake?.stop();
+  return cleared;
+}
+
+async function exitTakeoverForBridge(ctx, input = {}) {
+  const command = await readCommandForBridgeInput(ctx, input);
+  const event = eventFromRemoteCommand(command);
+  const language = await languageForBridgeInput(ctx, input, command);
+  const cleared = await clearTakeover({ dataDir: ctx.config.dataDir });
+  await stopPendingTakeoverObservation(ctx, cleared?.previous);
+  if (event.chatIdHash) await setIntentSessionModeForEvent(ctx, event, "console", "handoff_disabled");
+  ctx.keepAwake?.stop();
+  return {
+    success: true,
+    data: { takeover: cleared?.previous || null },
+    text: formatHandoffDisabled({ language }),
+  };
+}
+
+async function cancelTakeoverForBridge(ctx, input = {}) {
+  const handoff = await readHandoff({ dataDir: ctx.config.dataDir });
+  const takeover = await readTakeover({ dataDir: ctx.config.dataDir });
+  if (takeover?.state === "active") return exitTakeoverForBridge(ctx, input);
+
+  const command = await readCommandForBridgeInput(ctx, input);
+  const event = eventFromRemoteCommand(command);
+  const language = await languageForBridgeInput(ctx, input, command);
+  if (!["selecting_project", "selecting", "selected", "pending"].includes(takeover?.state || "")) {
+    return {
+      success: true,
+      data: { takeover: takeover || null, handoff: handoff || null },
+      text: formatTakeoverPreparationNotActive({ handoff }, { language }),
+    };
+  }
+  const cleared = await clearTakeover({ dataDir: ctx.config.dataDir });
+  await stopPendingTakeoverObservation(ctx, cleared?.previous);
+  if (event.chatIdHash) {
+    await setIntentSessionModeForEvent(ctx, event, handoff?.active ? "handoff" : "console", "takeover_cancelled");
+  }
+  return {
+    success: true,
+    data: { takeover: cleared?.previous || takeover, handoff: handoff || null },
+    text: formatTakeoverPreparationCancelled({ takeover: cleared?.previous || takeover, handoff }, { language }),
+  };
 }
 
 function stopBridgeSoon(ctx) {
@@ -1260,6 +1356,36 @@ export async function routeRemoteCommand(ctx, remoteCommandId) {
   const text = String(command.normalizedTask || command.prompt || "").trim();
   const target = normalizeDispatchTarget(command.dispatchTarget)
     || (["active", "pending"].includes(takeover?.state || "") ? normalizeDispatchTarget(takeover.target) : null);
+  const classifiedAction = classifyChatText(text, ctx.config);
+  if (isRoutableControlAction(classifiedAction)) {
+    const routed = routeControlAction(classifiedAction, { command, target });
+    return {
+      success: true,
+      data: {
+        remoteCommandId: command.id,
+        feishuMessage: text,
+        activeTarget: target,
+        controlWindowContract: controlWindowRouteContract(routed),
+        ...routed,
+      },
+      text: routed.summary,
+    };
+  }
+  if (classifiedAction?.kind === "rejected") {
+    const routed = controlReplyRoute(classifiedAction.reason || "这条消息不能作为 Lark Remote 指令处理。", command.id);
+    return {
+      success: true,
+      data: {
+        remoteCommandId: command.id,
+        feishuMessage: text,
+        activeTarget: target,
+        controlWindowContract: controlWindowRouteContract(routed),
+        ...routed,
+      },
+      text: routed.summary,
+    };
+  }
+
   const controlAction = parseControlSemanticAction(text, {
     mode: "console",
     state: { handoff, takeover },
@@ -1543,6 +1669,8 @@ function routeControlAction(action = {}, { command = {} } = {}) {
   const control = (nextTool, toolInput, summary) =>
     controlRoute("control", nextTool, toolInput, summary, remoteCommandId);
   switch (action.kind) {
+    case "setup_verify":
+      return control("lark_verify_setup", {}, "Verify Lark Remote setup, then reply with lark_reply_remote_command.");
     case "status":
     case "handoff_status":
     case "takeover_status":
@@ -1570,12 +1698,32 @@ function routeControlAction(action = {}, { command = {} } = {}) {
     case "observe_disable":
       return control("lark_stop_observation", {}, "Stop observation, then reply with lark_reply_remote_command.");
     case "handoff_disable":
+      return control("lark_exit_takeover", { remoteCommandId }, "End active takeover, then reply with lark_reply_remote_command.");
     case "takeover_disable":
-      return control("lark_clear_active_target", {}, "Clear the active target, then reply with lark_reply_remote_command.");
+      return control("lark_cancel_takeover", { remoteCommandId }, "Cancel takeover selection or waiting takeover, then reply with lark_reply_remote_command.");
     case "bridge_stop_confirm":
       return controlReplyRoute("关闭飞书连接会断开后续回复。请发送“确认关闭飞书连接”继续。", remoteCommandId);
+    case "bridge_stop_cancel":
+      return controlReplyRoute("已取消关闭飞书连接。", remoteCommandId);
+    case "bridge_stop_execute":
+      return control("lark_stop", { remoteCommandId }, "正在关闭飞书连接。");
     case "command_visibility":
-      return controlReplyRoute(action.enabled === false ? "已收到：隐藏命令输出。" : "已收到：显示命令输出。", remoteCommandId);
+      return control(
+        "lark_set_command_visibility",
+        { enabled: action.enabled },
+        "Update command visibility, then reply with lark_reply_remote_command.",
+      );
+    case "task_status":
+    case "task_diff":
+      return control("lark_get_remote_command", { id: action.id || action.remoteCommandId || remoteCommandId }, "Read the remote command, then reply with lark_reply_remote_command.");
+    case "cancel":
+      return control("lark_cancel_remote_command", { id: action.id || action.remoteCommandId || remoteCommandId }, "Cancel the remote command, then reply with lark_reply_remote_command.");
+    case "approve":
+      return control(
+        "lark_approve_remote_command",
+        { id: action.id || action.remoteCommandId || remoteCommandId, action: action.action || "review" },
+        "Approve the remote command action, then reply with lark_reply_remote_command.",
+      );
     default:
       return {
         action: "clarify",
@@ -1594,6 +1742,10 @@ function routeControlAction(action = {}, { command = {} } = {}) {
         summary: "Ask for clarification.",
       };
   }
+}
+
+function isRoutableControlAction(action = {}) {
+  return Boolean(action && !["task", "empty", "rejected"].includes(action.kind));
 }
 
 function controlRoute(action, nextTool, toolInput, summary, remoteCommandId = "") {
@@ -2104,6 +2256,28 @@ async function languageForEvent(ctx, event) {
     config: ctx.config,
     text: event?.text || "",
   });
+}
+
+async function readCommandForBridgeInput(ctx, input = {}) {
+  const remoteCommandId = input.remoteCommandId || input.commandId || input.id || "";
+  if (!remoteCommandId || typeof ctx.queue?.get !== "function") return null;
+  return ctx.queue.get(remoteCommandId).catch(() => null);
+}
+
+function eventFromRemoteCommand(command = {}) {
+  return {
+    messageId: command?.messageId || "",
+    chatIdHash: command?.chatIdHash || "",
+    userIdHash: command?.userIdHash || "",
+    senderName: command?.userName || "",
+    text: command?.normalizedTask || command?.prompt || "",
+  };
+}
+
+async function languageForBridgeInput(ctx, input = {}, command = null) {
+  const explicit = String(input.language || "").trim();
+  if (explicit === "en" || explicit === "zh") return explicit;
+  return languageForEvent(ctx, eventFromRemoteCommand(command || {}));
 }
 
 function buildHandoffGuidancePrompt(text, runningCommand) {

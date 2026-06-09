@@ -465,6 +465,19 @@ function buildControlWindowPrompt(command) {
 async function executeRoutedControlTool(state, routeData = {}, remoteCommandId = "", { fetchBridge = bridgeFetch } = {}) {
   const tool = String(routeData.nextTool || "").trim();
   const input = routeData.toolInput || {};
+  if (tool === "lark_stop") {
+    const text = routeData.summary || "正在关闭飞书连接。";
+    await fetchBridge(state, "/bridge/remote-command/reply", {
+      method: "POST",
+      body: {
+        ...(routeData.completionToolInput || {}),
+        remoteCommandId,
+        text,
+      },
+    });
+    await callBridgeControlTool(state, tool, { ...input, remoteCommandId }, { fetchBridge });
+    return;
+  }
   const result = await callBridgeControlTool(state, tool, input, { fetchBridge });
   const text = result?.text || result?.data?.text || result?.message || JSON.stringify(result?.data || result || {});
   await fetchBridge(state, "/bridge/remote-command/reply", {
@@ -479,6 +492,13 @@ async function executeRoutedControlTool(state, routeData = {}, remoteCommandId =
 
 async function callBridgeControlTool(state, tool, input = {}, { fetchBridge = bridgeFetch } = {}) {
   switch (tool) {
+    case "lark_verify_setup":
+      return fetchBridge(state, "/bridge/setup/verify");
+    case "lark_set_command_visibility":
+      return fetchBridge(state, "/bridge/commands/visibility", {
+        method: "POST",
+        body: input,
+      });
     case "lark_get_bridge_status":
       return fetchBridge(state, "/bridge/status");
     case "lark_list_projects":
@@ -515,11 +535,35 @@ async function callBridgeControlTool(state, tool, input = {}, { fetchBridge = br
       return fetchBridge(state, "/bridge/observation", { method: "DELETE" });
     case "lark_clear_active_target":
       return fetchBridge(state, "/bridge/takeover", { method: "DELETE" });
+    case "lark_exit_takeover":
+      return fetchBridge(state, "/bridge/takeover/exit", {
+        method: "POST",
+        body: input,
+      });
+    case "lark_cancel_takeover":
+      return fetchBridge(state, "/bridge/takeover/cancel", {
+        method: "POST",
+        body: input,
+      });
+    case "lark_list_remote_commands":
+      return fetchBridge(state, "/bridge/tasks");
     case "lark_get_remote_command":
       return fetchBridge(state, `/bridge/tasks/${encodeURIComponent(input.id || input.remoteCommandId || "")}`);
     case "lark_cancel_remote_command":
       return fetchBridge(state, `/bridge/tasks/${encodeURIComponent(input.id || input.remoteCommandId || "")}/cancel`, {
         method: "POST",
+      });
+    case "lark_approve_remote_command":
+      return fetchBridge(state, `/bridge/tasks/${encodeURIComponent(input.id || input.remoteCommandId || "")}/approve`, {
+        method: "POST",
+        body: { action: input.action || "review" },
+      });
+    case "lark_unlock_control_window":
+      return fetchBridge(state, "/bridge/handoff", { method: "DELETE" });
+    case "lark_stop":
+      return fetchBridge(state, "/bridge/stop", {
+        method: "POST",
+        body: input,
       });
     default:
       throw new Error(`Unsupported Lark Remote control tool: ${tool || "unknown"}`);

@@ -78,6 +78,7 @@ export function parseControlSemanticAction(text, options = {}) {
   const normalized = commandText(directed || text);
   if (!normalized) return null;
 
+  if (isBridgeStopExecuteText(normalized)) return { kind: "bridge_stop_execute" };
   if (isBridgeStopText(normalized)) return { kind: "bridge_stop_confirm" };
   if (/^(帮助|使用帮助|怎么用|如何使用|有哪些命令|命令列表|指令列表|可用命令|help|usage|commands|command list)[。.!！]?$/.test(normalized)) return { kind: "help" };
   if (/^(我是谁|我的id|我的 id|查看我的id|查看我的 id|获取我的id|获取我的 id|我的用户id|我的用户 id|查我身份|whoami|who am i)[。.?？!！]?$/.test(normalized)) {
@@ -158,6 +159,11 @@ export function parseControlSemanticAction(text, options = {}) {
   if (/^(停止|暂停|关闭|关掉|退出|结束|断开)吧?[。.!！]?$/.test(normalized)) return { kind: "handoff_disable" };
 
   return null;
+}
+
+function isBridgeStopExecuteText(text) {
+  return /^(?:确认|同意|允许|yes|confirm)\s*(?:关闭|关掉|停止|结束|断开|close|stop|disconnect|disable|shut down|shutdown)\s*(?:飞书连接|lark连接|feishu连接|websocket|bridge|连接|插件|机器人|服务|本地连接|codex lark remote|lark remote|feishu|lark|connection|bot|plugin)?[。.!！]?$/.test(text)
+    || /^(?:yes|confirm)\s*(?:close|stop|disconnect|disable|shut down|shutdown)\s+(?:the\s+)?(?:feishu|lark|feishu\/lark|websocket|bridge|connection|bot|plugin|lark remote|codex lark remote)(?:\s+connection)?[。.!！]?$/i.test(text);
 }
 
 function isProjectListText(text) {

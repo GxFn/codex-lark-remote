@@ -44,6 +44,8 @@ test("control semantics keep handoff exit and bridge stop distinct", () => {
   assert.deepEqual(parseControlSemanticAction("exit handoff", { mode: "console" }), { kind: "handoff_disable" });
   assert.deepEqual(parseControlSemanticAction("断开接管", { mode: "console" }), { kind: "handoff_disable" });
   assert.deepEqual(parseControlSemanticAction("关闭飞书连接", { mode: "console" }), { kind: "bridge_stop_confirm" });
+  assert.deepEqual(parseControlSemanticAction("确认关闭飞书连接", { mode: "console" }), { kind: "bridge_stop_execute" });
+  assert.deepEqual(parseControlSemanticAction("confirm close Lark connection", { mode: "console" }), { kind: "bridge_stop_execute" });
   assert.deepEqual(parseControlSemanticAction("close Lark connection", { mode: "console" }), { kind: "bridge_stop_confirm" });
   assert.deepEqual(parseControlSemanticAction("断开连接", { mode: "console" }), { kind: "bridge_stop_confirm" });
   assert.deepEqual(parseControlSemanticAction("check status", { mode: "console" }), { kind: "status" });
