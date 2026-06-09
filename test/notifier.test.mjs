@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { LarkNotifier, splitForLarkText, stripInternalCodexMetadata } from "../src/notifier.mjs";
+import { LarkNotifier, sanitizeLarkTextContent, splitForLarkText, stripInternalCodexMetadata } from "../src/notifier.mjs";
 
 test("LarkNotifier.checkAuth reports missing credentials without throwing", async () => {
   const notifier = new LarkNotifier({ appId: "", appSecret: "" });
@@ -232,6 +232,86 @@ test("LarkNotifier.reply strips internal Codex memory citations before sending",
   assert.deepEqual(sentTexts, ["已完成。"]);
 });
 
+test("LarkNotifier.reply strips unsupported image content before sending", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const sentTexts = [];
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes("/auth/v3/tenant_access_token/internal")) {
+      return Response.json({ code: 0, tenant_access_token: "token", expire: 3600 });
+    }
+    const body = JSON.parse(init.body);
+    sentTexts.push(JSON.parse(body.content).text);
+    return Response.json({ code: 0, data: { message_id: "om_reply" } });
+  };
+
+  const text = [
+    "处理完成。",
+    "![截图](/tmp/codex-output.png)",
+    '<img src="file:///tmp/codex-output.jpg" alt="screenshot">',
+    "/tmp/only-image.webp",
+    "文字继续。",
+  ].join("\n");
+  const notifier = new LarkNotifier({ appId: "cli_test", appSecret: "secret" });
+  const result = await notifier.reply("om_test", text);
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(sentTexts, ["处理完成。\n文字继续。"]);
+});
+
+test("LarkNotifier.reply skips image-only content without calling Feishu APIs", async (t) => {
+  const originalFetch = globalThis.fetch;
+  let fetchCount = 0;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async () => {
+    fetchCount += 1;
+    return Response.json({ code: 0, tenant_access_token: "token", expire: 3600 });
+  };
+
+  const notifier = new LarkNotifier({ appId: "cli_test", appSecret: "secret" });
+  const result = await notifier.reply("om_test", "![截图](/tmp/codex-output.png)");
+
+  assert.equal(result.ok, true);
+  assert.equal(result.filtered, true);
+  assert.equal(result.deliveredParts, 0);
+  assert.equal(fetchCount, 0);
+});
+
+test("LarkNotifier.sendCard removes unsupported image elements and markdown images", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url).includes("/auth/v3/tenant_access_token/internal")) {
+      return Response.json({ code: 0, tenant_access_token: "token", expire: 3600 });
+    }
+    requests.push(JSON.parse(init.body));
+    return Response.json({ code: 0, data: { message_id: "om_card" } });
+  };
+
+  const notifier = new LarkNotifier({ appId: "cli_test", appSecret: "secret" });
+  const result = await notifier.sendCard("oc_test", {
+    elements: [
+      { tag: "markdown", content: "上文\n![截图](/tmp/codex-output.png)\n下文" },
+      { tag: "img", img_key: "img_v3_123", alt: { tag: "plain_text", content: "screenshot" } },
+      { tag: "markdown", content: "<img src=\"https://example.com/a.png\">" },
+    ],
+  });
+
+  assert.equal(result.ok, true);
+  const content = JSON.parse(requests[0].content);
+  assert.deepEqual(content.elements, [{ tag: "markdown", content: "上文\n下文" }]);
+});
+
 test("splitForLarkText prefers newline boundaries", () => {
   assert.deepEqual(splitForLarkText("a\nb\nc", 4), ["a\nb\n", "c"]);
 });
@@ -244,5 +324,12 @@ test("stripInternalCodexMetadata removes complete and partial memory citation bl
   assert.equal(
     stripInternalCodexMetadata("A\n<oai-mem-citation>\nsecret"),
     "A",
+  );
+});
+
+test("sanitizeLarkTextContent removes common image-only blocks", () => {
+  assert.equal(
+    sanitizeLarkTextContent("A\n<<ImageDisplayed>>\n![cap][ref]\n[ref]: /tmp/a.png\nB"),
+    "A\nB",
   );
 });

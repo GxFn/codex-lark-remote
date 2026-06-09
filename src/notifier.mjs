@@ -27,7 +27,7 @@ export class LarkNotifier {
   async reply(messageId, text) {
     return this.replyMessage(messageId, {
       msgType: "text",
-      chunks: splitForLarkText(text).map((chunk) => ({ text: chunk })),
+      chunks: textChunksForLark(text).map((chunk) => ({ text: chunk })),
     });
   }
 
@@ -35,28 +35,32 @@ export class LarkNotifier {
     return this.sendMessage(receiveId, {
       receiveIdType: options.receiveIdType || "chat_id",
       msgType: "text",
-      chunks: splitForLarkText(text).map((chunk) => ({ text: chunk })),
+      chunks: textChunksForLark(text).map((chunk) => ({ text: chunk })),
     });
   }
 
   async sendCard(receiveId, card, options = {}) {
+    const cleanCard = sanitizeLarkCard(card);
     return this.sendMessage(receiveId, {
       receiveIdType: options.receiveIdType || "chat_id",
       msgType: "interactive",
-      chunks: [card],
+      chunks: cleanCard ? [cleanCard] : [],
     });
   }
 
   async replyCard(messageId, card) {
+    const cleanCard = sanitizeLarkCard(card);
     return this.replyMessage(messageId, {
       msgType: "interactive",
-      content: card,
-      chunks: [card],
+      content: cleanCard,
+      chunks: cleanCard ? [cleanCard] : [],
     });
   }
 
   async patchCard(messageId, card) {
     if (!messageId) return { ok: false, error: "Missing Lark message id" };
+    const cleanCard = sanitizeLarkCard(card);
+    if (!cleanCard) return noContentDelivery();
     if (!this.appId || !this.appSecret) return { ok: false, error: "Missing Lark appId/appSecret" };
     const token = await this.#tenantToken();
     if (!token) return { ok: false, error: "Missing Lark tenant access token" };
@@ -68,7 +72,7 @@ export class LarkNotifier {
       },
       body: JSON.stringify({
         msg_type: "interactive",
-        content: JSON.stringify(card),
+        content: JSON.stringify(cleanCard),
       }),
     });
     return larkDeliveryResult(response, { messageIds: [], totalParts: 1 });
@@ -76,16 +80,19 @@ export class LarkNotifier {
 
   async updateCardByToken(token, card) {
     if (!token) return { ok: false, error: "Missing Lark card update token" };
+    const cleanCard = sanitizeLarkCard(card);
+    if (!cleanCard) return noContentDelivery();
     const response = await fetch(this.#url("/open-apis/interactive/v1/card/update"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, card }),
+      body: JSON.stringify({ token, card: cleanCard }),
     });
     return larkDeliveryResult(response, { messageIds: [], totalParts: 1 });
   }
 
   async replyMessage(messageId, { msgType, chunks }) {
     if (!messageId) return { ok: false, error: "Missing Lark message id" };
+    if (!chunks.length) return noContentDelivery();
     if (!this.appId || !this.appSecret) return { ok: false, error: "Missing Lark appId/appSecret" };
     const token = await this.#tenantToken();
     if (!token) return { ok: false, error: "Missing Lark tenant access token" };
@@ -120,6 +127,7 @@ export class LarkNotifier {
 
   async sendMessage(receiveId, { receiveIdType = "chat_id", msgType, chunks }) {
     if (!receiveId) return { ok: false, error: "Missing Lark receive id" };
+    if (!chunks.length) return noContentDelivery();
     if (!this.appId || !this.appSecret) return { ok: false, error: "Missing Lark appId/appSecret" };
     const token = await this.#tenantToken();
     if (!token) return { ok: false, error: "Missing Lark tenant access token" };
@@ -176,6 +184,19 @@ export class LarkNotifier {
   }
 }
 
+function noContentDelivery() {
+  return {
+    ok: true,
+    status: 204,
+    code: 0,
+    messageId: "",
+    messageIds: [],
+    deliveredParts: 0,
+    totalParts: 0,
+    filtered: true,
+  };
+}
+
 async function larkDeliveryResult(response, { messageIds = [], totalParts = 1 } = {}) {
   const data = await readJsonSafe(response);
   const code = data?.code;
@@ -200,13 +221,13 @@ async function larkDeliveryResult(response, { messageIds = [], totalParts = 1 } 
 }
 
 export function truncateForLark(text, max = 3000) {
-  const value = stripInternalCodexMetadata(text);
+  const value = sanitizeLarkTextContent(text);
   if (value.length <= max) return value;
   return `${value.slice(0, max)}\n\n... truncated`;
 }
 
 export function splitForLarkText(text, max = 2800) {
-  const value = stripInternalCodexMetadata(text);
+  const value = sanitizeLarkTextContent(text);
   if (!value) return [""];
   if (value.length <= max) return [value];
 
@@ -235,6 +256,14 @@ export function splitForLarkText(text, max = 2800) {
   return chunks.length ? chunks : [""];
 }
 
+function textChunksForLark(text) {
+  return splitForLarkText(text).filter((chunk) => chunk.trim());
+}
+
+export function sanitizeLarkTextContent(text) {
+  return stripUnsupportedImageContent(stripInternalCodexMetadata(text));
+}
+
 export function stripInternalCodexMetadata(text) {
   const value = String(text || "");
   if (!/<oai-mem-citation\b/i.test(value)) return value;
@@ -243,6 +272,73 @@ export function stripInternalCodexMetadata(text) {
     .replace(/\n*<oai-mem-citation\b[^>]*>[\s\S]*$/gi, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+export function stripUnsupportedImageContent(text) {
+  const value = String(text || "");
+  if (!looksLikeImageContent(value)) return value;
+  return value
+    .replace(/!\[[^\]\n]*\]\([^)]+\)/g, "")
+    .replace(/!\[[^\]\n]*\]\[[^\]\n]*\]/g, "")
+    .replace(/<img\b[^>]*>/gi, "")
+    .replace(/<picture\b[\s\S]*?<\/picture>/gi, "")
+    .split(/\n/)
+    .filter((line) => !isStandaloneImageLine(line))
+    .join("\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function looksLikeImageContent(value) {
+  return /!\[[^\]\n]*\]\([^)]+\)|!\[[^\]\n]*\]\[[^\]\n]*\]|<img\b|<picture\b|data:image\/|<<ImageDisplayed>>|(?:^|\s)(?:file:\/\/|https?:\/\/|\/|~\/|\.\.?\/)[^\s)]+\.(?:png|jpe?g|gif|webp|heic|heif|bmp|tiff?)(?:[?#][^\s)]*)?/im.test(String(value || ""));
+}
+
+function isStandaloneImageLine(line) {
+  const text = String(line || "").trim();
+  if (!text) return true;
+  if (/^(?:<<ImageDisplayed>>|\[image(?:\s+\d+)?\]|<image\b[^>]*>|<\/image>)$/i.test(text)) return true;
+  if (/^data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=]+$/i.test(text)) return true;
+  if (/^\[[^\]]+\]:\s*(?:file:\/\/|https?:\/\/|\/|~\/|\.\.?\/)[^\s)]+\.(?:png|jpe?g|gif|webp|heic|heif|bmp|tiff?)(?:[?#][^\s)]*)?(?:\s+["'][^"']*["'])?$/i.test(text)) return true;
+  return /^(?:file:\/\/|https?:\/\/|\/|~\/|\.\.?\/)[^\s)]+\.(?:png|jpe?g|gif|webp|heic|heif|bmp|tiff?)(?:[?#][^\s)]*)?$/i.test(text);
+}
+
+function sanitizeLarkCard(card) {
+  const clean = sanitizeCardNode(card);
+  return hasRenderableCardContent(clean) ? clean : null;
+}
+
+function sanitizeCardNode(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => sanitizeCardNode(item))
+      .filter((item) => item !== null && item !== undefined);
+  }
+  if (!value || typeof value !== "object") {
+    return typeof value === "string" ? sanitizeLarkTextContent(value) : value;
+  }
+  const tag = String(value.tag || "").toLowerCase();
+  if (["img", "image", "media"].includes(tag)) return null;
+  const clean = {};
+  for (const [key, item] of Object.entries(value)) {
+    const next = sanitizeCardNode(item);
+    if (next === null || next === undefined) continue;
+    clean[key] = next;
+  }
+  if ((tag === "markdown" || tag === "plain_text") && typeof clean.content === "string" && !clean.content.trim()) return null;
+  return clean;
+}
+
+function hasRenderableCardContent(value) {
+  if (!value || typeof value !== "object") return false;
+  if (Array.isArray(value)) return value.some(hasRenderableCardContent);
+  if (typeof value.content === "string" && value.content.trim()) return true;
+  if (value.config && typeof value.config === "object" && Object.keys(value.config).length) return true;
+  if (value.card_link && typeof value.card_link === "object" && Object.keys(value.card_link).length) return true;
+  if (value.text && hasRenderableCardContent(value.text)) return true;
+  if (Array.isArray(value.elements) && value.elements.length) return true;
+  if (value.header && hasRenderableCardContent(value.header)) return true;
+  return false;
 }
 
 async function readJsonSafe(response) {
