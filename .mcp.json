@@ -5,7 +5,8 @@
       "args": [
         "./bin/codex-lark-remote-mcp-wrapper.mjs"
       ],
-      "cwd": "."
+      "cwd": ".",
+      "default_tools_approval_mode": "approve"
     }
   }
 }

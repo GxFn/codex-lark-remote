@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { prepareDispatchCommand, processLarkEvent, recordDispatchCommand, replyRemoteCommand, routeRemoteCommand, startBridge } from "../src/bridge-server.mjs";
+import { dispatchRemoteCommand, prepareDispatchCommand, processLarkEvent, recordDispatchCommand, replyRemoteCommand, routeRemoteCommand, startBridge } from "../src/bridge-server.mjs";
 import { configFilePath, stateFilePath } from "../src/config.mjs";
 import { activateHandoff, readHandoff } from "../src/handoff.mjs";
 import { readIntentSession } from "../src/intent-state.mjs";
@@ -53,16 +53,13 @@ test("processLarkEvent still rejects non-whoami messages outside allowlist", asy
   assert.deepEqual(replies, [{ messageId: "om_1", text: "Permission denied." }]);
 });
 
-test("dispatch prepare and record use locked control-window capabilities", async () => {
+test("dispatch prepare ignores legacy host-thread capabilities", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-dispatch-record-"));
   await activateHandoff({
     dataDir,
     threadId: "control-thread",
     cwd: dataDir,
-    capabilities: {
-      hostThreadSend: { available: true, tool: "send_message_to_thread" },
-      hostThreadRead: { available: true, tool: "read_thread" },
-    },
+    capabilities: {},
   });
   const queue = new RemoteCommandQueue({ dataDir });
   const command = await queue.enqueue({
@@ -92,7 +89,7 @@ test("dispatch prepare and record use locked control-window capabilities", async
   assert.equal(prepared.success, true);
   assert.equal(prepared.data.action, "dispatch");
   assert.equal(prepared.data.target.threadId, "target-thread");
-  assert.equal(prepared.data.capabilities.hostThreadSend.available, true);
+  assert.equal(prepared.data.capabilities.hostThreadSend.available, false);
   assert.equal(prepared.data.targetPrompt, "[Lark Remote dispatch]\n全面检查链路");
 
   const recorded = await recordDispatchCommand(ctx, {
@@ -100,15 +97,15 @@ test("dispatch prepare and record use locked control-window capabilities", async
     status: "sent",
     targetThreadId: "target-thread",
     targetTitle: "检查并修复 codex-lark-remote 功能",
-    hostTool: "send_message_to_thread",
+    hostTool: "lark_dispatch_remote_command",
     readbackOk: true,
-    evidence: "host accepted message",
+    evidence: "target command queued",
   });
   const updated = await queue.get(command.id);
   assert.equal(recorded.success, true);
   assert.equal(updated.status, "dispatch_sent");
   assert.equal(updated.dispatchStatus, "dispatch_sent");
-  assert.equal(updated.dispatchHostTool, "send_message_to_thread");
+  assert.equal(updated.dispatchHostTool, "lark_dispatch_remote_command");
   assert.deepEqual(replies, [{
     messageId: "om_dispatch",
     text: "已派发到：检查并修复 codex-lark-remote 功能",
@@ -207,18 +204,13 @@ test("remote command router returns exact next actions", async () => {
   const routedDispatch = await routeRemoteCommand(ctx, dispatchCommand.id);
   assert.equal(routedDispatch.success, true);
   assert.equal(routedDispatch.data.action, "dispatch");
-  assert.equal(routedDispatch.data.nextTool, "send_message_to_thread");
-  assert.equal(routedDispatch.data.completionTool, "lark_record_dispatch");
+  assert.equal(routedDispatch.data.nextTool, "lark_dispatch_remote_command");
+  assert.equal(routedDispatch.data.completionTool, "lark_dispatch_remote_command");
   assert.deepEqual(routedDispatch.data.toolInput, {
-    threadId: "target-thread",
-    prompt: "[Lark Remote dispatch]\n全面检查链路",
+    remoteCommandId: dispatchCommand.id,
   });
   assert.deepEqual(routedDispatch.data.completionToolInput, {
     remoteCommandId: dispatchCommand.id,
-    status: "sent",
-    targetThreadId: "target-thread",
-    targetTitle: "检查并修复 codex-lark-remote 功能",
-    hostTool: "send_message_to_thread",
   });
   assert.equal(routedDispatch.data.controlWindowContract.localRepositoryWorkAllowed, false);
   assert.match(routedDispatch.data.targetPrompt, /全面检查链路/);
@@ -238,6 +230,66 @@ test("remote command router returns exact next actions", async () => {
     remoteCommandId: clarifyCommand.id,
     question: "这条消息要投递到哪个 Codex 会话？",
   });
+});
+
+test("dispatchRemoteCommand queues target delivery and records original command", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-dispatch-execute-"));
+  await activateHandoff({
+    dataDir,
+    threadId: "control-thread",
+    cwd: dataDir,
+    capabilities: {},
+  });
+  const queue = new RemoteCommandQueue({ dataDir });
+  const command = await queue.enqueue({
+    source: "lark",
+    mode: "thread_handoff",
+    controlWindowCommand: true,
+    prompt: "全面检查链路",
+    normalizedTask: "全面检查链路",
+    messageId: "om_execute_dispatch",
+    chatIdHash: "chat_hash",
+    codexSessionId: "control-thread",
+    dispatchTarget: {
+      threadId: "target-thread",
+      threadPath: "/tmp/target.jsonl",
+      name: "检查并修复 codex-lark-remote 功能",
+      cwd: dataDir,
+      status: "running",
+    },
+    handoffDispatch: true,
+  });
+  const replies = [];
+  const processAllCalls = [];
+  const ctx = {
+    config: { dataDir },
+    queue,
+    notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+    runner: { processAll: async () => processAllCalls.push("called") },
+  };
+
+  const dispatched = await dispatchRemoteCommand(ctx, { remoteCommandId: command.id });
+  const original = await queue.get(command.id);
+  const commands = await queue.list({ limit: 10 });
+  const targetCommand = commands.find((item) => item.parentRemoteCommandId === command.id);
+
+  assert.equal(dispatched.success, true);
+  assert.equal(original.status, "dispatch_sent");
+  assert.equal(original.dispatchStatus, "dispatch_sent");
+  assert.equal(original.dispatchHostTool, "lark_dispatch_remote_command");
+  assert.equal(original.dispatchTargetCommandId, targetCommand.id);
+  assert.equal(targetCommand.targetWindowDispatch, true);
+  assert.equal(targetCommand.controlWindowCommand, false);
+  assert.equal(targetCommand.codexSessionId, "target-thread");
+  assert.equal(targetCommand.codexSessionPath, "/tmp/target.jsonl");
+  assert.equal(targetCommand.projectRoot, dataDir);
+  assert.equal(targetCommand.prompt, "[Lark Remote dispatch]\n全面检查链路");
+  assert.equal(targetCommand.status, "pending");
+  assert.deepEqual(replies, [{
+    messageId: "om_execute_dispatch",
+    text: "已派发到：检查并修复 codex-lark-remote 功能",
+  }]);
+  assert.deepEqual(processAllCalls, ["called"]);
 });
 
 test("processLarkEvent deduplicates direct command replies and reports websocket status", async () => {

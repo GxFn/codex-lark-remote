@@ -278,6 +278,12 @@ async function route(ctx) {
     return sendJson(res, recorded.success ? 200 : 400, recorded);
   }
 
+  if (req.method === "POST" && url.pathname === "/bridge/dispatch/execute") {
+    const { body } = await readJson(req);
+    const dispatched = await dispatchRemoteCommand(ctx, body);
+    return sendJson(res, dispatched.success ? 200 : 400, dispatched);
+  }
+
   if (req.method === "POST" && url.pathname === "/bridge/dispatch/clarify") {
     const { body } = await readJson(req);
     const clarified = await requestDispatchClarification(ctx, body);
@@ -1219,18 +1225,6 @@ export async function prepareDispatchCommand(ctx, remoteCommandId) {
       text: "No active Lark Remote control window is locked.",
     };
   }
-  if (!capabilities.hostThreadSend.available) {
-    return {
-      success: true,
-      data: {
-        ...data,
-        action: "blocked",
-        targetPrompt: "",
-        reason: "The locked control window did not confirm a host thread send tool.",
-      },
-      text: "The locked control window did not confirm a host thread send tool.",
-    };
-  }
   if (!target?.threadId) {
     return {
       success: true,
@@ -1293,20 +1287,15 @@ export async function routeRemoteCommand(ctx, remoteCommandId) {
       data: {
         ...prepared.data,
         action: "dispatch",
-        nextTool: prepared.data.capabilities?.hostThreadSend?.tool || "send_message_to_thread",
-        completionTool: "lark_record_dispatch",
+        nextTool: "lark_dispatch_remote_command",
+        completionTool: "lark_dispatch_remote_command",
         toolInput: {
-          threadId: prepared.data.target?.threadId || "",
-          prompt: prepared.data.targetPrompt || "",
+          remoteCommandId: command.id,
         },
         completionToolInput: {
           remoteCommandId: command.id,
-          status: "sent",
-          targetThreadId: prepared.data.target?.threadId || "",
-          targetTitle: prepared.data.target?.name || "",
-          hostTool: prepared.data.capabilities?.hostThreadSend?.tool || "send_message_to_thread",
         },
-        controlWindowContract: controlWindowRouteContract({ action: "dispatch", completionTool: "lark_record_dispatch" }),
+        controlWindowContract: controlWindowRouteContract({ action: "dispatch", completionTool: "lark_dispatch_remote_command" }),
         summary: "Dispatch this work request to the selected target session.",
       },
       text: "Dispatch this work request to the selected target session.",
@@ -1356,6 +1345,105 @@ export async function routeRemoteCommand(ctx, remoteCommandId) {
       summary: prepared.data.reason || "Dispatch is blocked.",
     },
     text: prepared.data.reason || "Dispatch is blocked.",
+  };
+}
+
+export async function dispatchRemoteCommand(ctx, input = {}) {
+  const remoteCommandId = input.remoteCommandId || input.commandId || input.id || "";
+  const command = remoteCommandId && typeof ctx.queue.get === "function" ? await ctx.queue.get(remoteCommandId) : null;
+  if (!command) return { success: false, error: "Remote command not found." };
+  if (command.mode !== "thread_handoff") {
+    return { success: false, error: "Remote command is not a control-window dispatch command.", data: { remoteCommandId: command.id } };
+  }
+  if (command.dispatchTargetCommandId) {
+    const existing = typeof ctx.queue.get === "function" ? await ctx.queue.get(command.dispatchTargetCommandId).catch(() => null) : null;
+    if (existing && !["failed", "cancelled"].includes(existing.status)) {
+      const recorded = await recordDispatchCommand(ctx, {
+        remoteCommandId: command.id,
+        status: "sent",
+        targetThreadId: command.dispatchTargetThreadId || existing.codexSessionId,
+        targetTitle: command.dispatchTarget?.name || "",
+        hostTool: "lark_dispatch_remote_command",
+        evidence: `target command already queued: ${existing.id}`,
+      });
+      return {
+        success: true,
+        data: { remoteCommandId: command.id, targetCommand: existing, recorded: recorded.data },
+        text: recorded.text,
+      };
+    }
+  }
+
+  const prepared = await prepareDispatchCommand(ctx, command.id);
+  if (!prepared.success) return prepared;
+  if (prepared.data.action === "clarify") {
+    const clarified = await requestDispatchClarification(ctx, {
+      remoteCommandId: command.id,
+      question: "这条消息要投递到哪个 Codex 会话？",
+    });
+    return { ...clarified, data: { ...(clarified.data || {}), action: "clarify" } };
+  }
+  if (prepared.data.action !== "dispatch") {
+    const recorded = await recordDispatchCommand(ctx, {
+      remoteCommandId: command.id,
+      status: "blocked_retryable",
+      error: prepared.data.reason || "Dispatch is blocked.",
+    });
+    return { ...recorded, data: { ...(recorded.data || {}), action: "blocked" } };
+  }
+
+  const target = prepared.data.target || {};
+  const targetCommand = await ctx.queue.enqueue({
+    source: "lark",
+    mode: "thread_handoff",
+    presentation: "chat",
+    notifyQueued: false,
+    notifyStarted: false,
+    controlWindowCommand: false,
+    targetWindowDispatch: true,
+    handoffDispatch: true,
+    parentRemoteCommandId: command.id,
+    dispatchTarget: target,
+    takeoverState: command.takeoverState || "",
+    repoKey: "current",
+    projectRoot: target.cwd || command.projectRoot || "",
+    prompt: prepared.data.targetPrompt,
+    normalizedTask: command.normalizedTask || command.prompt || "",
+    messageId: command.messageId,
+    chatIdHash: command.chatIdHash,
+    userIdHash: command.userIdHash,
+    userName: command.userName,
+    codexSessionId: target.threadId,
+    codexSessionPath: target.threadPath || "",
+  });
+  await ctx.queue.update(
+    command.id,
+    {
+      dispatchTargetCommandId: targetCommand.id,
+      dispatchTargetThreadId: target.threadId || "",
+      dispatchTargetTitle: target.name || "",
+    },
+    "dispatch_target_queued",
+  );
+  const recorded = await recordDispatchCommand(ctx, {
+    remoteCommandId: command.id,
+    status: "sent",
+    targetThreadId: target.threadId || "",
+    targetTitle: target.name || "",
+    hostTool: "lark_dispatch_remote_command",
+    readbackOk: true,
+    evidence: `target command queued: ${targetCommand.id}`,
+  });
+  Promise.resolve(ctx.runner?.processAll?.()).catch(() => {});
+  return {
+    success: true,
+    data: {
+      remoteCommandId: command.id,
+      action: "dispatch",
+      targetCommand,
+      recorded: recorded.data,
+    },
+    text: recorded.text,
   };
 }
 

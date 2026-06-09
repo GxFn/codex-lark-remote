@@ -40,7 +40,9 @@ test("RemoteCommandQueue preserves thread handoff dispatch metadata", async () =
     prompt: "继续检查",
     codexSessionId: "control-thread",
     controlWindowCommand: true,
+    targetWindowDispatch: true,
     handoffDispatch: true,
+    parentRemoteCommandId: "rcmd_parent",
     takeoverState: "active",
     dispatchTarget: {
       threadId: "target-thread",
@@ -54,12 +56,16 @@ test("RemoteCommandQueue preserves thread handoff dispatch metadata", async () =
 
   assert.equal(created.handoffDispatch, true);
   assert.equal(created.controlWindowCommand, true);
+  assert.equal(created.targetWindowDispatch, true);
+  assert.equal(created.parentRemoteCommandId, "rcmd_parent");
   assert.equal(created.takeoverState, "active");
   assert.equal(created.dispatchTarget.threadId, "target-thread");
 
   const claimed = await queue.claimNext();
   assert.equal(claimed.handoffDispatch, true);
   assert.equal(claimed.controlWindowCommand, true);
+  assert.equal(claimed.targetWindowDispatch, true);
+  assert.equal(claimed.parentRemoteCommandId, "rcmd_parent");
   assert.equal(claimed.takeoverState, "active");
   assert.equal(claimed.dispatchTarget.threadId, "target-thread");
   assert.equal(claimed.dispatchTarget.name, "检查并修复 codex-lark-remote 功能");

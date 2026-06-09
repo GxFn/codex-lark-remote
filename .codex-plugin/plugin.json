@@ -1,6 +1,6 @@
 {
   "name": "codex-lark-remote",
-  "version": "0.2.24",
+  "version": "0.2.25",
   "description": "Control, observe, and take over local Codex sessions from Feishu/Lark.",
   "author": {
     "name": "gaoxuefeng",
@@ -24,7 +24,7 @@
   "interface": {
     "displayName": "Lark Remote",
     "shortDescription": "Control, observe, and take over Codex sessions from Feishu/Lark.",
-    "longDescription": "Lark Remote connects Feishu/Lark to a local Codex bridge. Use the natural-language console to list projects and sessions, observe read-only progress, or take over a selected Codex session. After takeover, Feishu/Lark messages go to the dedicated Codex control window, where the agent uses skills, MCP tools, and host thread tools to decide the next action.",
+    "longDescription": "Lark Remote connects Feishu/Lark to a local Codex bridge. Use the natural-language console to list projects and sessions, observe read-only progress, or take over a selected Codex session. After takeover, Feishu/Lark messages go to the dedicated Codex control window; that window routes through Lark Remote skills and MCP tools, and target delivery is executed by the dedicated Lark Remote dispatch MCP.",
     "developerName": "GxFn",
     "category": "Productivity",
     "capabilities": [

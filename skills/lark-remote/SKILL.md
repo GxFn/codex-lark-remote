@@ -22,21 +22,19 @@ Use Lark Remote MCP tools only during normal startup.
    routing state and connecting future Feishu/Lark messages to this bridge.
 4. After consent, call `lark_prepare_takeover` for project/session takeover, or
    `lark_lock_control_window` for a control-window-only connection.
-5. Pass the control-window host thread capability snapshot silently. If the
-   current Codex window can use host thread tools, pass:
+5. Do not ask the user about tool capabilities. Normal dispatch uses
+   `lark_dispatch_remote_command`, so `capabilities` may be omitted or passed as
+   an empty object for compatibility:
 
 ```json
 {
-  "capabilities": {
-    "hostThreadSend": { "available": true, "tool": "send_message_to_thread" },
-    "hostThreadRead": { "available": true, "tool": "read_thread" },
-    "hostThreadInterrupt": { "available": false, "tool": "" }
-  }
+  "capabilities": {}
 }
 ```
 
-If a capability is not available, pass it with `available: false`; do not ask the
-user about this capability check.
+Older cached installs may still pass legacy host-thread capability fields. They
+are accepted for compatibility, but the control-window dispatch path must not
+depend on them.
 
 Keep startup replies short: current readiness and the one next action.
 
@@ -59,8 +57,7 @@ The router returns the exact action and next tool. For target-thread dispatch it
 will direct the control window to use:
 
 ```text
-Codex host thread send tool
-lark_record_dispatch(remoteCommandId, ...)
+lark_dispatch_remote_command(remoteCommandId)
 ```
 
 For non-dispatch control actions, it uses the matching `lark_*` control tool and
@@ -86,6 +83,5 @@ be visible in Feishu/Lark as prompt separators so turns do not merge visually.
 
 Takeover is dispatch-oriented. After a session is taken over, Feishu/Lark work
 messages are routed to the control window, and the control window dispatches
-them to the selected target with host thread tools. If the target is busy, still
-attempt normal dispatch; only mark blocked if the host thread tool rejects or is
-unavailable.
+them to the selected target with `lark_dispatch_remote_command`. If the target
+is busy, still dispatch normally; busy status alone is not a failure.

@@ -14,7 +14,7 @@ Codex sessions for Feishu/Lark. It is not the target worker session.
 - Control window: this Codex conversation. It understands Feishu/Lark messages
   and chooses one Lark Remote action.
 - Target session: the Codex conversation selected for takeover. Coding work is
-  delivered there with Codex host thread tools.
+  delivered there by the dedicated Lark Remote dispatch MCP tool.
 - Remote command: one Feishu/Lark message stored by the bridge. It has a
   `remoteCommandId`.
 - Observation: read-only progress streaming. It never routes user prompts into
@@ -64,18 +64,14 @@ context guessing.
 
 The Feishu/Lark message is a work request for the selected target session.
 
-1. Use the returned host thread send tool, normally `send_message_to_thread`.
-2. Send only the returned `targetPrompt` to the returned target thread. For
-   `send_message_to_thread`, this is the `prompt` field.
-3. Call `lark_record_dispatch` with `status: "sent"` when the host tool accepts
-   delivery. Prefer the returned `completionToolInput` and add evidence if
-   useful.
-4. If host delivery is unavailable or rejected, call `lark_record_dispatch` with
-   `status: "blocked"` or `status: "failed"`.
+1. Call the returned `nextTool`, normally `lark_dispatch_remote_command`, with
+   the returned `toolInput`.
+2. That MCP queues delivery to the selected target Codex session and records the
+   Feishu/Lark dispatch result.
+3. End the turn immediately after `lark_dispatch_remote_command` succeeds.
 
 Do not inspect files, run tests, or do the work in this control window.
-Do not rewrite the target task except for the wrapper already returned by the
-router.
+Do not rewrite the target task or try to use host thread tools directly.
 
 ### `action: "control"`
 
@@ -110,10 +106,12 @@ retained or clearly reported; do not silently drop it.
 ## MCP Tool Map
 
 - `lark_route_remote_command`: first-step router for one Feishu/Lark command.
+- `lark_dispatch_remote_command`: only normal target dispatch executor after
+  `action: "dispatch"`.
 - `lark_prepare_dispatch`: lower-level dispatch preparation. Use only when the
   router tells you to, or for diagnostics.
-- `lark_record_dispatch`: only success/failure record for target-thread
-  delivery.
+- `lark_record_dispatch`: low-level success/failure record for diagnostics or
+  routed blocked states.
 - `lark_reply_remote_command`: only completion record for non-dispatch control
   actions.
 - `lark_request_clarification`: asks Feishu/Lark for a missing target or
@@ -142,8 +140,7 @@ verify, and lock the current conversation. Control-window prompts use this skill
 to route Feishu/Lark messages after lock.
 
 Do not ask the user to choose a control window during every remote command. The
-locked control-window identity and host thread capability snapshot are local
-Lark Remote state.
+locked control-window identity is local Lark Remote state.
 
 ## Ambiguity Handling
 
@@ -160,16 +157,18 @@ selection.
 
 - Never do repository work in the control window.
 - Never use shell commands to route Feishu/Lark messages.
+- Never use dynamic host thread tools such as `send_message_to_thread` from this
+  control-window flow; `codex exec` cannot call them reliably.
 - Never send ordinary Feishu/Lark text directly from JavaScript to the target;
-  dispatch must go through the control window and host thread tools.
+  dispatch must go through the control window and `lark_dispatch_remote_command`.
 - Never treat Codex turn completion as dispatch success.
 - Never finish a control-window turn without one of:
-  `lark_record_dispatch`, `lark_reply_remote_command`, or
-  `lark_request_clarification`.
-- If the target session is busy, still dispatch normally when the host thread
-  tool accepts delivery. Busy status alone is not failure.
-- Host thread capabilities come from the control-window lock snapshot. Do not
-  ask the user to confirm them each turn.
+  `lark_dispatch_remote_command`, `lark_record_dispatch`,
+  `lark_reply_remote_command`, or `lark_request_clarification`.
+- If the target session is busy, still dispatch normally. Busy status alone is
+  not failure.
+- Legacy host thread capability snapshots may exist in state files, but normal
+  dispatch must not depend on them.
 - Feishu/Lark cannot approve native Codex Desktop permission dialogs. If a
   native approval is required, use `lark_reply_remote_command` to tell the user
   exactly what must be approved.

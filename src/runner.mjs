@@ -1,6 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { nowIso, safeFileName, worktreeRoot } from "./config.mjs";
 import { readHandoff } from "./handoff.mjs";
@@ -10,6 +11,9 @@ import { buildRunnerPrompt } from "./prompt.mjs";
 import { detectSessionStatus } from "./takeover.mjs";
 
 const execFileP = promisify(execFile);
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+const pluginRoot = path.resolve(moduleDir, "..");
+const larkRemoteMcpWrapperPath = path.join(pluginRoot, "bin", "codex-lark-remote-mcp-wrapper.mjs");
 
 export class CodexCliRunner {
   constructor({ queue, config, notifier }) {
@@ -231,6 +235,7 @@ export class CodexCliRunner {
       prompt,
       outputFile,
       cwd: command.projectRoot,
+      controlWindowCommand: command.controlWindowCommand,
     });
     const sessionWatcher = createSessionProgressWatcher({
       sessionPath: command.codexSessionPath,
@@ -290,6 +295,7 @@ export class CodexCliRunner {
 
   async #shouldNotify(command) {
     if (command.mode !== "thread_handoff") return true;
+    if (command.targetWindowDispatch && command.messageId) return true;
     if (!this.config.dataDir) return false;
     try {
       const handoff = await readHandoff({ dataDir: this.config.dataDir });
@@ -360,12 +366,13 @@ export function buildCodexExecArgs({ runner = {}, worktreePath, prompt }) {
   return args;
 }
 
-export function buildCodexResumeArgs({ runner = {}, threadId, prompt, outputFile, cwd }) {
+export function buildCodexResumeArgs({ runner = {}, threadId, prompt, outputFile, cwd, controlWindowCommand = false }) {
   if (!threadId) throw new Error("Codex handoff thread id is required");
   const args = ["exec"];
   if (runner.ignoreUserConfig !== false) args.push("--ignore-user-config");
   args.push("--sandbox", runner.sandbox || "workspace-write");
   if (cwd) args.push("-C", cwd);
+  if (controlWindowCommand) args.push(...buildLarkRemoteMcpApprovalArgs());
   args.push("resume", "--json");
   if (runner.skipGitRepoCheck !== false) args.push("--skip-git-repo-check");
   if (runner.model) args.push("-m", runner.model);
@@ -374,7 +381,22 @@ export function buildCodexResumeArgs({ runner = {}, threadId, prompt, outputFile
   return args;
 }
 
+function buildLarkRemoteMcpApprovalArgs() {
+  return [
+    "-c",
+    'mcp_servers.lark-remote.command="node"',
+    "-c",
+    `mcp_servers.lark-remote.args=["${escapeTomlString(larkRemoteMcpWrapperPath)}"]`,
+    "-c",
+    `mcp_servers.lark-remote.cwd="${escapeTomlString(pluginRoot)}"`,
+    "-c",
+    'mcp_servers.lark-remote.default_tools_approval_mode="approve"',
+  ];
+}
+
 export function buildHandoffPrompt(command, { promptStyle = "direct" } = {}) {
+  if (command.targetWindowDispatch) return command.prompt || command.normalizedTask || "";
+
   if (command.dispatchTarget?.threadId) {
     return buildControlWindowPrompt(command);
   }
@@ -766,7 +788,7 @@ function isSubmittedHandoffPrompt(text, { command = {}, submittedPrompt = "" } =
   return Boolean(
     (submitted && normalized === submitted)
     || (raw && normalized === raw)
-    || /\[(?:Codex )?Lark Remote (?:handoff|thread dispatch|control message|control)\]/i.test(text)
+    || /\[(?:Codex )?Lark Remote (?:handoff|thread dispatch|control message|control|dispatch)\]/i.test(text)
     || /Feishu\/Lark user message to dispatch:/i.test(text)
   );
 }
@@ -778,6 +800,10 @@ function extractThreadDispatchUserMessage(text) {
 
 function comparablePrompt(text) {
   return progressText(text).replace(/\s+/g, " ").trim();
+}
+
+function escapeTomlString(value) {
+  return String(value || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 function formatUsage(usage) {

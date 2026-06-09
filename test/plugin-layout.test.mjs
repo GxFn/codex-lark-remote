@@ -107,10 +107,11 @@ test("ships a plugin-root agent guide for global Lark Remote behavior", async ()
   assert.match(guide, /Global Contract/);
   assert.match(guide, /lark-remote-control-window/);
   assert.match(guide, /lark_route_remote_command/);
+  assert.match(guide, /lark_dispatch_remote_command/);
   assert.match(guide, /lark_record_dispatch/);
   assert.match(guide, /lark_reply_remote_command/);
   assert.match(guide, /lark_request_clarification/);
-  assert.match(guide, /send_message_to_thread/);
+  assert.doesNotMatch(guide, /send_message_to_thread/);
   assert.doesNotMatch(guide, /codex_lark_/);
 });
 
@@ -157,6 +158,7 @@ test("exposes control-window MCP tools and skill guidance", async () => {
   const requiredTools = [
     "lark_prepare_dispatch",
     "lark_route_remote_command",
+    "lark_dispatch_remote_command",
     "lark_record_dispatch",
     "lark_request_clarification",
     "lark_reply_remote_command",
@@ -184,10 +186,10 @@ test("exposes control-window MCP tools and skill guidance", async () => {
   assert.match(controlSkill, /toolInput/);
   assert.match(controlSkill, /completionToolInput/);
   assert.match(controlSkill, /Full Lifecycle/);
-  assert.match(controlSkill, /host thread/);
+  assert.match(controlSkill, /lark_dispatch_remote_command/);
   assert.match(controlSkill, /lark_prepare_dispatch/);
   assert.match(controlSkill, /lark_record_dispatch/);
-  assert.match(startupSkill, /capability snapshot/);
+  assert.match(startupSkill, /lark_dispatch_remote_command/);
   assert.doesNotMatch(server, /name: "lark_context"/);
   assert.doesNotMatch(server, /name: "lark_send"/);
   assert.doesNotMatch(server, /name: "lark_approve"/);
@@ -203,6 +205,7 @@ test("declares a plugin-root cwd for the MCP server", async () => {
     "./bin/codex-lark-remote-mcp-wrapper.mjs",
   ]);
   assert.equal(server?.cwd, ".");
+  assert.equal(server?.default_tools_approval_mode, "approve");
 });
 
 test("keeps example runner config compatible with plugin tools", async () => {
@@ -220,13 +223,22 @@ test("ships a self-contained runtime package for Node dependencies", async () =>
   const runtimeUrl = new URL("../runtime.tgz", import.meta.url);
   const runtimeStat = await fs.lstat(runtimeUrl);
   const tar = spawnSync("tar", ["-tzf", runtimeUrl.pathname], { encoding: "utf8" });
+  const runtimePackage = spawnSync("tar", ["-xOf", runtimeUrl.pathname, "package/package.json"], { encoding: "utf8" });
+  const runtimeMcp = spawnSync("tar", ["-xOf", runtimeUrl.pathname, "package/bin/codex-lark-remote-mcp.mjs"], {
+    encoding: "utf8",
+  });
 
   assert.equal(packageJson.scripts?.["prepare:codex-plugin-runtime"], "node ./scripts/prepare-codex-plugin-runtime.mjs");
   assert.equal(packageJson.scripts?.["mcp:wrapper"], "node ./bin/codex-lark-remote-mcp-wrapper.mjs");
   assert.equal(runtimeStat.isFile(), true, "runtime.tgz must ship with the plugin root");
   assert.equal(tar.status, 0, tar.stderr);
+  assert.equal(runtimePackage.status, 0, runtimePackage.stderr);
+  assert.equal(runtimeMcp.status, 0, runtimeMcp.stderr);
   assert.match(tar.stdout, /package\/node_modules\/@larksuiteoapi\/node-sdk\/package\.json/);
   assert.match(tar.stdout, /package\/node_modules\/@larksuiteoapi\/node-sdk\/lib\/index\.js/);
+  assert.equal(JSON.parse(runtimePackage.stdout).version, packageJson.version);
+  assert.match(runtimeMcp.stdout, /name: "lark_dispatch_remote_command"/);
+  assert.match(runtimeMcp.stdout, /name === "lark_dispatch_remote_command"/);
   assert.match(wrapper, /runtime\.tgz/);
   assert.match(wrapper, /codex-lark-remote-mcp/);
   assert.match(wrapper, /"--offline"/);

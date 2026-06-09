@@ -125,10 +125,10 @@ const tools = [
   },
   {
     name: "lark_lock_control_window",
-    description: "Attach and lock this Codex conversation as the Lark Remote control window. Existing chat history is not sent to Feishu/Lark. Also stores the host thread capability snapshot for later dispatch.",
+    description: "Attach and lock this Codex conversation as the Lark Remote control window. Existing chat history is not sent to Feishu/Lark. Capabilities is optional and retained only for compatibility; normal dispatch uses Lark Remote MCP.",
     inputSchema: {
       type: "object",
-      required: ["confirmedLocalBridgeHandoff", "capabilities"],
+      required: ["confirmedLocalBridgeHandoff"],
       properties: {
         dataDir: { type: "string" },
         configPath: { type: "string" },
@@ -137,7 +137,7 @@ const tools = [
         checkAuth: { type: "boolean", description: "Also call Feishu/Lark auth API. Defaults to false." },
         capabilities: {
           type: "object",
-          description: "Silent capability snapshot confirmed by the current Codex window.",
+          description: "Optional legacy capability snapshot. Normal dispatch does not require host thread tools.",
           properties: {
             hostThreadSend: {
               type: "object",
@@ -174,14 +174,14 @@ const tools = [
     description: "Prepare Feishu/Lark-driven takeover from this Codex conversation. This starts the bridge, attaches this conversation as the control window, and stores local takeover routing state; allowed Feishu/Lark users choose the project and window to inspect or take over.",
     inputSchema: {
       type: "object",
-      required: ["confirmedLocalBridgeHandoff", "capabilities"],
+      required: ["confirmedLocalBridgeHandoff"],
       properties: {
         dataDir: { type: "string" },
         configPath: { type: "string" },
         cwd: { type: "string", description: "Optional workspace cwd used when resolving takeover targets." },
         capabilities: {
           type: "object",
-          description: "Silent control-window host thread capability snapshot.",
+          description: "Optional legacy capability snapshot. Normal dispatch does not require host thread tools.",
         },
         confirmedLocalBridgeHandoff: {
           type: "boolean",
@@ -400,8 +400,21 @@ const tools = [
     },
   },
   {
+    name: "lark_dispatch_remote_command",
+    description: "Execute a routed target dispatch for one remoteCommandId. This is the only dispatch action a control window should call after lark_route_remote_command returns action=dispatch; it queues delivery to the selected target Codex session and records the Feishu/Lark result.",
+    inputSchema: {
+      type: "object",
+      required: ["remoteCommandId"],
+      properties: {
+        remoteCommandId: { type: "string" },
+        dataDir: { type: "string" },
+        configPath: { type: "string" },
+      },
+    },
+  },
+  {
     name: "lark_record_dispatch",
-    description: "Required completion tool after a control window uses a host thread tool for target dispatch. This is the only success/failure signal for active-target delivery.",
+    description: "Low-level dispatch result recorder. Normal control-window dispatch should use lark_dispatch_remote_command, which records automatically. Use this only when the router explicitly returns it or for diagnostics.",
     inputSchema: {
       type: "object",
       required: ["remoteCommandId", "status"],
@@ -727,6 +740,12 @@ async function callTool(name, args, request = {}) {
   }
   if (name === "lark_route_remote_command") {
     return textContent(formatJson(await bridgeFetch(state, "/bridge/remote-command/route", {
+      method: "POST",
+      body: { remoteCommandId: args.remoteCommandId },
+    })));
+  }
+  if (name === "lark_dispatch_remote_command") {
+    return textContent(formatJson(await bridgeFetch(state, "/bridge/dispatch/execute", {
       method: "POST",
       body: { remoteCommandId: args.remoteCommandId },
     })));

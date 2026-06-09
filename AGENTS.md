@@ -10,8 +10,8 @@ Lark Remote action. Target sessions do the coding work.
 - Lark Remote is a control-window product, not a worktree task runner.
 - The Codex conversation that starts or locks Lark Remote is the control window.
 - A selected takeover session is the target session.
-- Ordinary Feishu/Lark work requests are dispatched to the selected target with
-  Codex host thread tools.
+- Ordinary Feishu/Lark work requests are dispatched to the selected target by
+  the dedicated Lark Remote dispatch MCP tool.
 - The control window must not inspect repositories, edit files, run tests, or
   answer the coding task locally.
 - The bridge must not send ordinary Feishu/Lark text directly to a target
@@ -34,8 +34,8 @@ lark_route_remote_command({ remoteCommandId })
 ```
 
 That router reads the stored Feishu/Lark command, active target, takeover state,
-and locked control-window capabilities. It returns `action`, `nextTool`,
-`toolInput`, and the required completion tool. Follow that route exactly.
+and locked control-window state. It returns `action`, `nextTool`, `toolInput`,
+and the required completion tool. Follow that route exactly.
 
 Do not choose tools by guessing from the visible Feishu/Lark text when a route
 exists. The router is the source of truth for whether this is a control request,
@@ -44,6 +44,7 @@ clarification, blocked state, or target-session dispatch.
 Every control-window turn must finish with exactly one of these Lark Remote
 completion tools:
 
+- `lark_dispatch_remote_command`
 - `lark_record_dispatch`
 - `lark_reply_remote_command`
 - `lark_request_clarification`
@@ -53,8 +54,9 @@ A plain Codex final answer is not a Lark Remote result.
 ## MCP Tool Families
 
 - First-step router: `lark_route_remote_command`.
-- Target dispatch: `lark_prepare_dispatch` only when routed or diagnosing,
-  host thread send/read tools, then `lark_record_dispatch`.
+- Target dispatch: `lark_dispatch_remote_command` only after the router returns
+  `action: "dispatch"`. `lark_prepare_dispatch` and `lark_record_dispatch` are
+  lower-level diagnostics/completion helpers.
 - Control status and navigation: `lark_get_bridge_status`,
   `lark_list_projects`, `lark_select_project`,
   `lark_list_project_sessions`, `lark_select_target`,
@@ -73,16 +75,13 @@ tool for the question at hand.
 
 When the router returns `action: "dispatch"`:
 
-1. Send the returned `targetPrompt` to the returned target thread with the
-   returned host thread tool, normally `send_message_to_thread`.
-2. If the host tool accepts delivery, call `lark_record_dispatch` with
-   `status: "sent"`.
-3. If the host tool is unavailable or rejects delivery, call
-   `lark_record_dispatch` with `status: "blocked"` or `status: "failed"`.
-4. Stop immediately after the record tool succeeds.
+1. Call `lark_dispatch_remote_command` with the returned `remoteCommandId`.
+2. That MCP queues the target-session delivery and records the Feishu/Lark
+   dispatch result.
+3. Stop immediately after `lark_dispatch_remote_command` succeeds.
 
-Busy target status is not a failure by itself. Dispatch should still be
-attempted if the host thread tool accepts messages.
+Busy target status is not a failure by itself. Dispatch still queues normally
+for the selected target session.
 
 ## Feishu/Lark Output
 
@@ -95,6 +94,7 @@ explicitly asks for diagnostics.
 - Do not use retired tool names from older releases.
 - Do not use legacy worktree approval/task tools for ordinary Feishu/Lark
   messages.
-- Do not report dispatch success until `lark_record_dispatch` succeeds.
+- Do not report dispatch success until `lark_dispatch_remote_command` or the
+  routed completion tool succeeds.
 - If a native Codex Desktop permission is required, reply through
   `lark_reply_remote_command` with the exact approval needed.

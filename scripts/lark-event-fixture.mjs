@@ -130,7 +130,7 @@ function helpText() {
     "Usage: node scripts/lark-event-fixture.mjs [options]",
     "",
     "Options:",
-    "  --data-dir <dir>       Codex Lark Remote data directory",
+    "  --data-dir <dir>       Lark Remote data directory",
     "  --config <path>        Config path",
     "  --url <url>            Bridge URL, defaults to state file",
     "  --text <text>          Message text",

@@ -209,8 +209,8 @@ The same controls also work in Chinese: `控制台`, `项目列表`, `会话列�
 After takeover, the chat switches to thread-dispatch mode. Ordinary
 Feishu/Lark messages go to the dedicated control Codex window as dispatch
 requests for the selected Codex session. JavaScript does not send those messages
-directly to the target thread; the control Codex window performs real thread
-dispatch with Codex host thread tools and available Lark Remote MCP tools.
+directly to the target thread; the control Codex window routes through Lark
+Remote MCP, and `lark_dispatch_remote_command` performs the target delivery.
 
 Once the control Codex window is connected, JavaScript only intercepts explicit
 control keywords such as `console`, `status`, `observe off`, `exit handoff`,
@@ -278,16 +278,17 @@ automation or local Codex input, are echoed as `User prompt:` separators.
 The control Codex window uses focused Lark Remote MCP tools instead of a broad
 context snapshot. `lark_route_remote_command` is the required first tool for
 each Feishu/Lark remote command; it returns the exact action, next tool, and
-completion tool. Target delivery uses the returned Codex host thread tool and
-then `lark_record_dispatch`; lower-level `lark_prepare_dispatch` is kept for
-router-driven dispatch preparation and diagnostics. Project/session routing uses
+completion tool. Target delivery uses `lark_dispatch_remote_command`, which
+queues the selected target session and records the Feishu/Lark dispatch result;
+lower-level `lark_prepare_dispatch` and `lark_record_dispatch` are kept for
+router-driven diagnostics and blocked states. Project/session routing uses
 `lark_list_projects` / `lark_select_project` /
 `lark_list_project_sessions`, takeover uses `lark_select_target` /
 `lark_confirm_takeover`, and read-only streams use `lark_start_observation` /
 `lark_stop_observation`. Non-dispatch control actions finish through
 `lark_reply_remote_command`. The bundled Lark Remote Control Window skill tells
-the control window to pair those tools with Codex host thread tools and to
-explicitly record the final result.
+the control window to follow the router result and finish with exactly one Lark
+Remote completion tool.
 
 ## Behavior And Boundaries
 
@@ -312,9 +313,8 @@ explaining what approval is needed and where to approve it.
 If the selected target Codex session is already working, Lark Remote still sends
 the Feishu/Lark message to the dedicated control Codex window. The control
 window should treat it as a higher-priority dispatch or interrupt request for
-the target thread, and fail closed only when the host thread tool is
-unavailable, the target cannot be addressed, or delivery/readback cannot be
-verified.
+the target thread, and fail closed only when Lark Remote cannot address or queue
+the selected target session.
 
 ## Repository Layout
 
