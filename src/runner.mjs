@@ -406,7 +406,10 @@ function buildControlWindowPrompt(command) {
     command.prompt || "",
     "</feishu_lark_message>",
     "",
-    "Use the Lark Remote Control Window skill. Do exactly one control action or one target dispatch, record the result with Lark Remote MCP when required, then end this turn.",
+    "Use the lark-remote-control-window skill.",
+    "First call lark_route_remote_command(remoteCommandId), then follow its returned action and nextTool exactly.",
+    "Do not choose tools by guessing from the message alone.",
+    "Do not inspect repositories, run shell commands, edit files, run tests, or finish before the routed Lark Remote completion tool succeeds.",
   ].filter((line) => line !== "").join("\n");
 }
 

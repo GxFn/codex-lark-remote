@@ -98,8 +98,9 @@ test("buildHandoffPrompt wraps Feishu input as a control-window message by defau
   });
 
   assert.match(prompt, /\[Lark Remote control message\]/);
-  assert.match(prompt, /Use the Lark Remote Control Window skill/);
-  assert.match(prompt, /record the result with Lark Remote MCP/);
+  assert.match(prompt, /Use the lark-remote-control-window skill/);
+  assert.match(prompt, /First call lark_route_remote_command/);
+  assert.match(prompt, /follow its returned action and nextTool exactly/);
   assert.match(prompt, /remoteCommandId: rcmd_note/);
   assert.match(prompt, /activeTarget:\n- none/);
   assert.match(prompt, /<feishu_lark_message>\nfix README\n<\/feishu_lark_message>/);
@@ -107,7 +108,7 @@ test("buildHandoffPrompt wraps Feishu input as a control-window message by defau
   assert.doesNotMatch(prompt, /Permission boundary/);
   assert.doesNotMatch(prompt, /Sender:/);
   assert.doesNotMatch(prompt, /<target_prompt>/);
-  assert.ok(prompt.split("\n").length <= 12);
+  assert.ok(prompt.split("\n").length <= 15);
 });
 
 test("buildHandoffPrompt keeps using the control envelope for subsequent turns", () => {
@@ -150,8 +151,8 @@ test("buildHandoffPrompt wraps target dispatch for the control window", () => {
   });
 
   assert.match(prompt, /\[Lark Remote control message\]/);
-  assert.match(prompt, /Lark Remote Control Window skill/);
-  assert.match(prompt, /record the result with Lark Remote MCP/);
+  assert.match(prompt, /First call lark_route_remote_command/);
+  assert.match(prompt, /Do not choose tools by guessing/);
   assert.doesNotMatch(prompt, /\[Lark Remote dispatch\]/);
   assert.match(prompt, /remoteCommandId: rcmd_dispatch/);
   assert.match(prompt, /- title: 修复 lark 远程派发/);
@@ -164,7 +165,7 @@ test("buildHandoffPrompt wraps target dispatch for the control window", () => {
   assert.doesNotMatch(prompt, /Control-window routing contract/);
   assert.doesNotMatch(prompt, /Permission boundary/);
   assert.doesNotMatch(prompt, /Selected target session/);
-  assert.ok(prompt.split("\n").length <= 14);
+  assert.ok(prompt.split("\n").length <= 18);
 });
 
 test("CodexCliRunner sends a handoff started acknowledgement by default", async () => {

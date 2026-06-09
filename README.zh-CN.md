@@ -249,7 +249,10 @@ LLM 输出在聊天里连成一段。
 同步到飞书。
 
 控制 Codex 窗口使用职责专一的 Lark Remote MCP 工具，而不是宽泛 context 快照：
-`lark_prepare_dispatch` / `lark_record_dispatch` 负责目标线程派发，
+每条飞书/Lark 远程命令都先调用 `lark_route_remote_command`，由它返回明确的
+action、next tool 和 completion tool。目标线程派发使用 route 返回的 Codex
+宿主线程工具，然后通过 `lark_record_dispatch` 记录结果；底层
+`lark_prepare_dispatch` 只保留给 route 驱动的派发准备和诊断使用。
 `lark_list_projects` / `lark_select_project` / `lark_list_project_sessions`
 负责项目和会话路由，`lark_select_target` / `lark_confirm_takeover`
 负责接管，`lark_start_observation` / `lark_stop_observation` 负责只读观察，

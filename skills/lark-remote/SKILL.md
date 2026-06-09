@@ -49,10 +49,16 @@ is delivered to the control Codex window.
 
 The control window decides whether a message is a Lark Remote control action,
 project/session selection, observation, takeover, clarification, direct state
-answer, or target-thread dispatch. For target-thread dispatch it must use:
+answer, or target-thread dispatch by first calling:
 
 ```text
-lark_prepare_dispatch(remoteCommandId)
+lark_route_remote_command(remoteCommandId)
+```
+
+The router returns the exact action and next tool. For target-thread dispatch it
+will direct the control window to use:
+
+```text
 Codex host thread send tool
 lark_record_dispatch(remoteCommandId, ...)
 ```

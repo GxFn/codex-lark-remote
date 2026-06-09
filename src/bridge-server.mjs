@@ -5,6 +5,7 @@ import { DEFAULT_BRIDGE_HOST, configFilePath, ensureDir, loadConfig, nowIso, rea
 import { runApprovedAction } from "./actions.mjs";
 import { decryptLarkPayload, verifyLarkSignature } from "./crypto.mjs";
 import { updateRuntimeConfig } from "./config-writer.mjs";
+import { parseControlSemanticAction } from "./control-semantics.mjs";
 import { activateHandoff, clearHandoff, readHandoff } from "./handoff.mjs";
 import { routeChatTextAction } from "./intent-router.mjs";
 import {
@@ -263,6 +264,12 @@ async function route(ctx) {
     const { body } = await readJson(req);
     const prepared = await prepareDispatchCommand(ctx, body.remoteCommandId || body.commandId || body.id);
     return sendJson(res, prepared.success ? 200 : 404, prepared);
+  }
+
+  if (req.method === "POST" && url.pathname === "/bridge/remote-command/route") {
+    const { body } = await readJson(req);
+    const routed = await routeRemoteCommand(ctx, body.remoteCommandId || body.commandId || body.id);
+    return sendJson(res, routed.success ? 200 : 404, routed);
   }
 
   if (req.method === "POST" && url.pathname === "/bridge/dispatch/record") {
@@ -1243,6 +1250,115 @@ export async function prepareDispatchCommand(ctx, remoteCommandId) {
   };
 }
 
+export async function routeRemoteCommand(ctx, remoteCommandId) {
+  const command = remoteCommandId && typeof ctx.queue.get === "function" ? await ctx.queue.get(remoteCommandId) : null;
+  if (!command) {
+    return { success: false, error: "Remote command not found." };
+  }
+  if (command.mode !== "thread_handoff") {
+    return { success: false, error: "Remote command is not a control-window command.", data: { remoteCommandId: command.id } };
+  }
+
+  const [handoff, takeover] = await Promise.all([
+    readHandoff({ dataDir: ctx.config.dataDir }),
+    readTakeover({ dataDir: ctx.config.dataDir }),
+  ]);
+  const text = String(command.normalizedTask || command.prompt || "").trim();
+  const target = normalizeDispatchTarget(command.dispatchTarget)
+    || (["active", "pending"].includes(takeover?.state || "") ? normalizeDispatchTarget(takeover.target) : null);
+  const controlAction = parseControlSemanticAction(text, {
+    mode: "console",
+    state: { handoff, takeover },
+  });
+  if (controlAction) {
+    const routed = routeControlAction(controlAction, { command, target });
+    return {
+      success: true,
+      data: {
+        remoteCommandId: command.id,
+        feishuMessage: text,
+        activeTarget: target,
+        controlWindowContract: controlWindowRouteContract(routed),
+        ...routed,
+      },
+      text: routed.summary,
+    };
+  }
+
+  const prepared = await prepareDispatchCommand(ctx, command.id);
+  if (!prepared.success) return prepared;
+  if (prepared.data.action === "dispatch") {
+    return {
+      success: true,
+      data: {
+        ...prepared.data,
+        action: "dispatch",
+        nextTool: prepared.data.capabilities?.hostThreadSend?.tool || "send_message_to_thread",
+        completionTool: "lark_record_dispatch",
+        toolInput: {
+          threadId: prepared.data.target?.threadId || "",
+          prompt: prepared.data.targetPrompt || "",
+        },
+        completionToolInput: {
+          remoteCommandId: command.id,
+          status: "sent",
+          targetThreadId: prepared.data.target?.threadId || "",
+          targetTitle: prepared.data.target?.name || "",
+          hostTool: prepared.data.capabilities?.hostThreadSend?.tool || "send_message_to_thread",
+        },
+        controlWindowContract: controlWindowRouteContract({ action: "dispatch", completionTool: "lark_record_dispatch" }),
+        summary: "Dispatch this work request to the selected target session.",
+      },
+      text: "Dispatch this work request to the selected target session.",
+    };
+  }
+  if (prepared.data.action === "clarify") {
+    return {
+      success: true,
+      data: {
+        ...prepared.data,
+        action: "clarify",
+        nextTool: "lark_request_clarification",
+        question: "这条消息要投递到哪个 Codex 会话？",
+        toolInput: {
+          remoteCommandId: command.id,
+          question: "这条消息要投递到哪个 Codex 会话？",
+        },
+        completionTool: "lark_request_clarification",
+        completionToolInput: {
+          remoteCommandId: command.id,
+          question: "这条消息要投递到哪个 Codex 会话？",
+        },
+        controlWindowContract: controlWindowRouteContract({ action: "clarify", completionTool: "lark_request_clarification" }),
+        summary: "Ask the Feishu/Lark user to select a target session.",
+      },
+      text: "Ask the Feishu/Lark user to select a target session.",
+    };
+  }
+  return {
+    success: true,
+    data: {
+      ...prepared.data,
+      action: "blocked",
+      nextTool: "lark_record_dispatch",
+      completionTool: "lark_record_dispatch",
+      toolInput: {
+        remoteCommandId: command.id,
+        status: "blocked_retryable",
+        error: prepared.data.reason || "Dispatch is blocked.",
+      },
+      completionToolInput: {
+        remoteCommandId: command.id,
+        status: "blocked_retryable",
+        error: prepared.data.reason || "Dispatch is blocked.",
+      },
+      controlWindowContract: controlWindowRouteContract({ action: "blocked", completionTool: "lark_record_dispatch" }),
+      summary: prepared.data.reason || "Dispatch is blocked.",
+    },
+    text: prepared.data.reason || "Dispatch is blocked.",
+  };
+}
+
 export async function recordDispatchCommand(ctx, input = {}) {
   const remoteCommandId = input.remoteCommandId || input.commandId || input.id || "";
   const command = remoteCommandId && typeof ctx.queue.get === "function" ? await ctx.queue.get(remoteCommandId) : null;
@@ -1331,6 +1447,100 @@ export async function replyRemoteCommand(ctx, input = {}) {
 function buildTargetDispatchPrompt(command = {}) {
   const prompt = String(command.normalizedTask || command.prompt || "").trim();
   return ["[Lark Remote dispatch]", prompt].filter(Boolean).join("\n");
+}
+
+function routeControlAction(action = {}, { command = {} } = {}) {
+  const remoteCommandId = command.id || "";
+  const selector = action.selector || action.optionIndex || action.threadId || "";
+  const control = (nextTool, toolInput, summary) =>
+    controlRoute("control", nextTool, toolInput, summary, remoteCommandId);
+  switch (action.kind) {
+    case "status":
+    case "handoff_status":
+    case "takeover_status":
+      return control("lark_get_bridge_status", {}, "Read Lark Remote status, then reply with lark_reply_remote_command.");
+    case "help":
+      return controlReplyRoute("可用操作：项目列表、进入项目 1、会话列表、接管 1、观察会话 2、退出接管、status。", remoteCommandId);
+    case "whoami":
+      return controlReplyRoute("请在飞书里发送 whoami 获取当前用户身份。", remoteCommandId);
+    case "takeover_list":
+      return control("lark_list_projects", {}, "List projects, then reply with lark_reply_remote_command.");
+    case "takeover_project_select":
+      return control("lark_select_project", { selector }, "Select the project, then reply with lark_reply_remote_command.");
+    case "takeover_window_list":
+      return control("lark_list_project_sessions", {}, "List sessions, then reply with lark_reply_remote_command.");
+    case "takeover_select":
+      return control("lark_select_target", { selector }, "Select the target session, then reply with lark_reply_remote_command.");
+    case "takeover_confirm":
+    case "takeover_execute":
+      return control("lark_confirm_takeover", { selector }, "Confirm takeover, then reply with lark_reply_remote_command.");
+    case "takeover_observe":
+    case "observe_enable":
+      return control("lark_start_observation", { selector, remoteCommandId }, "Start observation, then reply with lark_reply_remote_command.");
+    case "observe_list":
+      return control("lark_list_observation_targets", {}, "List observation targets, then reply with lark_reply_remote_command.");
+    case "observe_disable":
+      return control("lark_stop_observation", {}, "Stop observation, then reply with lark_reply_remote_command.");
+    case "handoff_disable":
+    case "takeover_disable":
+      return control("lark_clear_active_target", {}, "Clear the active target, then reply with lark_reply_remote_command.");
+    case "bridge_stop_confirm":
+      return controlReplyRoute("关闭飞书连接会断开后续回复。请发送“确认关闭飞书连接”继续。", remoteCommandId);
+    case "command_visibility":
+      return controlReplyRoute(action.enabled === false ? "已收到：隐藏命令输出。" : "已收到：显示命令输出。", remoteCommandId);
+    default:
+      return {
+        action: "clarify",
+        nextTool: "lark_request_clarification",
+        question: "我还没识别出这条控制指令，要查看项目列表还是投递到当前会话？",
+        toolInput: {
+          remoteCommandId,
+          question: "我还没识别出这条控制指令，要查看项目列表还是投递到当前会话？",
+        },
+        completionTool: "lark_request_clarification",
+        completionToolInput: {
+          remoteCommandId,
+          question: "我还没识别出这条控制指令，要查看项目列表还是投递到当前会话？",
+        },
+        controlWindowContract: controlWindowRouteContract({ action: "clarify", completionTool: "lark_request_clarification" }),
+        summary: "Ask for clarification.",
+      };
+  }
+}
+
+function controlRoute(action, nextTool, toolInput, summary, remoteCommandId = "") {
+  return {
+    action,
+    nextTool,
+    toolInput,
+    completionTool: "lark_reply_remote_command",
+    completionToolInput: { remoteCommandId },
+    controlWindowContract: controlWindowRouteContract({ action, completionTool: "lark_reply_remote_command" }),
+    summary,
+  };
+}
+
+function controlReplyRoute(text, remoteCommandId = "") {
+  return {
+    action: "control_reply",
+    nextTool: "lark_reply_remote_command",
+    toolInput: { remoteCommandId, text },
+    completionTool: "lark_reply_remote_command",
+    completionToolInput: { remoteCommandId, text },
+    controlWindowContract: controlWindowRouteContract({ action: "control_reply", completionTool: "lark_reply_remote_command" }),
+    summary: "Reply directly and mark the command handled.",
+  };
+}
+
+function controlWindowRouteContract(route = {}) {
+  return {
+    role: "control_window",
+    firstToolAlreadyCalled: "lark_route_remote_command",
+    nextToolIsAuthoritative: true,
+    localRepositoryWorkAllowed: false,
+    completionRequired: route.completionTool || "",
+    finishAfterCompletionTool: true,
+  };
 }
 
 function controlWindowCapabilities(handoff = {}) {

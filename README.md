@@ -276,14 +276,18 @@ Feishu/Lark are not echoed back; prompts appended by other sources, such as
 automation or local Codex input, are echoed as `User prompt:` separators.
 
 The control Codex window uses focused Lark Remote MCP tools instead of a broad
-context snapshot: `lark_prepare_dispatch` / `lark_record_dispatch` for target
-thread delivery, `lark_list_projects` / `lark_select_project` /
-`lark_list_project_sessions` for project and session routing,
-`lark_select_target` / `lark_confirm_takeover` for takeover, and
-`lark_start_observation` / `lark_stop_observation` for read-only streams.
-Non-dispatch control actions finish through `lark_reply_remote_command`. The
-bundled Lark Remote Control Window skill tells the control window to pair those
-tools with Codex host thread tools and to explicitly record the final result.
+context snapshot. `lark_route_remote_command` is the required first tool for
+each Feishu/Lark remote command; it returns the exact action, next tool, and
+completion tool. Target delivery uses the returned Codex host thread tool and
+then `lark_record_dispatch`; lower-level `lark_prepare_dispatch` is kept for
+router-driven dispatch preparation and diagnostics. Project/session routing uses
+`lark_list_projects` / `lark_select_project` /
+`lark_list_project_sessions`, takeover uses `lark_select_target` /
+`lark_confirm_takeover`, and read-only streams use `lark_start_observation` /
+`lark_stop_observation`. Non-dispatch control actions finish through
+`lark_reply_remote_command`. The bundled Lark Remote Control Window skill tells
+the control window to pair those tools with Codex host thread tools and to
+explicitly record the final result.
 
 ## Behavior And Boundaries
 

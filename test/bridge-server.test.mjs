@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { prepareDispatchCommand, processLarkEvent, recordDispatchCommand, replyRemoteCommand, startBridge } from "../src/bridge-server.mjs";
+import { prepareDispatchCommand, processLarkEvent, recordDispatchCommand, replyRemoteCommand, routeRemoteCommand, startBridge } from "../src/bridge-server.mjs";
 import { configFilePath, stateFilePath } from "../src/config.mjs";
 import { activateHandoff, readHandoff } from "../src/handoff.mjs";
 import { readIntentSession } from "../src/intent-state.mjs";
@@ -149,6 +149,95 @@ test("remote command reply completes non-dispatch control-window commands", asyn
     messageId: "om_control",
     text: "当前可接管项目：CodexPlugin",
   }]);
+});
+
+test("remote command router returns exact next actions", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-route-command-"));
+  await activateHandoff({
+    dataDir,
+    threadId: "control-thread",
+    cwd: dataDir,
+    capabilities: {
+      hostThreadSend: { available: true, tool: "send_message_to_thread" },
+    },
+  });
+  const queue = new RemoteCommandQueue({ dataDir });
+  const dispatchCommand = await queue.enqueue({
+    source: "lark",
+    mode: "thread_handoff",
+    controlWindowCommand: true,
+    prompt: "全面检查链路",
+    normalizedTask: "全面检查链路",
+    messageId: "om_route_dispatch",
+    chatIdHash: "chat_hash",
+    codexSessionId: "control-thread",
+    dispatchTarget: {
+      threadId: "target-thread",
+      name: "检查并修复 codex-lark-remote 功能",
+      cwd: dataDir,
+    },
+    handoffDispatch: true,
+  });
+  const controlCommand = await queue.enqueue({
+    source: "lark",
+    mode: "thread_handoff",
+    controlWindowCommand: true,
+    prompt: "项目列表",
+    normalizedTask: "项目列表",
+    messageId: "om_route_control",
+    chatIdHash: "chat_hash",
+    codexSessionId: "control-thread",
+  });
+  const clarifyCommand = await queue.enqueue({
+    source: "lark",
+    mode: "thread_handoff",
+    controlWindowCommand: true,
+    prompt: "全面检查链路",
+    normalizedTask: "全面检查链路",
+    messageId: "om_route_clarify",
+    chatIdHash: "chat_hash",
+    codexSessionId: "control-thread",
+  });
+  const ctx = {
+    config: { dataDir },
+    queue,
+    notifier: { reply: async () => {} },
+  };
+
+  const routedDispatch = await routeRemoteCommand(ctx, dispatchCommand.id);
+  assert.equal(routedDispatch.success, true);
+  assert.equal(routedDispatch.data.action, "dispatch");
+  assert.equal(routedDispatch.data.nextTool, "send_message_to_thread");
+  assert.equal(routedDispatch.data.completionTool, "lark_record_dispatch");
+  assert.deepEqual(routedDispatch.data.toolInput, {
+    threadId: "target-thread",
+    prompt: "[Lark Remote dispatch]\n全面检查链路",
+  });
+  assert.deepEqual(routedDispatch.data.completionToolInput, {
+    remoteCommandId: dispatchCommand.id,
+    status: "sent",
+    targetThreadId: "target-thread",
+    targetTitle: "检查并修复 codex-lark-remote 功能",
+    hostTool: "send_message_to_thread",
+  });
+  assert.equal(routedDispatch.data.controlWindowContract.localRepositoryWorkAllowed, false);
+  assert.match(routedDispatch.data.targetPrompt, /全面检查链路/);
+
+  const routedControl = await routeRemoteCommand(ctx, controlCommand.id);
+  assert.equal(routedControl.success, true);
+  assert.equal(routedControl.data.action, "control");
+  assert.equal(routedControl.data.nextTool, "lark_list_projects");
+  assert.equal(routedControl.data.completionTool, "lark_reply_remote_command");
+  assert.deepEqual(routedControl.data.completionToolInput, { remoteCommandId: controlCommand.id });
+
+  const routedClarify = await routeRemoteCommand(ctx, clarifyCommand.id);
+  assert.equal(routedClarify.success, true);
+  assert.equal(routedClarify.data.action, "clarify");
+  assert.equal(routedClarify.data.nextTool, "lark_request_clarification");
+  assert.deepEqual(routedClarify.data.toolInput, {
+    remoteCommandId: clarifyCommand.id,
+    question: "这条消息要投递到哪个 Codex 会话？",
+  });
 });
 
 test("processLarkEvent deduplicates direct command replies and reports websocket status", async () => {

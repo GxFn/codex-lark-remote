@@ -268,16 +268,16 @@ Use the Lark Remote Control Window skill.
 skill 的核心决策树应该是：
 
 ```text
-1. Read feishuMessage and decide whether it is a control action, target work request, or clarification case.
-2. If it is a control action, use the specific Lark Remote MCP control tool.
-3. After a non-dispatch control action, call lark_reply_remote_command.
-4. If it is a target work request, call lark_prepare_dispatch.
-5. If prepare_dispatch says action=dispatch, call the Codex host thread tool.
-6. After host dispatch, call lark_record_dispatch.
+1. For every remoteCommandId, first call lark_route_remote_command.
+2. Follow the returned action, nextTool, toolInput, and completionTool.
+3. If action=dispatch, call the returned Codex host thread tool with targetPrompt.
+4. After host dispatch, call lark_record_dispatch.
+5. If action=control, call the returned Lark Remote control tool, then lark_reply_remote_command.
+6. If action=control_reply, call lark_reply_remote_command.
 7. If action=clarify, call lark_request_clarification.
-8. If action=blocked, call lark_record_dispatch(status="blocked").
+8. If action=blocked, call the returned completion tool with the returned reason.
 9. Do not run repository work in this control window.
-10. End the turn after one action.
+10. End the turn after the completion tool succeeds.
 ```
 
 ### Layer 5: Lark Remote MCP 能力层
@@ -339,8 +339,7 @@ skill 的核心决策树应该是：
 控制窗口调用顺序必须是：
 
 ```text
-classify feishuMessage as target work request
-lark_prepare_dispatch(remoteCommandId)
+lark_route_remote_command(remoteCommandId)
 send_message_to_thread(threadId, targetPrompt)
 lark_record_dispatch(remoteCommandId, status="sent", evidence=...)
 ```
@@ -1028,7 +1027,8 @@ codex exec resume <controlThreadId> <prompt>
 
 ### 运行时使用能力快照
 
-`lark_prepare_dispatch(remoteCommandId)` 读取保存的能力快照：
+`lark_route_remote_command(remoteCommandId)` 读取保存的能力快照，并在派发路径中
+使用低层 `lark_prepare_dispatch` 生成稳定 targetPrompt：
 
 - `hostThreadSend=true`: 可以返回 `action=dispatch`。
 - `hostThreadSend=false`: 返回 `action=blocked`，原因是控制窗口不具备宿主线程发送
@@ -1370,8 +1370,8 @@ README 应表达新产品模型：
 3. envelope 不包含长篇 routing contract。
 4. envelope 包含 `remoteCommandId` 和 active target 摘要。
 5. `lark_lock_control_window` 保存 control thread id 和 host thread 能力。
-6. `lark_prepare_dispatch` 根据 remoteCommandId 返回稳定 targetPrompt。
-7. `lark_prepare_dispatch` 读取锁定能力；能力缺失时返回 blocked，不再次问模型。
+6. `lark_route_remote_command` 根据 remoteCommandId 返回稳定 action、nextTool 和 targetPrompt。
+7. route 读取锁定能力；能力缺失时返回 blocked，不再次问模型。
 8. `lark_record_dispatch(status="sent")` 完成队列任务并触发 Feishu 成功通知。
 9. `lark_record_dispatch(status="blocked")` 保留队列任务。
 10. `lark_request_clarification` 进入 `waiting_clarification`。
@@ -1382,12 +1382,13 @@ README 应表达新产品模型：
 
 1. control-window skill 明确：
    - 有 active target 且是普通任务时，先派发。
-   - 派发前先调用 `lark_prepare_dispatch`，不调用旧 context/debug snapshot。
+   - 派发前先调用 `lark_route_remote_command`，不调用旧 context/debug snapshot。
    - 不在控制窗口执行仓库工作。
    - host thread 能力来自锁定快照，不在每轮重新判断。
 2. plugin layout 测试确认 skill 暴露了：
    - `send_message_to_thread`
    - `lark_lock_control_window`
+   - `lark_route_remote_command`
    - `lark_prepare_dispatch`
    - `lark_record_dispatch`
    - `lark_request_clarification`
@@ -1406,7 +1407,7 @@ README 应表达新产品模型：
 3. Feishu 选择并确认接管目标 A。
 4. 飞书发普通工作请求。
 5. 控制窗口收到短 envelope。
-6. 控制窗口调用 `lark_prepare_dispatch`。
+6. 控制窗口调用 `lark_route_remote_command`。
 7. 控制窗口调用宿主线程工具派发到 A。
 8. 控制窗口调用 `lark_record_dispatch(sent)`。
 9. 队列记录 `dispatch_sent`。

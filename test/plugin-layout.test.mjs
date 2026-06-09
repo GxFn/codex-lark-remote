@@ -10,6 +10,7 @@ const marketplaceUrl = new URL("../.agents/plugins/marketplace.json", import.met
 const rootPluginEntries = [
   ".codex-plugin",
   ".mcp.json",
+  "AGENTS.md",
   "README.md",
   "README.zh-CN.md",
   "assets",
@@ -100,6 +101,19 @@ test("keeps the repository root as the plugin root", async () => {
   assert.equal(docsStat.isDirectory(), true, "implementation docs may ship at the plugin root");
 });
 
+test("ships a plugin-root agent guide for global Lark Remote behavior", async () => {
+  const guide = await fs.readFile(new URL("../AGENTS.md", import.meta.url), "utf8");
+
+  assert.match(guide, /Global Contract/);
+  assert.match(guide, /lark-remote-control-window/);
+  assert.match(guide, /lark_route_remote_command/);
+  assert.match(guide, /lark_record_dispatch/);
+  assert.match(guide, /lark_reply_remote_command/);
+  assert.match(guide, /lark_request_clarification/);
+  assert.match(guide, /send_message_to_thread/);
+  assert.doesNotMatch(guide, /codex_lark_/);
+});
+
 test("keeps full plugin-root READMEs", async () => {
   for (const { rootUrl, language, requiredRootPatterns } of readmePairs) {
     const rootReadme = await fs.readFile(rootUrl, "utf8");
@@ -142,6 +156,7 @@ test("exposes control-window MCP tools and skill guidance", async () => {
   );
   const requiredTools = [
     "lark_prepare_dispatch",
+    "lark_route_remote_command",
     "lark_record_dispatch",
     "lark_request_clarification",
     "lark_reply_remote_command",
@@ -165,6 +180,10 @@ test("exposes control-window MCP tools and skill guidance", async () => {
   }
 
   assert.match(controlSkill, /remoteCommandId/);
+  assert.match(controlSkill, /lark_route_remote_command/);
+  assert.match(controlSkill, /toolInput/);
+  assert.match(controlSkill, /completionToolInput/);
+  assert.match(controlSkill, /Full Lifecycle/);
   assert.match(controlSkill, /host thread/);
   assert.match(controlSkill, /lark_prepare_dispatch/);
   assert.match(controlSkill, /lark_record_dispatch/);

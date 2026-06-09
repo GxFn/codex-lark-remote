@@ -374,8 +374,21 @@ const tools = [
     },
   },
   {
+    name: "lark_route_remote_command",
+    description: "Required first MCP for every Lark Remote control-window prompt containing remoteCommandId. Returns the exact action, nextTool, toolInput, and completion tool; follow it before any dispatch or control action.",
+    inputSchema: {
+      type: "object",
+      required: ["remoteCommandId"],
+      properties: {
+        remoteCommandId: { type: "string" },
+        dataDir: { type: "string" },
+        configPath: { type: "string" },
+      },
+    },
+  },
+  {
     name: "lark_prepare_dispatch",
-    description: "Prepare target-thread dispatch after the control window has decided that a Feishu/Lark remote command is an ordinary work request for the selected target session.",
+    description: "Low-level target dispatch preparation. Do not call as the first step for control-window prompts; use lark_route_remote_command first and call this only when the router or diagnostics require it.",
     inputSchema: {
       type: "object",
       required: ["remoteCommandId"],
@@ -388,7 +401,7 @@ const tools = [
   },
   {
     name: "lark_record_dispatch",
-    description: "Record the result of a control-window host thread dispatch. This is the only success signal for active-target dispatch.",
+    description: "Required completion tool after a control window uses a host thread tool for target dispatch. This is the only success/failure signal for active-target delivery.",
     inputSchema: {
       type: "object",
       required: ["remoteCommandId", "status"],
@@ -408,7 +421,7 @@ const tools = [
   },
   {
     name: "lark_request_clarification",
-    description: "Ask the Feishu/Lark user for clarification for one remote command and mark it waiting_clarification.",
+    description: "Required completion tool when a routed remote command needs user clarification, such as missing target session or ambiguous intent.",
     inputSchema: {
       type: "object",
       required: ["remoteCommandId", "question"],
@@ -422,7 +435,7 @@ const tools = [
   },
   {
     name: "lark_reply_remote_command",
-    description: "Send one concise Feishu/Lark reply for a non-dispatch control-window command and mark that command handled.",
+    description: "Required completion tool for non-dispatch routed control actions. Sends one concise Feishu/Lark reply and marks the remote command handled.",
     inputSchema: {
       type: "object",
       required: ["remoteCommandId", "text"],
@@ -708,6 +721,12 @@ async function callTool(name, args, request = {}) {
   }
   if (name === "lark_prepare_dispatch") {
     return textContent(formatJson(await bridgeFetch(state, "/bridge/dispatch/prepare", {
+      method: "POST",
+      body: { remoteCommandId: args.remoteCommandId },
+    })));
+  }
+  if (name === "lark_route_remote_command") {
+    return textContent(formatJson(await bridgeFetch(state, "/bridge/remote-command/route", {
       method: "POST",
       body: { remoteCommandId: args.remoteCommandId },
     })));
