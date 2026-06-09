@@ -326,6 +326,7 @@ Codex 插件根目录会通过一个小 wrapper 和 `runtime.tgz` 启动 MCP。
 | 现象 | 检查 |
 | --- | --- |
 | 当前没有 `lark_*` 工具 | 刷新或重新启用插件，然后新开一个 Codex 对话。 |
+| 控制窗口回合结束但没有记录 Lark Remote 结果 | 重启 bridge/新开 Codex 窗口，确保 runner 加载当前插件工具；控制窗口 resume 不能使用 `--ignore-user-config`。 |
 | `status` 显示 `websocket disabled` | 检查 `~/.codex-lark-remote/config.json` 里的 `appId`、`appSecret` 和 `lark.domain`。 |
 | 同一条飞书/Lark 消息收到两次回复 | 停止旧 bridge 进程或重复插件安装。 |
 | Codex 改到了插件缓存目录 | 从目标项目所在的 Codex 对话里启动接管。 |

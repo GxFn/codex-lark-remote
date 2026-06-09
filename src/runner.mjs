@@ -218,12 +218,15 @@ export class CodexCliRunner {
 
   async #runCodexResume(command, prompt, { onEvent } = {}) {
     const runner = this.config.runner || {};
+    const resumeRunner = command.controlWindowCommand
+      ? { ...runner, ignoreUserConfig: false }
+      : runner;
     const resultsDir = path.join(this.config.dataDir, "results");
     await fs.mkdir(resultsDir, { recursive: true });
     const outputFile = path.join(resultsDir, `${safeFileName(command.id)}.txt`);
     const language = await resolveCommandLanguage(this.config, command);
     const args = buildCodexResumeArgs({
-      runner,
+      runner: resumeRunner,
       threadId: command.codexSessionId,
       prompt,
       outputFile,

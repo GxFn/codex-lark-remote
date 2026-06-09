@@ -22,7 +22,7 @@
   "runner": {
     "sandbox": "workspace-write",
     "askForApproval": "never",
-    "ignoreUserConfig": true,
+    "ignoreUserConfig": false,
     "model": ""
   },
   "handoff": {

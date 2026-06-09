@@ -407,6 +407,60 @@ test("CodexCliRunner accepts explicit control-window completion records", async 
   assert.deepEqual(replies, []);
 });
 
+test("CodexCliRunner preserves user config for control-window commands", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-user-config-"));
+  const argsPath = path.join(dataDir, "args.json");
+  const fakeCodex = path.join(dataDir, "fake-codex");
+  await fs.writeFile(fakeCodex, [
+    "#!/usr/bin/env node",
+    "const fs = require('fs');",
+    `fs.writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(process.argv.slice(2)));`,
+    "console.log(JSON.stringify({ type: 'turn.completed' }));",
+    "",
+  ].join("\n"));
+  await fs.chmod(fakeCodex, 0o755);
+
+  let command = {
+    id: "rcmd_control_config",
+    mode: "thread_handoff",
+    status: "pending",
+    notifyStarted: false,
+    controlWindowCommand: true,
+    messageId: "om_1",
+    projectRoot: dataDir,
+    prompt: "项目列表",
+    codexSessionId: "control-thread",
+  };
+  const queue = {
+    claimNext: async () => {
+      if (command.status !== "pending") return null;
+      command = { ...command, status: "running" };
+      return command;
+    },
+    update: async (_id, patch) => {
+      command = { ...command, ...patch };
+      return command;
+    },
+    get: async () => command,
+  };
+  const runner = new CodexCliRunner({
+    queue,
+    config: {
+      dataDir,
+      runner: { codexPath: fakeCodex, ignoreUserConfig: true },
+      handoff: { notifyProgress: false },
+    },
+    notifier: { reply: async () => {} },
+  });
+
+  await runner.processAll();
+
+  const args = JSON.parse(await fs.readFile(argsPath, "utf8"));
+  assert.equal(args.includes("--ignore-user-config"), false);
+  assert.equal(args.includes("resume"), true);
+  assert.match(args.at(-1), /lark_route_remote_command/);
+});
+
 test("CodexCliRunner does not treat dispatch resume exit code as delivery success", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-dispatch-record-"));
   const fakeCodex = path.join(dataDir, "fake-codex");

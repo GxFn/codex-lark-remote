@@ -205,6 +205,12 @@ test("declares a plugin-root cwd for the MCP server", async () => {
   assert.equal(server?.cwd, ".");
 });
 
+test("keeps example runner config compatible with plugin tools", async () => {
+  const config = JSON.parse(await fs.readFile(new URL("../config/example.config.json", import.meta.url), "utf8"));
+
+  assert.equal(config.runner?.ignoreUserConfig, false);
+});
+
 test("ships a self-contained runtime package for Node dependencies", async () => {
   const packageJson = JSON.parse(await fs.readFile(new URL("../package.json", import.meta.url), "utf8"));
   const wrapper = await fs.readFile(

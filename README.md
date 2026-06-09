@@ -359,6 +359,7 @@ entrypoint changes.
 | Symptom | Check |
 | --- | --- |
 | `lark_*` tools are missing | Refresh or re-enable the plugin, then start a new Codex conversation. |
+| Control window turn ends without recording a Lark Remote result | Restart the bridge/new Codex window so the runner loads the current plugin tools; control-window resume must not use `--ignore-user-config`. |
 | `status` says `websocket disabled` | Confirm `appId`, `appSecret`, and `lark.domain` in `~/.codex-lark-remote/config.json`. |
 | Feishu/Lark replies twice | Stop stale bridge processes or duplicate plugin installations. |
 | Codex edits the plugin cache | Start handoff from a Codex conversation whose cwd is the project you want to edit. |
