@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   buildCodexExecArgs,
   buildCodexResumeArgs,
@@ -20,8 +19,6 @@ import {
 } from "../src/runner.mjs";
 import { activateHandoff } from "../src/handoff.mjs";
 import { RemoteCommandQueue } from "../src/queue.mjs";
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 test("buildCodexExecArgs uses supported codex exec flags", () => {
   const args = buildCodexExecArgs({
@@ -93,7 +90,7 @@ test("buildCodexResumeArgs can keep the git repo check when explicitly requested
   assert.equal(args.includes("--skip-git-repo-check"), false);
 });
 
-test("buildCodexResumeArgs auto-approves Lark Remote MCP tools for control windows", () => {
+test("buildCodexResumeArgs does not inject Lark Remote MCP config for control windows", () => {
   const args = buildCodexResumeArgs({
     runner: { ignoreUserConfig: false },
     threadId: "control-thread",
@@ -103,11 +100,9 @@ test("buildCodexResumeArgs auto-approves Lark Remote MCP tools for control windo
   });
 
   assert.equal(args.includes("--ignore-user-config"), false);
-  assert.match(args.join("\n"), /mcp_servers\.lark-remote\.command="node"/);
-  assert.match(args.join("\n"), /mcp_servers\.lark-remote\.args=\[".*codex-lark-remote-mcp-wrapper\.mjs"\]/);
-  assert.match(args.join("\n"), /mcp_servers\.lark-remote\.cwd=".*codex-lark-remote"/);
-  assert.match(args.join("\n"), /mcp_servers\.lark-remote\.default_tools_approval_mode="approve"/);
-  assert.ok(args.indexOf("resume") > args.indexOf('mcp_servers.lark-remote.default_tools_approval_mode="approve"'));
+  assert.equal(args.includes("resume"), true);
+  assert.doesNotMatch(args.join("\n"), /mcp_servers\.lark-remote/);
+  assert.doesNotMatch(args.join("\n"), /codex-lark-remote-mcp-wrapper/);
 });
 
 test("buildHandoffPrompt wraps Feishu input as a control-window message by default", () => {
@@ -230,9 +225,9 @@ test("CodexCliRunner sends a handoff started acknowledgement by default", async 
 
   await runner.processAll();
 
-  assert.deepEqual(replies.find((reply) => reply.text === "已收到，控制 Codex 窗口正在处理这条消息。"), {
+  assert.deepEqual(replies.find((reply) => reply.text === "已收到，Lark Remote 正在路由这条消息。"), {
     messageId: "om_1",
-    text: "已收到，控制 Codex 窗口正在处理这条消息。",
+    text: "已收到，Lark Remote 正在路由这条消息。",
   });
 });
 
@@ -278,9 +273,9 @@ test("CodexCliRunner localizes the handoff started acknowledgement in English", 
 
   await runner.processAll();
 
-  assert.deepEqual(replies.find((reply) => reply.text === "Received. The control Codex window is handling this message."), {
+  assert.deepEqual(replies.find((reply) => reply.text === "Received. Lark Remote is routing this message."), {
     messageId: "om_1",
-    text: "Received. The control Codex window is handling this message.",
+    text: "Received. Lark Remote is routing this message.",
   });
 });
 
@@ -325,8 +320,8 @@ test("CodexCliRunner suppresses the handoff started acknowledgement when explici
 
   await runner.processAll();
 
-  assert.equal(replies.some((reply) => reply.text === "已收到，控制 Codex 窗口正在处理这条消息。"), false);
-  assert.equal(replies.some((reply) => reply.text === "Received. The control Codex window is handling this message."), false);
+  assert.equal(replies.some((reply) => reply.text === "已收到，Lark Remote 正在路由这条消息。"), false);
+  assert.equal(replies.some((reply) => reply.text === "Received. Lark Remote is routing this message."), false);
 });
 
 test("CodexCliRunner suppresses handoff notifications after handoff is off", async () => {
@@ -376,9 +371,6 @@ test("CodexCliRunner suppresses handoff notifications after handoff is off", asy
 
 test("CodexCliRunner accepts explicit control-window completion records", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-control-record-"));
-  const fakeCodex = path.join(dataDir, "fake-codex");
-  await fs.writeFile(fakeCodex, "#!/bin/sh\necho '{\"type\":\"turn.completed\"}'\nexit 0\n");
-  await fs.chmod(fakeCodex, 0o755);
 
   let command = {
     id: "rcmd_control_recorded",
@@ -402,33 +394,59 @@ test("CodexCliRunner accepts explicit control-window completion records", async 
       command = { ...command, ...patch };
       return command;
     },
-    get: async () => {
-      command = {
-        ...command,
-        status: "control_completed",
-        controlStatus: "control_completed",
-        result: "当前可接管项目：CodexPlugin",
-      };
-      return command;
-    },
+    get: async () => command,
   };
+  const bridgeCalls = [];
   const runner = new CodexCliRunner({
     queue,
     config: {
       dataDir,
-      runner: { codexPath: fakeCodex },
+      runner: { codexPath: "codex" },
       handoff: { notifyProgress: true },
     },
     notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+    bridgeClient: {
+      readState: async () => ({ url: "mock://bridge", token: "token" }),
+      fetch: async (_state, route, options = {}) => {
+        bridgeCalls.push({ route, body: options.body || null });
+        if (route === "/bridge/remote-command/route") {
+          return {
+            success: true,
+            data: {
+              action: "control_reply",
+              toolInput: {
+                remoteCommandId: command.id,
+                text: "当前可接管项目：CodexPlugin",
+              },
+            },
+          };
+        }
+        if (route === "/bridge/remote-command/reply") {
+          command = {
+            ...command,
+            status: "control_completed",
+            controlStatus: "control_completed",
+            result: options.body.text,
+          };
+          return { success: true, data: command, text: options.body.text };
+        }
+        throw new Error(`unexpected route ${route}`);
+      },
+    },
   });
 
   await runner.processAll();
 
   assert.equal(command.status, "control_completed");
+  assert.equal(command.result, "当前可接管项目：CodexPlugin");
+  assert.deepEqual(bridgeCalls.map((call) => call.route), [
+    "/bridge/remote-command/route",
+    "/bridge/remote-command/reply",
+  ]);
   assert.deepEqual(replies, []);
 });
 
-test("CodexCliRunner preserves user config for control-window commands", async () => {
+test("CodexCliRunner executes control-window commands through the bridge client instead of codex exec", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-user-config-"));
   const argsPath = path.join(dataDir, "args.json");
   const fakeCodex = path.join(dataDir, "fake-codex");
@@ -464,6 +482,7 @@ test("CodexCliRunner preserves user config for control-window commands", async (
     },
     get: async () => command,
   };
+  const bridgeCalls = [];
   const runner = new CodexCliRunner({
     queue,
     config: {
@@ -472,22 +491,56 @@ test("CodexCliRunner preserves user config for control-window commands", async (
       handoff: { notifyProgress: false },
     },
     notifier: { reply: async () => {} },
+    bridgeClient: {
+      readState: async () => ({ url: "mock://bridge", token: "token" }),
+      fetch: async (_state, route, options = {}) => {
+        bridgeCalls.push({ route, body: options.body || null });
+        if (route === "/bridge/remote-command/route") {
+          return {
+            success: true,
+            data: {
+              action: "control_reply",
+              toolInput: {
+                remoteCommandId: command.id,
+                text: "当前可接管项目：CodexPlugin",
+              },
+            },
+          };
+        }
+        if (route === "/bridge/remote-command/reply") {
+          command = {
+            ...command,
+            status: "control_completed",
+            controlStatus: "control_completed",
+            result: options.body.text,
+          };
+          return { success: true, data: command, text: options.body.text };
+        }
+        throw new Error(`unexpected route ${route}`);
+      },
+    },
   });
 
   await runner.processAll();
 
-  const args = JSON.parse(await fs.readFile(argsPath, "utf8"));
-  assert.equal(args.includes("--ignore-user-config"), false);
-  assert.equal(args.includes("resume"), true);
-  assert.ok(args.includes('mcp_servers.lark-remote.default_tools_approval_mode="approve"'));
-  assert.match(args.join("\n"), /codex-lark-remote-mcp-wrapper\.mjs/);
-  assert.match(args.at(-1), /lark_route_remote_command/);
+  assert.equal(command.status, "control_completed");
+  assert.deepEqual(bridgeCalls.map((call) => call.route), [
+    "/bridge/remote-command/route",
+    "/bridge/remote-command/reply",
+  ]);
+  await assert.rejects(fs.stat(argsPath), { code: "ENOENT" });
 });
 
-test("CodexCliRunner does not treat dispatch resume exit code as delivery success", async () => {
+test("CodexCliRunner does not fall back to codex exec when local control routing is unavailable", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-dispatch-record-"));
+  const argsPath = path.join(dataDir, "args.jsonl");
   const fakeCodex = path.join(dataDir, "fake-codex");
-  await fs.writeFile(fakeCodex, "#!/bin/sh\necho '{\"type\":\"turn.completed\"}'\nexit 0\n");
+  await fs.writeFile(fakeCodex, [
+    "#!/usr/bin/env node",
+    `require('node:fs').appendFileSync(${JSON.stringify(argsPath)}, process.argv.slice(2).join(' ') + '\\n');`,
+    "console.log('{\"type\":\"turn.completed\"}');",
+    "",
+  ].join("\n"));
   await fs.chmod(fakeCodex, 0o755);
   await activateHandoff({
     dataDir,
@@ -540,28 +593,24 @@ test("CodexCliRunner does not treat dispatch resume exit code as delivery succes
 
   await runner.processAll();
 
-  assert.equal(command.status, "blocked_retryable");
-  assert.match(command.error, /没有记录 Lark Remote 处理结果/);
+  assert.equal(command.status, "failed");
+  assert.match(command.error, /bridge 状态不可用/);
   assert.equal(replies.length, 2);
   assert.equal(replies[0].messageId, "om_1");
-  assert.equal(replies[0].text, "已收到，控制 Codex 窗口正在处理这条消息。");
+  assert.equal(replies[0].text, "已收到，Lark Remote 正在路由这条消息。");
   assert.equal(replies[1].messageId, "om_1");
-  assert.match(replies[1].text, /没有记录 Lark Remote 处理结果/);
+  assert.match(replies[1].text, /bridge 状态不可用/);
+  await assert.rejects(fs.stat(argsPath), { code: "ENOENT" });
 });
 
 test("CodexCliRunner accepts a real routed control-window dispatch record", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-control-dispatch-"));
   const argsPath = path.join(dataDir, "args.json");
-  const routePath = path.join(dataDir, "route.json");
-  const recordPath = path.join(dataDir, "record.json");
-  const repliesPath = path.join(dataDir, "child-replies.jsonl");
   const deliveriesPath = path.join(dataDir, "host-deliveries.jsonl");
   const fakeCodex = path.join(dataDir, "fake-codex");
   await fs.writeFile(fakeCodex, [
     "#!/usr/bin/env node",
     "const fs = require('node:fs');",
-    "const path = require('node:path');",
-    "const { pathToFileURL } = require('node:url');",
     "async function main() {",
     "  const args = process.argv.slice(2);",
     `  fs.appendFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args) + '\\n');`,
@@ -572,34 +621,7 @@ test("CodexCliRunner accepts a real routed control-window dispatch record", asyn
     "    console.log(JSON.stringify({ type: 'turn.completed' }));",
     "    return;",
     "  }",
-    "  const match = prompt.match(/remoteCommandId:\\s*([^\\s]+)/);",
-    "  if (!match) throw new Error('missing remoteCommandId in control prompt');",
-    "  const remoteCommandId = match[1];",
-    `  const repoRoot = ${JSON.stringify(repoRoot)};`,
-    `  const dataDir = ${JSON.stringify(dataDir)};`,
-    "  const { RemoteCommandQueue } = await import(pathToFileURL(path.join(repoRoot, 'src/queue.mjs')).href);",
-    "  const { dispatchRemoteCommand, routeRemoteCommand } = await import(pathToFileURL(path.join(repoRoot, 'src/bridge-server.mjs')).href);",
-    "  const queue = new RemoteCommandQueue({ dataDir });",
-    "  const ctx = {",
-    "    config: { dataDir },",
-    "    queue,",
-    "    notifier: {",
-    "      reply: async (messageId, text) => {",
-    `        fs.appendFileSync(${JSON.stringify(repliesPath)}, JSON.stringify({ messageId, text }) + '\\n');`,
-    "        return { ok: true, messageId: `reply_${messageId}` };",
-    "      },",
-    "    },",
-    "    runner: { processAll: async () => {} },",
-    "  };",
-    "  const route = await routeRemoteCommand(ctx, remoteCommandId);",
-    `  fs.writeFileSync(${JSON.stringify(routePath)}, JSON.stringify(route, null, 2));`,
-    "  if (!route.success || route.data?.action !== 'dispatch') {",
-    "    throw new Error(`expected dispatch route, got ${JSON.stringify(route)}`);",
-    "  }",
-    "  const record = await dispatchRemoteCommand(ctx, route.data.toolInput);",
-    `  fs.writeFileSync(${JSON.stringify(recordPath)}, JSON.stringify(record, null, 2));`,
-    "  if (!record.success) throw new Error(`record failed: ${JSON.stringify(record)}`);",
-    "  console.log(JSON.stringify({ type: 'turn.completed' }));",
+    "  throw new Error('control-window codex exec should not run for local dispatch');",
     "}",
     "main().catch((error) => {",
     "  console.error(error.stack || error.message);",
@@ -620,6 +642,66 @@ test("CodexCliRunner accepts a real routed control-window dispatch record", asyn
   });
 
   const queue = new RemoteCommandQueue({ dataDir });
+  const bridgeRequests = [];
+  const bridgeClient = {
+    readState: async () => ({ url: "mock://bridge", token: "token" }),
+    fetch: async (_state, route, options = {}) => {
+      const body = options.body || {};
+      bridgeRequests.push({ route, body });
+      if (route === "/bridge/remote-command/route") {
+        return {
+          success: true,
+          data: {
+            action: "dispatch",
+            nextTool: "lark_dispatch_remote_command",
+            completionTool: "lark_dispatch_remote_command",
+            toolInput: { remoteCommandId: body.remoteCommandId },
+          },
+        };
+      }
+      if (route === "/bridge/dispatch/execute") {
+        const original = await queue.get(body.remoteCommandId);
+        const targetCommand = await queue.enqueue({
+          source: "lark",
+          mode: "thread_handoff",
+          presentation: "chat",
+          notifyQueued: false,
+          notifyStarted: false,
+          controlWindowCommand: false,
+          targetWindowDispatch: true,
+          handoffDispatch: true,
+          parentRemoteCommandId: original.id,
+          dispatchTarget: original.dispatchTarget,
+          repoKey: "current",
+          projectRoot: original.dispatchTarget.cwd,
+          prompt: `[Lark Remote dispatch]\n${original.prompt}`,
+          normalizedTask: original.normalizedTask,
+          messageId: original.messageId,
+          chatIdHash: original.chatIdHash,
+          userIdHash: original.userIdHash,
+          userName: original.userName,
+          codexSessionId: original.dispatchTarget.threadId,
+        });
+        await queue.update(
+          original.id,
+          {
+            status: "dispatch_sent",
+            dispatchStatus: "dispatch_sent",
+            dispatchTargetCommandId: targetCommand.id,
+            dispatchTargetThreadId: original.dispatchTarget.threadId,
+            dispatchTargetTitle: original.dispatchTarget.name,
+            dispatchHostTool: "lark_dispatch_remote_command",
+            dispatchReadbackOk: true,
+            result: "已派发到：检查并修复 codex-lark-remote 功能",
+            completedAt: new Date().toISOString(),
+          },
+          "dispatch_recorded",
+        );
+        return { success: true, data: { targetCommand } };
+      }
+      throw new Error(`unexpected route ${route}`);
+    },
+  };
   await queue.enqueue({
     id: "rcmd_control_dispatch_e2e",
     source: "lark",
@@ -648,6 +730,7 @@ test("CodexCliRunner accepts a real routed control-window dispatch record", asyn
       handoff: { notifyProgress: false, notifyStarted: false },
     },
     notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+    bridgeClient,
   });
 
   await runner.processAll();
@@ -659,41 +742,34 @@ test("CodexCliRunner accepts a real routed control-window dispatch record", asyn
   assert.equal(command.dispatchHostTool, "lark_dispatch_remote_command");
   assert.equal(command.dispatchReadbackOk, true);
   assert.match(command.result, /已派发到：检查并修复 codex-lark-remote 功能/);
-  assert.deepEqual(replies, [{
-    messageId: "om_1",
-    text: "目标线程已收到并处理任务。",
-  }]);
+  assert.deepEqual(replies, [
+    {
+      messageId: "om_1",
+      text: "目标线程已收到并处理任务。",
+    },
+  ]);
 
   const argRuns = (await fs.readFile(argsPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
-  assert.equal(argRuns.length, 2);
-  assert.equal(argRuns[0].includes("--ignore-user-config"), false);
-  assert.match(argRuns[0].at(-1), /remoteCommandId: rcmd_control_dispatch_e2e/);
-  assert.match(argRuns[1].at(-1), /^\[Lark Remote dispatch\]\n全面检查一下各个链路功能/);
-
-  const route = JSON.parse(await fs.readFile(routePath, "utf8"));
-  assert.equal(route.data.action, "dispatch");
-  assert.equal(route.data.nextTool, "lark_dispatch_remote_command");
-  assert.equal(route.data.completionTool, "lark_dispatch_remote_command");
-  assert.equal(route.data.toolInput.remoteCommandId, "rcmd_control_dispatch_e2e");
+  assert.equal(argRuns.length, 1);
+  assert.match(argRuns[0].at(-1), /^\[Lark Remote dispatch\]\n全面检查一下各个链路功能/);
+  assert.doesNotMatch(argRuns[0].at(-1), /remoteCommandId/);
+  assert.doesNotMatch(argRuns[0].at(-1), /lark_route_remote_command/);
+  assert.deepEqual(bridgeRequests.map((item) => item.route), [
+    "/bridge/remote-command/route",
+    "/bridge/dispatch/execute",
+  ]);
+  assert.equal(bridgeRequests[0].body.remoteCommandId, "rcmd_control_dispatch_e2e");
+  assert.equal(bridgeRequests[1].body.remoteCommandId, "rcmd_control_dispatch_e2e");
 
   const [delivery] = (await fs.readFile(deliveriesPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
   assert.match(delivery.prompt, /^\[Lark Remote dispatch\]\n全面检查一下各个链路功能/);
   assert.doesNotMatch(delivery.prompt, /remoteCommandId/);
   assert.doesNotMatch(delivery.prompt, /lark_route_remote_command/);
 
-  const record = JSON.parse(await fs.readFile(recordPath, "utf8"));
-  assert.equal(record.success, true);
-  assert.equal(record.data.recorded.status, "dispatch_sent");
-  assert.equal(record.data.targetCommand.targetWindowDispatch, true);
-  assert.equal(record.data.targetCommand.codexSessionId, "target-thread");
-
-  const childReplies = (await fs.readFile(repliesPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
-  assert.deepEqual(childReplies, [
-    {
-      messageId: "om_1",
-      text: "已派发到：检查并修复 codex-lark-remote 功能",
-    },
-  ]);
+  const targetCommand = await queue.get(command.dispatchTargetCommandId);
+  assert.equal(targetCommand.targetWindowDispatch, true);
+  assert.equal(targetCommand.controlWindowCommand, false);
+  assert.equal(targetCommand.codexSessionId, "target-thread");
 });
 
 test("CodexCliRunner only echoes non-Lark user prompts during handoff progress", async () => {

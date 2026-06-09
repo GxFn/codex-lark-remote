@@ -103,10 +103,10 @@ test("console mode intro is a natural-language control card", () => {
 
   assert.match(text, /已进入外层自然语言控制台/);
   assert.match(text, /线程派发模式/);
-  assert.match(text, /专用 Codex 控制窗口/);
+  assert.match(text, /Lark Remote 本地路由/);
   assert.match(text, /进入项目 1/);
   assert.match(rendered, /自然语言控制台/);
-  assert.match(rendered, /专用 Codex 控制窗口/);
+  assert.match(rendered, /Lark Remote 本地路由/);
   assert.match(rendered, /接管 1/);
   assert.match(rendered, /关闭飞书连接/);
   assert.match(rendered, /startup_windows/);
@@ -207,7 +207,7 @@ test("buildBridgeStatusCard explains mode and next message route", () => {
   const rendered = JSON.stringify(card);
   assert.match(rendered, /Lark Remote 状态/);
   assert.match(rendered, /线程派发/);
-  assert.match(rendered, /交给控制 Codex 窗口作为线程派发请求/);
+  assert.match(rendered, /由 Lark Remote 作为线程派发请求路由/);
   assert.match(rendered, /Running target/);
   assert.match(rendered, /配置验证/);
 });

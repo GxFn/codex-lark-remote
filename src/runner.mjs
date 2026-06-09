@@ -1,25 +1,23 @@
 import { execFile, spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { nowIso, safeFileName, worktreeRoot } from "./config.mjs";
 import { readHandoff } from "./handoff.mjs";
 import { resolveIntentSessionLanguage } from "./intent-state.mjs";
 import { formatFinal, formatHandoffSessionBusy, formatProgress } from "./presenter.mjs";
 import { buildRunnerPrompt } from "./prompt.mjs";
+import { bridgeFetch, readBridgeState } from "./supervisor.mjs";
 import { detectSessionStatus } from "./takeover.mjs";
 
 const execFileP = promisify(execFile);
-const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-const pluginRoot = path.resolve(moduleDir, "..");
-const larkRemoteMcpWrapperPath = path.join(pluginRoot, "bin", "codex-lark-remote-mcp-wrapper.mjs");
 
 export class CodexCliRunner {
-  constructor({ queue, config, notifier }) {
+  constructor({ queue, config, notifier, bridgeClient }) {
     this.queue = queue;
     this.config = config;
     this.notifier = notifier;
+    this.bridgeClient = bridgeClient || {};
     this.busy = false;
   }
 
@@ -155,6 +153,10 @@ export class CodexCliRunner {
         const language = await resolveCommandLanguage(this.config, command);
         await this.#notify(command, formatHandoffStarted({ language, dispatchTarget: command.dispatchTarget }));
       }
+      if (command.controlWindowCommand) {
+        await this.#runRemoteControlCommand(command);
+        return;
+      }
       const progressNotifier = createProgressNotifier({
         command,
         config: this.config,
@@ -164,25 +166,6 @@ export class CodexCliRunner {
       const result = await this.#runCodexResume(command, prompt, { onEvent: progressNotifier });
       if (await this.#isCancelled(command.id)) return;
       const language = await resolveCommandLanguage(this.config, command);
-      if (command.controlWindowCommand) {
-        const latest = await this.queue.get(command.id);
-        if (hasControlWindowRecord(latest)) return;
-        const blocked = await this.queue.update(
-          command.id,
-          {
-            status: "blocked_retryable",
-            error: language === "en"
-              ? "The control window turn ended without recording a Lark Remote result."
-              : "控制窗口回合结束，但没有记录 Lark Remote 处理结果。",
-            result: "",
-            progressSummary: result.progressSummary || "",
-            completedAt: nowIso(),
-          },
-          "control_record_missing",
-        );
-        await this.#notify(blocked || command, formatFinal(blocked || command));
-        return;
-      }
       const diffSummary = command.projectRoot ? await gitMaybe(["-C", command.projectRoot, "diff", "--stat"]) : "";
 
       const updated = await this.queue.update(
@@ -220,22 +203,87 @@ export class CodexCliRunner {
     }
   }
 
+  async #runRemoteControlCommand(command) {
+    const state = this.bridgeClient.readState
+      ? await this.bridgeClient.readState({
+        dataDir: this.config.dataDir,
+        configPath: this.config.configPath,
+      })
+      : await readBridgeState({
+        dataDir: this.config.dataDir,
+        configPath: this.config.configPath,
+      });
+    if (!state?.url || !state?.token) {
+      const language = await resolveCommandLanguage(this.config, command);
+      throw new Error(
+        language === "en"
+          ? "Lark Remote bridge state is unavailable, so the control command cannot be routed locally."
+          : "Lark Remote bridge 状态不可用，无法在本地路由这条控制消息。",
+      );
+    }
+
+    const fetchBridge = this.bridgeClient.fetch || bridgeFetch;
+    const route = await fetchBridge(state, "/bridge/remote-command/route", {
+      method: "POST",
+      body: { remoteCommandId: command.id },
+    });
+    if (!route?.success) throw new Error(route?.error || "Lark Remote route failed");
+
+    const data = route.data || {};
+    if (data.action === "dispatch") {
+      await fetchBridge(state, "/bridge/dispatch/execute", {
+        method: "POST",
+        body: data.toolInput || { remoteCommandId: command.id },
+      });
+      return;
+    }
+    if (data.action === "clarify") {
+      await fetchBridge(state, "/bridge/dispatch/clarify", {
+        method: "POST",
+        body: data.toolInput || data.completionToolInput || { remoteCommandId: command.id },
+      });
+      return;
+    }
+    if (data.action === "blocked") {
+      await fetchBridge(state, "/bridge/dispatch/record", {
+        method: "POST",
+        body: data.toolInput || data.completionToolInput || {
+          remoteCommandId: command.id,
+          status: "blocked_retryable",
+          error: data.reason || data.summary || "Dispatch is blocked.",
+        },
+      });
+      return;
+    }
+    if (data.action === "control_reply") {
+      await fetchBridge(state, "/bridge/remote-command/reply", {
+        method: "POST",
+        body: data.toolInput || data.completionToolInput || {
+          remoteCommandId: command.id,
+          text: data.text || data.summary || "",
+        },
+      });
+      return;
+    }
+    if (data.action === "control") {
+      await executeRoutedControlTool(state, data, command.id, { fetchBridge });
+      return;
+    }
+    throw new Error(`Unsupported Lark Remote route action: ${data.action || "unknown"}`);
+  }
+
   async #runCodexResume(command, prompt, { onEvent } = {}) {
     const runner = this.config.runner || {};
-    const resumeRunner = command.controlWindowCommand
-      ? { ...runner, ignoreUserConfig: false }
-      : runner;
     const resultsDir = path.join(this.config.dataDir, "results");
     await fs.mkdir(resultsDir, { recursive: true });
     const outputFile = path.join(resultsDir, `${safeFileName(command.id)}.txt`);
     const language = await resolveCommandLanguage(this.config, command);
     const args = buildCodexResumeArgs({
-      runner: resumeRunner,
+      runner,
       threadId: command.codexSessionId,
       prompt,
       outputFile,
       cwd: command.projectRoot,
-      controlWindowCommand: command.controlWindowCommand,
     });
     const sessionWatcher = createSessionProgressWatcher({
       sessionPath: command.codexSessionPath,
@@ -322,18 +370,8 @@ function shouldNotifyStarted(config, command) {
 
 function formatHandoffStarted(options = {}) {
   return options.language === "en"
-    ? "Received. The control Codex window is handling this message."
-    : "已收到，控制 Codex 窗口正在处理这条消息。";
-}
-
-function hasControlWindowRecord(command = {}) {
-  return [
-    "control_completed",
-    "dispatch_sent",
-    "blocked_retryable",
-    "waiting_clarification",
-    "failed",
-  ].includes(command?.controlStatus || command?.dispatchStatus || command?.status);
+    ? "Received. Lark Remote is routing this message."
+    : "已收到，Lark Remote 正在路由这条消息。";
 }
 
 async function detectBusyHandoffSession(config = {}, command = {}) {
@@ -366,32 +404,18 @@ export function buildCodexExecArgs({ runner = {}, worktreePath, prompt }) {
   return args;
 }
 
-export function buildCodexResumeArgs({ runner = {}, threadId, prompt, outputFile, cwd, controlWindowCommand = false }) {
+export function buildCodexResumeArgs({ runner = {}, threadId, prompt, outputFile, cwd }) {
   if (!threadId) throw new Error("Codex handoff thread id is required");
   const args = ["exec"];
   if (runner.ignoreUserConfig !== false) args.push("--ignore-user-config");
   args.push("--sandbox", runner.sandbox || "workspace-write");
   if (cwd) args.push("-C", cwd);
-  if (controlWindowCommand) args.push(...buildLarkRemoteMcpApprovalArgs());
   args.push("resume", "--json");
   if (runner.skipGitRepoCheck !== false) args.push("--skip-git-repo-check");
   if (runner.model) args.push("-m", runner.model);
   if (outputFile) args.push("-o", outputFile);
   args.push(threadId, prompt);
   return args;
-}
-
-function buildLarkRemoteMcpApprovalArgs() {
-  return [
-    "-c",
-    'mcp_servers.lark-remote.command="node"',
-    "-c",
-    `mcp_servers.lark-remote.args=["${escapeTomlString(larkRemoteMcpWrapperPath)}"]`,
-    "-c",
-    `mcp_servers.lark-remote.cwd="${escapeTomlString(pluginRoot)}"`,
-    "-c",
-    'mcp_servers.lark-remote.default_tools_approval_mode="approve"',
-  ];
 }
 
 export function buildHandoffPrompt(command, { promptStyle = "direct" } = {}) {
@@ -436,6 +460,70 @@ function buildControlWindowPrompt(command) {
     "Do not choose tools by guessing from the message alone.",
     "Do not inspect repositories, run shell commands, edit files, run tests, or finish before the routed Lark Remote completion tool succeeds.",
   ].filter((line) => line !== "").join("\n");
+}
+
+async function executeRoutedControlTool(state, routeData = {}, remoteCommandId = "", { fetchBridge = bridgeFetch } = {}) {
+  const tool = String(routeData.nextTool || "").trim();
+  const input = routeData.toolInput || {};
+  const result = await callBridgeControlTool(state, tool, input, { fetchBridge });
+  const text = result?.text || result?.data?.text || result?.message || JSON.stringify(result?.data || result || {});
+  await fetchBridge(state, "/bridge/remote-command/reply", {
+    method: "POST",
+    body: {
+      ...(routeData.completionToolInput || {}),
+      remoteCommandId,
+      text,
+    },
+  });
+}
+
+async function callBridgeControlTool(state, tool, input = {}, { fetchBridge = bridgeFetch } = {}) {
+  switch (tool) {
+    case "lark_get_bridge_status":
+      return fetchBridge(state, "/bridge/status");
+    case "lark_list_projects":
+      return fetchBridge(state, "/bridge/takeover/projects");
+    case "lark_select_project":
+      return fetchBridge(state, "/bridge/takeover/project/select", {
+        method: "POST",
+        body: input,
+      });
+    case "lark_list_project_sessions":
+      return fetchBridge(state, "/bridge/takeover/targets");
+    case "lark_select_target":
+      return fetchBridge(state, "/bridge/takeover/select", {
+        method: "POST",
+        body: input,
+      });
+    case "lark_confirm_takeover":
+      return fetchBridge(state, "/bridge/takeover/execute", {
+        method: "POST",
+        body: input,
+      });
+    case "lark_start_observation":
+      return fetchBridge(state, "/bridge/observation/start", {
+        method: "POST",
+        body: {
+          ...input,
+          commandId: input.commandId || input.remoteCommandId,
+          activatedBy: input.activatedBy || "runner",
+        },
+      });
+    case "lark_list_observation_targets":
+      return fetchBridge(state, "/bridge/observation/targets");
+    case "lark_stop_observation":
+      return fetchBridge(state, "/bridge/observation", { method: "DELETE" });
+    case "lark_clear_active_target":
+      return fetchBridge(state, "/bridge/takeover", { method: "DELETE" });
+    case "lark_get_remote_command":
+      return fetchBridge(state, `/bridge/tasks/${encodeURIComponent(input.id || input.remoteCommandId || "")}`);
+    case "lark_cancel_remote_command":
+      return fetchBridge(state, `/bridge/tasks/${encodeURIComponent(input.id || input.remoteCommandId || "")}/cancel`, {
+        method: "POST",
+      });
+    default:
+      throw new Error(`Unsupported Lark Remote control tool: ${tool || "unknown"}`);
+  }
 }
 
 function normalizeDelivery(delivery) {
@@ -800,10 +888,6 @@ function extractThreadDispatchUserMessage(text) {
 
 function comparablePrompt(text) {
   return progressText(text).replace(/\s+/g, " ").trim();
-}
-
-function escapeTomlString(value) {
-  return String(value || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 function formatUsage(usage) {

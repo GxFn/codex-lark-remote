@@ -207,17 +207,19 @@ The same controls also work in Chinese: `控制台`, `项目列表`, `会话列�
 `进入项目 1`, `观察会话 2`, `接管 1`, `状态`, and `关闭飞书连接`.
 
 After takeover, the chat switches to thread-dispatch mode. Ordinary
-Feishu/Lark messages go to the dedicated control Codex window as dispatch
-requests for the selected Codex session. JavaScript does not send those messages
-directly to the target thread; the control Codex window routes through Lark
-Remote MCP, and `lark_dispatch_remote_command` performs the target delivery.
-
-Once the control Codex window is connected, JavaScript only intercepts explicit
-control keywords such as `console`, `status`, `observe off`, `exit handoff`,
-`close Lark connection`, and the `control:` / `控制:` prefix. Everything else,
-including project/session wording and `dispatch:` / `派发:` text, is passed
-through to the control Codex window so the agent can decide with its skills and
+Feishu/Lark messages are stored as remote commands, routed by the local bridge
+runner, and delivered to the selected Codex session through the local
+route/dispatch executor. The Codex conversation that started Lark Remote remains
+the locked control-window identity, but routine dispatch no longer depends on
+starting a fresh `codex exec` control-window turn or asking that turn to call
 MCP tools.
+
+The JavaScript bridge still intercepts deterministic keywords and card actions
+such as `console`, `status`, `observe off`, `exit handoff`,
+`close Lark connection`, and the `control:` / `控制:` prefix. Other text,
+including project/session wording and `dispatch:` / `派发:` text, is passed to
+the local route/dispatch executor, which uses the stored remote-command state and
+the locked control-window target to choose the next Lark Remote action.
 
 ## Start From Codex
 
@@ -266,29 +268,25 @@ as a short `User prompt:` separator before later Codex progress, so separate
 turns do not collapse into one continuous assistant stream.
 
 Takeover is write-capable after confirmation. Full-project takeover requires a
-non-empty `lark.allowedUsers` allowlist. Ordinary Feishu/Lark messages are sent
-to the Codex conversation that started Lark Remote, which acts as the dedicated
-control window. That control window then dispatches to the selected target. If
-the target session is active, the control window should treat the dispatch as a
-higher-priority interrupt/delivery request instead of waiting for the target to
-become idle. During takeover, prompts that Lark Remote itself sent from
-Feishu/Lark are not echoed back; prompts appended by other sources, such as
-automation or local Codex input, are echoed as `User prompt:` separators.
+non-empty `lark.allowedUsers` allowlist. Ordinary Feishu/Lark messages are
+queued by the bridge runner, routed locally, and delivered to the selected
+target Codex session. If the target session is active, Lark Remote still queues
+the dispatch as a higher-priority delivery request instead of failing just
+because the target is busy. During takeover, prompts that Lark Remote itself
+sent from Feishu/Lark are not echoed back; prompts appended by other sources,
+such as automation or local Codex input, are echoed as `User prompt:`
+separators.
 
-The control Codex window uses focused Lark Remote MCP tools instead of a broad
-context snapshot. `lark_route_remote_command` is the required first tool for
-each Feishu/Lark remote command; it returns the exact action, next tool, and
-completion tool. Target delivery uses `lark_dispatch_remote_command`, which
-queues the selected target session and records the Feishu/Lark dispatch result;
-lower-level `lark_prepare_dispatch` and `lark_record_dispatch` are kept for
-router-driven diagnostics and blocked states. Project/session routing uses
-`lark_list_projects` / `lark_select_project` /
-`lark_list_project_sessions`, takeover uses `lark_select_target` /
-`lark_confirm_takeover`, and read-only streams use `lark_start_observation` /
-`lark_stop_observation`. Non-dispatch control actions finish through
-`lark_reply_remote_command`. The bundled Lark Remote Control Window skill tells
-the control window to follow the router result and finish with exactly one Lark
-Remote completion tool.
+The dedicated control Codex window provides the locked local identity and an
+explicit manual/diagnostic fallback. Normal runtime dispatch uses the bridge
+runner's local route endpoint, then calls local bridge endpoints such as
+`/bridge/dispatch/execute`, `/bridge/remote-command/reply`, or observation and
+target-selection endpoints. The focused Lark Remote MCP tools
+`lark_route_remote_command`, `lark_dispatch_remote_command`,
+`lark_record_dispatch`, `lark_request_clarification`, and
+`lark_reply_remote_command` remain available for explicit control-window
+diagnostics or recovery, but they are no longer invoked from `codex exec` for
+every Feishu/Lark message.
 
 ## Behavior And Boundaries
 
@@ -310,11 +308,9 @@ prompts, network/install approvals, or other native Codex UI popups. When Codex
 hits one of those boundaries, it should send a clear Feishu/Lark message
 explaining what approval is needed and where to approve it.
 
-If the selected target Codex session is already working, Lark Remote still sends
-the Feishu/Lark message to the dedicated control Codex window. The control
-window should treat it as a higher-priority dispatch or interrupt request for
-the target thread, and fail closed only when Lark Remote cannot address or queue
-the selected target session.
+If the selected target Codex session is already working, Lark Remote still
+queues the Feishu/Lark message as a target dispatch request. It fails closed
+only when the bridge cannot address or queue the selected target session.
 
 ## Repository Layout
 
@@ -359,7 +355,7 @@ entrypoint changes.
 | Symptom | Check |
 | --- | --- |
 | `lark_*` tools are missing | Refresh or re-enable the plugin, then start a new Codex conversation. |
-| Control window turn ends without recording a Lark Remote result | Restart the bridge/new Codex window so the runner loads the current plugin tools; control-window resume must not use `--ignore-user-config`. |
+| Dispatch says bridge state is unavailable | Restart Lark Remote so the runner can read the current local bridge state, then resend the retained Feishu/Lark message. |
 | `status` says `websocket disabled` | Confirm `appId`, `appSecret`, and `lark.domain` in `~/.codex-lark-remote/config.json`. |
 | Feishu/Lark replies twice | Stop stale bridge processes or duplicate plugin installations. |
 | Codex edits the plugin cache | Start handoff from a Codex conversation whose cwd is the project you want to edit. |

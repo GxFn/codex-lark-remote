@@ -13,7 +13,7 @@ const TASK_START_RE = /^(?:(?:修复|实现|修改|改一下|改掉|检查|分�
 const TASK_OBJECT_RE = /(?:代码|仓库|文件|组件|页面|样式|功能|需求|测试|报错|错误|异常|bug|问题|文档|readme|分支|提交|实现|逻辑|接口|脚本|repo|repository|file|component|page|style|ui|feature|requirement|test|error|bug|issue|doc|branch|commit|implementation|logic|api|script)/i;
 
 export const CONSOLE_COMMAND_EXAMPLES = "控制台 / console、项目列表 / project list、会话列表 / session list、进入项目 1 / enter project 1、接管 1 / takeover 1";
-export const HANDOFF_DIRECT_MODE_DESCRIPTION = "接管后会进入线程派发模式：后续普通消息会交给专用 Codex 控制窗口，由它作为新任务或补充指令派发给目标 Codex 会话；不再判断项目/会话操作。";
+export const HANDOFF_DIRECT_MODE_DESCRIPTION = "接管后会进入线程派发模式：后续普通消息会由 Lark Remote 本地路由并派发给目标 Codex 会话；不再判断项目/会话操作。";
 export const CONTROL_COMMAND_MEANING_DESCRIPTION = "指令意义：控制台 / console 或跳出接管 / jump out of handoff，是临时回到这里；退出接管 / exit handoff，是结束当前接管但保持飞书连接；关闭飞书连接 / close Lark connection，会确认后停止本机 bridge。";
 
 export function normalizeControlText(text) {

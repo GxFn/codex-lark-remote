@@ -22,9 +22,9 @@ Use Lark Remote MCP tools only during normal startup.
    routing state and connecting future Feishu/Lark messages to this bridge.
 4. After consent, call `lark_prepare_takeover` for project/session takeover, or
    `lark_lock_control_window` for a control-window-only connection.
-5. Do not ask the user about tool capabilities. Normal dispatch uses
-   `lark_dispatch_remote_command`, so `capabilities` may be omitted or passed as
-   an empty object for compatibility:
+5. Do not ask the user about tool capabilities. Normal dispatch is executed by
+   the bridge runner through local JS/HTTP route and dispatch endpoints, so
+   `capabilities` may be omitted or passed as an empty object for compatibility:
 
 ```json
 {
@@ -40,33 +40,26 @@ Keep startup replies short: current readiness and the one next action.
 
 ## Remote Operation
 
-After the control window is locked, JavaScript handles only deterministic bridge
-keywords and card actions, such as `status`, `控制台`, `commands on/off`,
-`observe off`, `退出接管`, and confirmed bridge shutdown. Other Feishu/Lark text
-is delivered to the control Codex window.
+After the control window is locked, the bridge handles deterministic keywords
+and card actions, such as `status`, `控制台`, `commands on/off`, `observe off`,
+`退出接管`, and confirmed bridge shutdown. Other Feishu/Lark text is stored as a
+remote command and routed by the bridge runner through local JS/HTTP endpoints.
 
-The control window decides whether a message is a Lark Remote control action,
-project/session selection, observation, takeover, clarification, direct state
-answer, or target-thread dispatch by first calling:
+The normal runtime path is:
 
 ```text
-lark_route_remote_command(remoteCommandId)
+/bridge/remote-command/route
+/bridge/dispatch/execute | /bridge/remote-command/reply | other specific bridge endpoint
 ```
 
-The router returns the exact action and next tool. For target-thread dispatch it
-will direct the control window to use:
+This path does not start a new `codex exec` control-window turn and does not ask
+that turn to call MCP tools. The MCP tools `lark_route_remote_command`,
+`lark_dispatch_remote_command`, `lark_record_dispatch`,
+`lark_request_clarification`, and `lark_reply_remote_command` are the equivalent
+manual/diagnostic fallback when an explicit control-window prompt is resumed in
+Codex.
 
-```text
-lark_dispatch_remote_command(remoteCommandId)
-```
-
-For non-dispatch control actions, it uses the matching `lark_*` control tool and
-then `lark_reply_remote_command(remoteCommandId, text)` to send the concise
-Feishu/Lark reply and close the command.
-
-Do not expect JavaScript to send ordinary Feishu/Lark text directly to the
-target thread. Do not use legacy worktree task mode for ordinary Feishu/Lark
-messages.
+Do not use legacy worktree task mode for ordinary Feishu/Lark messages.
 
 ## Permission Boundary
 
@@ -82,6 +75,6 @@ Observation is read-only. During observation, newly appended user prompts should
 be visible in Feishu/Lark as prompt separators so turns do not merge visually.
 
 Takeover is dispatch-oriented. After a session is taken over, Feishu/Lark work
-messages are routed to the control window, and the control window dispatches
-them to the selected target with `lark_dispatch_remote_command`. If the target
-is busy, still dispatch normally; busy status alone is not a failure.
+messages are routed and queued by the local bridge runner, then delivered to the
+selected target Codex session. If the target is busy, still dispatch normally;
+busy status alone is not a failure.

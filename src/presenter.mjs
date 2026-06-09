@@ -5,7 +5,7 @@ export function formatHelp(options = {}) {
     return [
       "Lark Remote",
       "",
-      "Use the console to choose local Codex projects and sessions. After takeover, normal messages go to the dedicated control Codex window as thread-dispatch requests for the selected session.",
+      "Use the console to choose local Codex projects and sessions. After takeover, normal messages are routed by Lark Remote to the selected session.",
       "Console: send console, project list, session list, enter project 1, observe session 2, takeover 2.",
       "Task control: status rcmd_..., diff rcmd_..., cancel rcmd_..., approve rcmd_... test.",
       "whoami",
@@ -24,7 +24,7 @@ export function formatHelp(options = {}) {
   return [
     "Lark Remote",
     "",
-    "可以从控制台选择本机 Codex 项目和会话；接管后普通需求会交给专用 Codex 控制窗口，作为被选中会话的线程派发请求。",
+    "可以从控制台选择本机 Codex 项目和会话；接管后普通需求会由 Lark Remote 路由并派发到被选中会话。",
     "控制台：发送控制台、项目列表、会话列表、进入项目 1、观察会话 2、接管 2。",
     "任务控制：status rcmd_...、diff rcmd_...、cancel rcmd_...、approve rcmd_... test。",
     "whoami",
@@ -55,7 +55,7 @@ export function formatStartupIntro(options = {}) {
       "- observe session 2",
       "- takeover 2",
       "",
-      "After takeover, normal messages go to the dedicated control Codex window as thread-dispatch requests for the selected Codex session. Project/session commands are no longer interpreted until you return to the console.",
+      "After takeover, normal messages are routed by Lark Remote to the selected Codex session. Project/session commands are no longer interpreted until you return to the console.",
       "To temporarily return to the console, send console or jump out of handoff. To end the current takeover but keep Lark connected, send exit handoff.",
       "To stop the local bridge and disconnect Lark, send close Lark connection. A confirmation card appears first.",
       "",
@@ -79,7 +79,7 @@ export function formatStartupIntro(options = {}) {
     "- 观察第 2 个会话",
     "- 接管第 2 个会话",
     "",
-    "接管后会切到线程派发模式，普通消息会交给专用 Codex 控制窗口，由它把新任务或补充指令派发给被接管的 Codex 会话；不再解析项目/会话操作。",
+    "接管后会切到线程派发模式，普通消息会由 Lark Remote 本地路由并派发给被接管的 Codex 会话；不再解析项目/会话操作。",
     "要临时回到外层自然语言控制台，发送控制台或跳出接管。要结束当前接管并留在控制台，发送退出接管。",
     "要停止本机桥接服务并断开飞书连接，发送关闭飞书连接；会先出现确认卡。",
   ].join("\n");
@@ -91,7 +91,7 @@ export function formatConsoleModeIntro(options = {}) {
       "Entered the natural-language console.",
       "",
       "Say: console, project list, session list, enter project 1, takeover 1.",
-      "After takeover, normal messages go to the dedicated control Codex window as thread-dispatch requests for the selected Codex session. Project/session commands are no longer interpreted.",
+      "After takeover, normal messages are routed by Lark Remote to the selected Codex session. Project/session commands are no longer interpreted.",
       "Command meanings: console or jump out of handoff temporarily returns here; exit handoff ends the current takeover but keeps Lark connected; close Lark connection asks for confirmation, then stops the local bridge.",
     ].join("\n");
   }
@@ -99,7 +99,7 @@ export function formatConsoleModeIntro(options = {}) {
     "已进入外层自然语言控制台。",
     "",
     "直接说：控制台、项目列表、会话列表、进入项目 1、接管 1。",
-    "接管后会进入线程派发模式：后续普通消息会交给专用 Codex 控制窗口，由它作为新任务或补充指令派发给目标 Codex 会话；不再判断项目/会话操作。",
+    "接管后会进入线程派发模式：后续普通消息会由 Lark Remote 本地路由并派发给目标 Codex 会话；不再判断项目/会话操作。",
     "指令意义：控制台或跳出接管，是临时回到这里；退出接管，是结束当前接管但保持飞书连接；关闭飞书连接，会确认后停止本机桥接服务。",
   ].join("\n");
 }
@@ -117,7 +117,7 @@ export function buildStartupIntroCard(options = {}) {
             "",
             "This manages local Codex session records. In this plugin, `windows` means Codex sessions.",
             "Before takeover, say `project list`, `enter project 1`, `observe session 2`, or `takeover 2`.",
-            "After takeover, normal messages go to the dedicated control Codex window as thread-dispatch requests for the selected Codex session. Project/session commands are no longer interpreted.",
+            "After takeover, normal messages are routed by Lark Remote to the selected Codex session. Project/session commands are no longer interpreted.",
             "To temporarily return to the console, send `console` or `jump out of handoff`.",
             "To end the current takeover but keep Lark connected, send `exit handoff`.",
             "To stop the local bridge and disconnect Lark, send `close Lark connection`; a confirmation card appears first.",
@@ -148,7 +148,7 @@ export function buildStartupIntroCard(options = {}) {
             "",
             "这里管理的是本机 Codex 会话记录；`窗口` 只是会话的口语叫法。",
             "没有接管时，可以直接说 `看看有哪些项目`、`进入第 1 个项目`、`观察第 2 个会话`、`接管第 2 个会话`。",
-            "接管后会切到线程派发模式：普通消息会交给专用 Codex 控制窗口，作为目标 Codex 会话的派发请求，不再解析项目/会话操作。",
+            "接管后会切到线程派发模式：普通消息会由 Lark Remote 本地路由并派发给目标 Codex 会话，不再解析项目/会话操作。",
             "要临时回到外层自然语言控制台，发送 `控制台` 或 `跳出接管`。",
             "要结束当前接管并留在控制台，发送 `退出接管`。",
             "要真正断开飞书连接并停止本机桥接服务，发送 `关闭飞书连接`；会先出现确认卡。",
@@ -182,7 +182,7 @@ export function buildConsoleModeCard(options = {}) {
             "**Entered the natural-language console.**",
             "",
             "Say: console, project list, session list, enter project 1, takeover 1.",
-            "After takeover, normal messages go to the dedicated control Codex window as thread-dispatch requests for the selected Codex session. Project/session commands are no longer interpreted.",
+            "After takeover, normal messages are routed by Lark Remote to the selected Codex session. Project/session commands are no longer interpreted.",
             "Command meanings: console or jump out of handoff temporarily returns here; exit handoff ends the current takeover but keeps Lark connected; close Lark connection asks for confirmation, then stops the local bridge.",
           ].join("\n"),
         },
@@ -207,7 +207,7 @@ export function buildConsoleModeCard(options = {}) {
             "**已进入外层自然语言控制台。**",
             "",
             "直接说：控制台、项目列表、会话列表、进入项目 1、接管 1。",
-            "接管后会进入线程派发模式：后续普通消息会交给专用 Codex 控制窗口，由它作为新任务或补充指令派发给目标 Codex 会话；不再判断项目/会话操作。",
+            "接管后会进入线程派发模式：后续普通消息会由 Lark Remote 本地路由并派发给目标 Codex 会话；不再判断项目/会话操作。",
             "指令意义：控制台或跳出接管，是临时回到这里；退出接管，是结束当前接管但保持飞书连接；关闭飞书连接，会确认后停止本机桥接服务。",
         ].join("\n"),
       },
@@ -682,13 +682,13 @@ export function formatHandoffModeEnabled(handoff, options = {}) {
   if (language === "en") {
     return [
       "Returned to control-window mode.",
-      `Normal messages now go to the dedicated control Codex window${thread ? ` (${thread})` : ""}.`,
+      `Normal messages now route through Lark Remote${thread ? ` (control ${thread})` : ""}.`,
       "Send console to temporarily return to project/session control.",
     ].join("\n");
   }
   return [
-    "已回到控制窗口模式。",
-    `普通消息会发送给专用 Codex 控制窗口${thread ? `（${thread}）` : ""}。`,
+    "已回到 Lark Remote 路由模式。",
+    `普通消息会通过 Lark Remote 本地路由${thread ? `（控制窗口 ${thread}）` : ""}。`,
     "发送“控制台”可临时回到项目/会话控制台。",
   ].join("\n");
 }
@@ -798,13 +798,13 @@ export function formatTakeoverPending(target, options = {}) {
   if (languageOf(options) === "en") {
     return [
       `Thread dispatch is pending for target thread ${String(target?.threadId || "").slice(0, 8) || "unknown"}.`,
-      "If the target Codex session is active, the control Codex window should still treat new Lark messages as normal dispatch/interrupt requests.",
+      "If the target Codex session is active, Lark Remote still queues new Lark messages as normal dispatch/interrupt requests.",
       "This waiting state is kept only for legacy compatibility.",
     ].join("\n");
   }
   return [
     `线程派发待处理，目标线程 ${String(target?.threadId || "").slice(0, 8) || "unknown"}。`,
-    "即使目标 Codex 会话仍在运行，控制 Codex 窗口也应把新的飞书消息作为正常派发/打断请求处理。",
+    "即使目标 Codex 会话仍在运行，Lark Remote 也会把新的飞书消息作为正常派发/打断请求排队。",
     "这个等待状态仅作为旧状态兼容保留。",
   ].join("\n");
 }
@@ -866,14 +866,14 @@ export function formatHandoffSessionBusy(target = {}, status = {}, options = {})
   const reason = status.reason || "";
   if (languageOf(options) === "en") {
     return [
-      "The dedicated control Codex window is currently busy in Codex Desktop, so this Lark message was not sent or queued.",
+      "The selected Codex session is currently busy in Codex Desktop, so this Lark message was not sent or queued.",
       `Thread: ${thread}`,
       reason ? `Reason: ${reason}` : "",
       "Wait until the desktop turn finishes, then send the message again. You can also return to the console and choose another session.",
     ].filter(Boolean).join("\n");
   }
   return [
-    "专用 Codex 控制窗口正在 Codex Desktop 中执行，这条飞书消息没有发送，也不会排队。",
+    "被选中的 Codex 会话正在 Codex Desktop 中执行，这条飞书消息没有发送，也不会排队。",
     `线程: ${thread}`,
     reason ? `原因: ${reason}` : "",
     "请等桌面端这一轮完成后再重新发送；也可以回到控制台选择其他会话。",
@@ -1130,22 +1130,22 @@ function bridgeMessageRoute(status = {}, language = "zh") {
   if (takeover?.state === "pending") {
     if (status.handoff?.active) {
       return language === "en"
-        ? "delivered to the control Codex window as a dispatch request"
-        : "交给控制 Codex 窗口作为线程派发请求";
+        ? "routed by Lark Remote as a dispatch request"
+        : "由 Lark Remote 作为线程派发请求路由";
     }
     return language === "en"
-      ? "blocked until the control Codex window is connected"
-      : "等待连接控制 Codex 窗口";
+      ? "blocked until the Lark Remote control window is connected"
+      : "等待连接 Lark Remote 控制窗口";
   }
   if (takeover?.state === "active") {
     return language === "en"
-      ? "delivered to the control Codex window as a dispatch request"
-      : "交给控制 Codex 窗口作为线程派发请求";
+      ? "routed by Lark Remote as a dispatch request"
+      : "由 Lark Remote 作为线程派发请求路由";
   }
   if (status.handoff?.active) {
     return language === "en"
-      ? "handled by the control Codex window"
-      : "交给控制 Codex 窗口处理";
+      ? "handled by Lark Remote control routing"
+      : "交给 Lark Remote 控制路由处理";
   }
   return language === "en"
     ? "interpreted by the natural-language console"

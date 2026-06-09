@@ -14,34 +14,40 @@ Codex sessions for Feishu/Lark. It is not the target worker session.
 - Control window: this Codex conversation. It understands Feishu/Lark messages
   and chooses one Lark Remote action.
 - Target session: the Codex conversation selected for takeover. Coding work is
-  delivered there by the dedicated Lark Remote dispatch MCP tool.
+  delivered there by the bridge runner's local route/dispatch executor. The
+  `lark_dispatch_remote_command` MCP tool is the equivalent manual completion
+  path when a control-window prompt is explicitly resumed in Codex.
 - Remote command: one Feishu/Lark message stored by the bridge. It has a
   `remoteCommandId`.
 - Observation: read-only progress streaming. It never routes user prompts into
   the observed session.
 - Takeover: write-capable routing after a target is selected and confirmed.
 
-Do not collapse these roles. The control window routes; the target session does
-coding work; the bridge stores state and sends Feishu/Lark replies.
+Do not collapse these roles. The target session does coding work; the bridge
+stores state and sends Feishu/Lark replies. In normal bridge operation the
+runner executes routing locally, so a control-window Codex turn is not required
+for each remote command.
 
 ## Full Lifecycle
 
 1. Feishu/Lark sends a message to the bot.
 2. The bridge intercepts only deterministic keywords and card actions.
 3. Other text becomes a remote command with `remoteCommandId`.
-4. The bridge resumes this control window with a short
-   `[Lark Remote control message]` prompt.
-5. This control window calls the router MCP tool first.
-6. The router returns exactly one action and the next tool.
-7. This control window performs that one action.
-8. This control window records the result with a Lark Remote completion tool.
-9. The bridge sends only the concise recorded result back to Feishu/Lark.
+4. The bridge runner calls the local route endpoint for that command.
+5. The router returns exactly one action and the next tool/endpoint.
+6. The runner performs that one action through the local bridge endpoint.
+7. The runner records the result and queues target delivery when needed.
+8. The bridge sends only the concise recorded result back to Feishu/Lark.
+
+If a `[Lark Remote control message]` prompt is explicitly resumed inside this
+Codex conversation, follow the MCP protocol below. That is a fallback/manual
+path, not the normal per-message execution path.
 
 The control window does not perform the user's coding task locally at any point.
 
 ## Required First Step
 
-For every `[Lark Remote control message]` prompt that includes
+For every explicit `[Lark Remote control message]` prompt that includes
 `remoteCommandId`, first call:
 
 ```text
@@ -160,7 +166,8 @@ selection.
 - Never use dynamic host thread tools such as `send_message_to_thread` from this
   control-window flow; `codex exec` cannot call them reliably.
 - Never send ordinary Feishu/Lark text directly from JavaScript to the target;
-  dispatch must go through the control window and `lark_dispatch_remote_command`.
+  dispatch must go through stored remote-command state and the Lark Remote
+  route/dispatch executor.
 - Never treat Codex turn completion as dispatch success.
 - Never finish a control-window turn without one of:
   `lark_dispatch_remote_command`, `lark_record_dispatch`,

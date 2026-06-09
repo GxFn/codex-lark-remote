@@ -187,14 +187,15 @@ commands off
 `enter project 1`, `observe session 2`, `takeover 1`, `status`, and
 `close Lark connection`.
 
-接管后，飞书会话会进入线程派发模式。后续普通消息会发送给专用 Codex 控制窗口，
-作为所选目标会话的派发请求。JavaScript 不会直接把普通消息发送到目标线程；真正
-的线程派发由控制窗口通过 Codex 宿主线程工具和 Lark Remote MCP 工具完成。
+接管后，飞书会话会进入线程派发模式。后续普通消息会先存成本地 remote command，
+由 bridge runner 在本地完成路由，再通过本地 route/dispatch executor 投递到选中的
+Codex 会话。开启 Lark Remote 的 Codex 会话仍然是锁定的控制窗口身份，但日常派发不再
+依赖重新启动一个 `codex exec` 控制窗口回合，也不再要求这个回合去调用 MCP 工具。
 
-控制窗口连接后，JavaScript 只拦截 `控制台`、`status`、`observe off`、
-`exit handoff`、`关闭飞书连接`、`控制:` / `control:` 这类明确控制关键词。
-其他内容，包括项目/会话语义和 `派发:` / `dispatch:` 文本，都会原样交给控制
-Codex 窗口，由 agent 基于 skill 和 MCP 工具自行判断。
+JavaScript bridge 仍会拦截 `控制台`、`status`、`observe off`、`exit handoff`、
+`关闭飞书连接`、`控制:` / `control:` 这类确定性关键词和卡片动作。其他内容，包括
+项目/会话语义和 `派发:` / `dispatch:` 文本，都会进入本地路由/派发执行器，由它基于
+已保存的 remote command、控制窗口锁定状态和当前目标选择决定下一步 Lark Remote 动作。
 
 ## 从 Codex 启动
 
@@ -238,30 +239,19 @@ Codex 会话的进度串流到飞书/Lark，但不会把飞书/Lark 输入路由
 LLM 输出在聊天里连成一段。
 
 接管在确认后具备写入能力。全项目接管要求 `lark.allowedUsers` 非空。普通
-飞书/Lark 消息会发送到专用 Codex 控制窗口，由控制窗口作为所选目标的线程派发
-请求处理；如果目标会话正在运行，也应作为更高优先级的派发/打断请求正常投递，而
-不是因为目标繁忙失败。控制窗口连接后，JS 入口只拦截 `控制台`、`status`、
-`observe off`、`exit handoff`、`关闭飞书连接`、`控制:` / `control:` 这类明确
-控制关键词；其他内容，包括项目/会话语义和 `派发:` / `dispatch:` 文本，都会原样
-交给控制 Codex 窗口，由 agent 基于 skill 和 MCP 工具自行判断。接管期间，
-飞书/Lark 端自己发给 Codex 控制窗口的提示词不会再回显；如果目标窗口出现非
+飞书/Lark 消息会由 bridge runner 本地排队、路由并投递到选中的目标 Codex 会话；
+如果目标会话正在运行，也会作为更高优先级的派发请求正常排队，而不是因为目标繁忙
+失败。接管期间，飞书/Lark 端自己触发的提示词不会再回显；如果目标窗口出现非
 飞书来源的新提示词，例如自动化或本地 Codex 输入，会作为 `用户提示：` 分隔消息
 同步到飞书。
 
-控制 Codex 窗口使用职责专一的 Lark Remote MCP 工具，而不是宽泛 context 快照：
-每条飞书/Lark 远程命令都先调用 `lark_route_remote_command`，由它返回明确的
-action、next tool 和 completion tool。目标线程派发使用 route 返回的 Codex
-宿主线程工具，然后通过 `lark_record_dispatch` 记录结果；底层
-`lark_prepare_dispatch` 只保留给 route 驱动的派发准备和诊断使用。
-`lark_list_projects` / `lark_select_project` / `lark_list_project_sessions`
-负责项目和会话路由，`lark_select_target` / `lark_confirm_takeover`
-负责接管，`lark_start_observation` / `lark_stop_observation` 负责只读观察，
-非派发控制动作通过 `lark_reply_remote_command` 回复并完成。
-随插件发布的 Lark Remote Control Window skill 会提示控制窗口结合这些工具和
-Codex 宿主线程工具，并显式记录最终结果。
-
-接管是可写的，但普通飞书/Lark 消息不会直接进入目标会话；它们会先进入开启连接的
-Codex 控制窗口，再由控制窗口使用 Codex 宿主线程工具派发到选中的目标会话。
+专用 Codex 控制窗口提供锁定的本地身份，并作为显式人工/诊断兜底。正常运行时，
+bridge runner 先调用本地 route endpoint，再调用 `/bridge/dispatch/execute`、
+`/bridge/remote-command/reply` 或观察、目标选择等本地 bridge endpoints。职责专一的
+Lark Remote MCP 工具 `lark_route_remote_command`、`lark_dispatch_remote_command`、
+`lark_record_dispatch`、`lark_request_clarification` 和
+`lark_reply_remote_command` 仍保留给显式控制窗口诊断或恢复使用，但不会再由每条
+飞书/Lark 消息触发的 `codex exec` 回合来调用。
 
 ## 行为与边界
 
@@ -280,9 +270,8 @@ Lark Remote 接管的是对话输入输出链路，不是 Codex Desktop 的原�
 不能点击权限弹窗、MCP 审批、沙箱提权、联网/安装依赖审批，或其他 Codex 原生 UI
 弹窗。遇到这些边界时，Codex 应发回清晰的飞书/Lark 提示，说明需要什么权限以及在哪里批准。
 
-如果所选目标 Codex 会话仍在执行，Lark Remote 仍会把飞书/Lark 消息发送给专用
-Codex 控制窗口。控制窗口应把它当成目标线程的更高优先级派发/打断请求处理；只有
-宿主线程工具不可用、目标线程无法定位，或无法验证投递/读回时才 fail closed。
+如果所选目标 Codex 会话仍在执行，Lark Remote 仍会把飞书/Lark 消息作为目标派发
+请求排队。只有 bridge 无法定位或排队到所选目标会话时才 fail closed。
 
 ## 仓库结构
 
@@ -326,7 +315,7 @@ Codex 插件根目录会通过一个小 wrapper 和 `runtime.tgz` 启动 MCP。
 | 现象 | 检查 |
 | --- | --- |
 | 当前没有 `lark_*` 工具 | 刷新或重新启用插件，然后新开一个 Codex 对话。 |
-| 控制窗口回合结束但没有记录 Lark Remote 结果 | 重启 bridge/新开 Codex 窗口，确保 runner 加载当前插件工具；控制窗口 resume 不能使用 `--ignore-user-config`。 |
+| 派发提示 bridge 状态不可用 | 重启 Lark Remote，让 runner 能读取当前本地 bridge 状态，然后重新发送已保留的飞书/Lark 消息。 |
 | `status` 显示 `websocket disabled` | 检查 `~/.codex-lark-remote/config.json` 里的 `appId`、`appSecret` 和 `lark.domain`。 |
 | 同一条飞书/Lark 消息收到两次回复 | 停止旧 bridge 进程或重复插件安装。 |
 | Codex 改到了插件缓存目录 | 从目标项目所在的 Codex 对话里启动接管。 |
