@@ -119,6 +119,28 @@ export class CodexSessionObserver {
   async restore() {
     const state = await readObservation({ dataDir: this.config.dataDir });
     if (state) await this.start(state);
+    await this.restoreTakeover();
+  }
+
+  async restoreTakeover() {
+    const takeover = await readTakeover({ dataDir: this.config.dataDir });
+    if (!["pending", "active"].includes(takeover?.state || "")) return this.status();
+    const target = takeover.target || {};
+    if (!target.threadPath || !takeover.lark?.messageId) return this.status();
+    return this.startTemporary({
+      active: true,
+      mode: takeover.state === "active" ? "takeover_active_observe" : "takeover_pending_observe",
+      threadId: target.threadId || "",
+      threadPath: target.threadPath || "",
+      cwd: target.cwd || "",
+      name: target.name || "",
+      messageId: takeover.lark.messageId || "",
+      chatIdHash: takeover.lark.chatIdHash || "",
+      userIdHash: takeover.lark.userIdHash || "",
+      language: takeover.lark.language || "",
+      activatedAt: takeover.activatedAt || takeover.pendingAt || "",
+      activatedBy: "takeover-restore",
+    });
   }
 
   async start(state) {
@@ -129,7 +151,7 @@ export class CodexSessionObserver {
       sessionPath: state.threadPath,
       onEvent: async (_event, summary) => this.#notify(summary),
       includeUserPrompts: true,
-      eventOptions: { language: state.language || this.config.intent?.language || "zh" },
+      eventOptions: { language: state.language || this.config.intent?.language || "zh", includeFinalAnswers: true },
     });
     await this.watcher.start();
     return this.status();
@@ -149,7 +171,7 @@ export class CodexSessionObserver {
       onEvent: async (_event, summary) => this.#notifyTemporary(summary),
       includeUserPrompts: true,
       userPromptText: (_event, prompt) => takeoverVisibleUserPrompt(prompt),
-      eventOptions: { language: state.language || this.config.intent?.language || "zh" },
+      eventOptions: { language: state.language || this.config.intent?.language || "zh", includeFinalAnswers: true },
     });
     await this.temporaryWatcher.start();
     return this.status();

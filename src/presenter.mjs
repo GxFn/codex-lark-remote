@@ -813,17 +813,13 @@ export function formatTakeoverActive(target, options = {}) {
   const recap = formatTakeoverRecap(options.recap, options);
   if (languageOf(options) === "en") {
     return [
-      `Thread dispatch is active for target thread ${String(target?.threadId || "").slice(0, 8) || "unknown"}.`,
-      "Normal Lark messages now go to the dedicated control Codex window as dispatch requests for the selected target session.",
-      "JavaScript does not send those messages to the target thread. The control Codex window must perform any real thread dispatch with host thread tools.",
+      `Takeover enabled for target thread ${String(target?.threadId || "").slice(0, 8) || "unknown"}.`,
       "Send console to temporarily return to project/session control. Send exit handoff to end the current dispatch target without disconnecting Lark.",
       recap,
     ].filter(Boolean).join("\n");
   }
   return [
-    `线程派发已启用，目标线程 ${String(target?.threadId || "").slice(0, 8) || "unknown"}。`,
-    "现在发送普通飞书消息，会先进入专用 Codex 控制窗口，由控制窗口作为派发请求处理。",
-    "JS 不会把消息直接发送到目标线程；真正的线程派发必须由控制窗口使用 Codex 宿主线程工具完成。",
+    `已接管目标线程 ${String(target?.threadId || "").slice(0, 8) || "unknown"}。`,
     "发送“控制台”可临时回到项目/会话控制台；发送“退出接管”会结束当前派发目标，但不会断开飞书连接。",
     recap,
   ].filter(Boolean).join("\n");
@@ -973,19 +969,21 @@ export function buildTakeoverSelectedCard(target, options = {}) {
 
 export function buildTakeoverConfirmCard(target, options = {}) {
   const language = languageOf(options);
+  const title = takeoverTargetTitle(target, language);
+  const actionTitle = language === "en" ? "Confirm Takeover" : "确认接管";
   return baseCard({
-    title: takeoverTargetTitle(target, language),
+    title,
     elements: [
       {
         tag: "markdown",
         content: language === "en"
-          ? `**Confirm Takeover**\n${takeoverTargetDetailsMarkdown(target, language)}\n\nAfter confirmation, future Lark messages route to this Codex thread.`
-          : `**确认接管**\n${takeoverTargetDetailsMarkdown(target, language)}\n\n确认后，飞书后续消息会路由到这个 Codex 线程。`,
+          ? `**${escapeCardText(title)}**\n${actionTitle}\n${takeoverTargetDetailsMarkdown(target, language)}\n\nAfter confirmation, future Lark messages route to this Codex thread.`
+          : `**${escapeCardText(title)}**\n${actionTitle}\n${takeoverTargetDetailsMarkdown(target, language)}\n\n确认后，飞书后续消息会路由到这个 Codex 线程。`,
       },
       {
         tag: "action",
         actions: [
-          cardButton(language === "en" ? "Confirm Takeover" : "确认接管", "takeover_execute", target, "danger"),
+          cardButton(actionTitle, "takeover_execute", target, "danger"),
           cardButton(language === "en" ? "Cancel" : "取消", "takeover_cancel", target, "default"),
         ],
       },

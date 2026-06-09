@@ -810,7 +810,7 @@ test("processLarkEvent executes takeover from a card action", async () => {
   assert.equal(temporaryObservations[0].mode, "takeover_active_observe");
   assert.equal(temporaryObservations[0].threadId, "019e0000-0000-7000-8000-000000000012");
   assert.equal(temporaryObservations[0].messageId, "om_card");
-  assert.match(replies[0].text, /线程派发已启用/);
+  assert.match(replies[0].text, /已接管目标线程/);
   assert.match(replies[0].text, /上个任务同步/);
   assert.match(replies[0].text, /上轮已经完成插件状态卡片优化/);
   assert.equal((await readHandoff({ dataDir })).threadId, "019e0000-0000-7000-8000-000000000099");

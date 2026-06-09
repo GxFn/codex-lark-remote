@@ -792,6 +792,13 @@ test("summarizeSessionProgressEvent separates assistant progress from user promp
   assert.equal(
     summarizeSessionProgressEvent({
       type: "event_msg",
+      payload: { type: "agent_message", phase: "final_answer", message: "done" },
+    }, { includeFinalAnswers: true }),
+    "done",
+  );
+  assert.equal(
+    summarizeSessionProgressEvent({
+      type: "event_msg",
       payload: { type: "user_message", message: "请检查观察输出" },
     }),
     "",
@@ -868,6 +875,30 @@ test("createSessionProgressWatcher can include appended user prompts as turn sep
     "User prompt:\ncheck observation output",
     "我找到触发点了。",
   ]);
+});
+
+test("createSessionProgressWatcher can forward final answers when enabled", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-session-final-progress-"));
+  const sessionPath = path.join(dir, "rollout-test.jsonl");
+  await fs.writeFile(sessionPath, "");
+  const summaries = [];
+  const watcher = createSessionProgressWatcher({
+    sessionPath,
+    intervalMs: 10,
+    eventOptions: { includeFinalAnswers: true },
+    onEvent: async (_event, summary) => summaries.push(summary),
+  });
+  await watcher.start();
+  await fs.appendFile(
+    sessionPath,
+    [
+      JSON.stringify({ type: "event_msg", payload: { type: "agent_message", phase: "final_answer", message: "目标会话最终回复。" } }),
+      "",
+    ].join("\n"),
+  );
+  await watcher.stop();
+
+  assert.deepEqual(summaries, ["目标会话最终回复。"]);
 });
 
 test("createSessionProgressWatcher can suppress or rewrite user prompt notifications", async () => {

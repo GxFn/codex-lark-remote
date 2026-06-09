@@ -645,7 +645,12 @@ export function summarizeSessionProgressEvent(event, options = {}) {
   const isAssistantMessage = itemType === "agent_message"
     || (itemType === "message" && item.role === "assistant")
     || /agentMessage/i.test(type);
-  if (!isAssistantMessage || item.phase === "final_answer") return "";
+  if (!isAssistantMessage) return "";
+  if (item.phase === "final_answer") {
+    if (!options.includeFinalAnswers) return "";
+    const text = textFromEvent(event);
+    return text ? progressText(text) : "";
+  }
   return summarizeCodexEvent(event, options);
 }
 

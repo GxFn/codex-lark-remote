@@ -90,6 +90,57 @@ test("CodexSessionObserver forwards Mac-local prompts during active takeover", a
       JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: "[Lark Remote dispatch]\n来自飞书的派发" } }),
       JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: "Mac 端继续输入" } }),
       JSON.stringify({ type: "event_msg", payload: { type: "agent_message", phase: "commentary", message: "正在处理 Mac 输入。" } }),
+      JSON.stringify({ type: "event_msg", payload: { type: "agent_message", phase: "final_answer", message: "Mac 输入处理完成。" } }),
+      "",
+    ].join("\n"),
+  );
+  await waitFor(() => replies.length >= 3);
+  await observer.stop();
+
+  assert.deepEqual(replies, [
+    { messageId: "om_takeover", text: "用户提示：\nMac 端继续输入" },
+    { messageId: "om_takeover", text: "正在处理 Mac 输入。" },
+    { messageId: "om_takeover", text: "Mac 输入处理完成。" },
+  ]);
+});
+
+test("CodexSessionObserver restores active takeover streaming for later Mac tasks", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-active-observer-restore-"));
+  const threadId = "019e0ffb-52e9-7ee3-bb87-42019b58eaa3";
+  const sessionPath = path.join(dataDir, "session.jsonl");
+  await fs.writeFile(
+    sessionPath,
+    `${JSON.stringify({ type: "event_msg", payload: { type: "agent_message", phase: "final_answer", message: "接管前旧回复。" } })}\n`,
+  );
+  await fs.writeFile(
+    takeoverFilePath(dataDir),
+    `${JSON.stringify({
+      version: 1,
+      state: "active",
+      mode: "dispatch",
+      target: { threadId, threadPath: sessionPath, cwd: "/workspace", name: "Target" },
+      lark: { messageId: "om_takeover_restore", chatIdHash: "chat_hash", userIdHash: "user_hash" },
+    }, null, 2)}\n`,
+  );
+
+  const replies = [];
+  const observer = new CodexSessionObserver({
+    config: { dataDir },
+    notifier: {
+      reply: async (messageId, text) => replies.push({ messageId, text }),
+    },
+    logger: { warn: () => {} },
+  });
+
+  await observer.restore();
+  assert.equal(observer.status().temporaryActive, true);
+  assert.equal(observer.status().temporaryThreadId, threadId);
+
+  await fs.appendFile(
+    sessionPath,
+    [
+      JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: "Mac 端新任务" } }),
+      JSON.stringify({ type: "event_msg", payload: { type: "agent_message", phase: "commentary", message: "正在处理新任务。" } }),
       "",
     ].join("\n"),
   );
@@ -97,8 +148,8 @@ test("CodexSessionObserver forwards Mac-local prompts during active takeover", a
   await observer.stop();
 
   assert.deepEqual(replies, [
-    { messageId: "om_takeover", text: "用户提示：\nMac 端继续输入" },
-    { messageId: "om_takeover", text: "正在处理 Mac 输入。" },
+    { messageId: "om_takeover_restore", text: "用户提示：\nMac 端新任务" },
+    { messageId: "om_takeover_restore", text: "正在处理新任务。" },
   ]);
 });
 
