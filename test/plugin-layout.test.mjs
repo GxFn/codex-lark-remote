@@ -211,6 +211,10 @@ test("requires explicit consent for conversation handoff", async () => {
   assert.doesNotMatch(server, /confirmedExternalHandoff/);
   assert.match(server, /handoff requires explicit consent/);
   assert.match(server, /allowed Feishu\/Lark users choose the project and window/);
+  assert.match(server, /attaches this Codex window as the control window/);
+  assert.match(server, /bridgeFetch\(state, "\/bridge\/handoff"/);
+  assert.match(server, /activatedBy: "mcp-takeover"/);
+  assert.match(server, /Control window:/);
   assert.match(server, /queryParams\.set\("cwd", args\.cwd\)/);
   assert.match(server, /Existing chat history is not sent to Feishu\/Lark/);
   assert.doesNotMatch(server, /exports the current conversation/);

@@ -227,7 +227,8 @@ session path，不会按工作目录猜测最近对话。bridge 连上后，你�
 
 飞书/Lark 通过 `控制台`、`windows`、`项目列表` 和 `接管` 控制目标选择。机器人先从
 本地 Codex session 记录列出项目，再列出某个项目内的会话/窗口。这里不是 macOS
-窗口句柄枚举。
+窗口句柄枚举。开启 Lark Remote 连接的 Codex 会话就是专用控制窗口；飞书/Lark 后续
+再从控制台选择另一个允许的本地会话作为观察或接管目标。
 
 ### 观察与接管
 
@@ -254,6 +255,9 @@ LLM 输出在聊天里连成一段。
 `codex_lark_observe` 和 `codex_lark_observe_stop` 等 MCP 工具检查和改变
 Lark Remote 状态。随插件发布的 Lark Remote Control Window skill 会提示控制窗口
 优先结合这些工具和 Codex 宿主线程工具判断，而不是只靠 JS 侧猜语义。
+
+接管是可写的，但普通飞书/Lark 消息不会直接进入目标会话；它们会先进入开启连接的
+Codex 控制窗口，再由控制窗口使用 Codex 宿主线程工具派发到选中的目标会话。
 
 ## 行为与边界
 

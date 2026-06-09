@@ -37,10 +37,11 @@ When the user says "start this plugin" or similar:
    with auth checking enabled when available. Handoff must bind the exact Codex
    thread from MCP request metadata or an explicit `threadId`; it must not guess
    from workspace path. If the tool says the current thread id is unavailable,
-   report that startup is blocked instead of falling back to local scripts. This
-   initial thread may be attached as a target, but Feishu/Lark can later choose
-   other allowed local sessions from the console. On macOS, handoff starts the
-   plugin's built-in keep-awake process unless `handoff.keepAwake` is disabled.
+  report that startup is blocked instead of falling back to local scripts. This
+  Codex conversation becomes the dedicated control window, not the selected
+  takeover target; Feishu/Lark can later choose target sessions from the
+  console. On macOS, handoff starts the plugin's built-in keep-awake process
+  unless `handoff.keepAwake` is disabled.
 5. If Feishu/Lark `appId` or `appSecret` is missing, ask for the missing values
    and give the short platform path: create an internal/custom app in
    the matching Feishu/Lark Open Platform, enable bot capability, copy App ID/App Secret from

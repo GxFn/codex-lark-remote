@@ -234,8 +234,9 @@ Feishu/Lark control path.
 
 When a Codex thread is attached, handoff uses the exact thread id or session
 path supplied by Codex. It does not guess the nearest conversation by workspace
-path. Feishu/Lark can later choose another allowed local session from the
-console.
+path. The Codex conversation that starts the connection is the dedicated control
+window; Feishu/Lark can later choose another allowed local session as the target
+from the console.
 
 On macOS, the bridge starts `caffeinate -dimsu` while handoff is active so the
 Mac can keep working with the display off. Set `handoff.keepAwake` to `false`
@@ -266,13 +267,13 @@ turns do not collapse into one continuous assistant stream.
 
 Takeover is write-capable after confirmation. Full-project takeover requires a
 non-empty `lark.allowedUsers` allowlist. Ordinary Feishu/Lark messages are sent
-to the dedicated control Codex window as thread-dispatch requests for the
-selected target. If the target session is active, the control window should
-treat the dispatch as a higher-priority interrupt/delivery request instead of
-waiting for the target to become idle. During takeover, prompts that Lark
-Remote itself sent from Feishu/Lark are not echoed back; prompts appended by
-other sources, such as automation or local Codex input, are echoed as `User
-prompt:` separators.
+to the Codex conversation that started Lark Remote, which acts as the dedicated
+control window. That control window then dispatches to the selected target. If
+the target session is active, the control window should treat the dispatch as a
+higher-priority interrupt/delivery request instead of waiting for the target to
+become idle. During takeover, prompts that Lark Remote itself sent from
+Feishu/Lark are not echoed back; prompts appended by other sources, such as
+automation or local Codex input, are echoed as `User prompt:` separators.
 
 The control Codex window can inspect and change Lark Remote state with MCP
 tools such as `codex_lark_context`, `codex_lark_takeover_projects`,
