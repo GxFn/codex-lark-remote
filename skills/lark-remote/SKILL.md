@@ -22,19 +22,8 @@ Use Lark Remote MCP tools only during normal startup.
    routing state and connecting future Feishu/Lark messages to this bridge.
 4. After consent, call `lark_prepare_takeover` for project/session takeover, or
    `lark_lock_control_window` for a control-window-only connection.
-5. Do not ask the user about tool capabilities. Normal dispatch is executed by
-   the bridge runner through local JS/HTTP route and dispatch endpoints, so
-   `capabilities` may be omitted or passed as an empty object for compatibility:
-
-```json
-{
-  "capabilities": {}
-}
-```
-
-Older cached installs may still pass legacy host-thread capability fields. They
-are accepted for compatibility, but the control-window dispatch path must not
-depend on them.
+5. Do not ask the user about the current Codex tool surface. Normal dispatch is executed by
+   the bridge runner through local JS/HTTP route and dispatch endpoints.
 
 Keep startup replies short: current readiness and the one next action.
 

@@ -266,10 +266,23 @@ export function sanitizeLarkTextContent(text) {
 
 export function stripInternalCodexMetadata(text) {
   const value = String(text || "");
-  if (!/<oai-mem-citation\b/i.test(value)) return value;
+  if (!/<(?:oai-mem-citation|environment_context|app-context|skills_instructions|plugins_instructions|collaboration_mode)\b/i.test(value)
+    && !/<permissions\s+instructions\b/i.test(value)) return value;
   return value
     .replace(/\n*<oai-mem-citation\b[^>]*>[\s\S]*?<\/oai-mem-citation>\n*/gi, "\n")
     .replace(/\n*<oai-mem-citation\b[^>]*>[\s\S]*$/gi, "")
+    .replace(/\n*<environment_context\b[^>]*>[\s\S]*?<\/environment_context>\n*/gi, "\n")
+    .replace(/\n*<environment_context\b[^>]*>[\s\S]*$/gi, "")
+    .replace(/\n*<permissions\s+instructions\b[^>]*>[\s\S]*?<\/permissions\s+instructions>\n*/gi, "\n")
+    .replace(/\n*<permissions\s+instructions\b[^>]*>[\s\S]*$/gi, "")
+    .replace(/\n*<app-context\b[^>]*>[\s\S]*?<\/app-context>\n*/gi, "\n")
+    .replace(/\n*<app-context\b[^>]*>[\s\S]*$/gi, "")
+    .replace(/\n*<skills_instructions\b[^>]*>[\s\S]*?<\/skills_instructions>\n*/gi, "\n")
+    .replace(/\n*<skills_instructions\b[^>]*>[\s\S]*$/gi, "")
+    .replace(/\n*<plugins_instructions\b[^>]*>[\s\S]*?<\/plugins_instructions>\n*/gi, "\n")
+    .replace(/\n*<plugins_instructions\b[^>]*>[\s\S]*$/gi, "")
+    .replace(/\n*<collaboration_mode\b[^>]*>[\s\S]*?<\/collaboration_mode>\n*/gi, "\n")
+    .replace(/\n*<collaboration_mode\b[^>]*>[\s\S]*$/gi, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }

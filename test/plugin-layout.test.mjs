@@ -139,7 +139,7 @@ test("keeps startup guidance on the plugin MCP path", async () => {
   assert.match(skill, /lark_\*/);
   assert.match(skill, /MCP server is not loaded/);
   assert.match(skill, /explicit consent/);
-  assert.match(skill, /capabilities/);
+  assert.doesNotMatch(skill, /capabilities/);
 });
 
 test("exposes control-window MCP tools and skill guidance", async () => {

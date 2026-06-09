@@ -125,7 +125,7 @@ const tools = [
   },
   {
     name: "lark_lock_control_window",
-    description: "Attach and lock this Codex conversation as the Lark Remote control window. Existing chat history is not sent to Feishu/Lark. Capabilities is optional and retained only for compatibility; normal dispatch uses Lark Remote MCP.",
+    description: "Attach and lock this Codex conversation as the Lark Remote control window. Existing chat history is not sent to Feishu/Lark. Normal dispatch uses Lark Remote's local bridge and queue executor.",
     inputSchema: {
       type: "object",
       required: ["confirmedLocalBridgeHandoff"],
@@ -135,33 +135,6 @@ const tools = [
         threadId: { type: "string", description: "Optional explicit Codex thread/session id. When omitted, Codex request metadata is used; the tool does not guess by workspace path." },
         cwd: { type: "string", description: "Optional workspace cwd used when resolving the current thread." },
         checkAuth: { type: "boolean", description: "Also call Feishu/Lark auth API. Defaults to false." },
-        capabilities: {
-          type: "object",
-          description: "Optional legacy capability snapshot. Normal dispatch does not require host thread tools.",
-          properties: {
-            hostThreadSend: {
-              type: "object",
-              properties: {
-                available: { type: "boolean" },
-                tool: { type: "string" },
-              },
-            },
-            hostThreadRead: {
-              type: "object",
-              properties: {
-                available: { type: "boolean" },
-                tool: { type: "string" },
-              },
-            },
-            hostThreadInterrupt: {
-              type: "object",
-              properties: {
-                available: { type: "boolean" },
-                tool: { type: "string" },
-              },
-            },
-          },
-        },
         confirmedLocalBridgeHandoff: {
           type: "boolean",
           description: "Set true only after the user explicitly approved storing local thread routing for this conversation so Feishu/Lark can continue it through the local bridge.",
@@ -179,10 +152,6 @@ const tools = [
         dataDir: { type: "string" },
         configPath: { type: "string" },
         cwd: { type: "string", description: "Optional workspace cwd used when resolving takeover targets." },
-        capabilities: {
-          type: "object",
-          description: "Optional legacy capability snapshot. Normal dispatch does not require host thread tools.",
-        },
         confirmedLocalBridgeHandoff: {
           type: "boolean",
           description: "Set true only after the user explicitly approved storing local takeover routing scope for this project.",
@@ -541,7 +510,6 @@ async function callTool(name, args, request = {}) {
         threadId: handoffArgs.threadId,
         threadPath: handoffArgs.threadPath,
         cwd: handoffArgs.cwd,
-        capabilities: args.capabilities,
         requireExplicitThread: true,
         activatedBy: "mcp",
       },
@@ -574,7 +542,6 @@ async function callTool(name, args, request = {}) {
         threadId: takeoverArgs.threadId,
         threadPath: takeoverArgs.threadPath,
         cwd: takeoverArgs.cwd,
-        capabilities: args.capabilities,
         requireExplicitThread: true,
         activatedBy: "mcp-takeover",
       },

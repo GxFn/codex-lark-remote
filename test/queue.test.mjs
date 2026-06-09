@@ -70,3 +70,58 @@ test("RemoteCommandQueue preserves thread handoff dispatch metadata", async () =
   assert.equal(claimed.dispatchTarget.threadId, "target-thread");
   assert.equal(claimed.dispatchTarget.name, "检查并修复 codex-lark-remote 功能");
 });
+
+test("RemoteCommandQueue prioritizes local control-window commands", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-queue-priority-"));
+  const queue = new RemoteCommandQueue({ dataDir: dir });
+
+  const target = await queue.enqueue({
+    source: "lark",
+    mode: "thread_handoff",
+    repoKey: "current",
+    projectRoot: "/workspace",
+    prompt: "[Lark Remote dispatch]\n修复问题",
+    codexSessionId: "target-thread",
+    targetWindowDispatch: true,
+  });
+  const control = await queue.enqueue({
+    source: "lark",
+    mode: "thread_handoff",
+    repoKey: "current",
+    projectRoot: "/workspace",
+    prompt: "status",
+    codexSessionId: "control-thread",
+    controlWindowCommand: true,
+  });
+
+  assert.equal((await queue.claimNext()).id, control.id);
+  assert.equal((await queue.claimNext()).id, target.id);
+});
+
+test("RemoteCommandQueue can claim only pending control-window commands", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-queue-control-only-"));
+  const queue = new RemoteCommandQueue({ dataDir: dir });
+
+  const target = await queue.enqueue({
+    source: "lark",
+    mode: "thread_handoff",
+    repoKey: "current",
+    projectRoot: "/workspace",
+    prompt: "[Lark Remote dispatch]\n修复问题",
+    codexSessionId: "target-thread",
+    targetWindowDispatch: true,
+  });
+  const control = await queue.enqueue({
+    source: "lark",
+    mode: "thread_handoff",
+    repoKey: "current",
+    projectRoot: "/workspace",
+    prompt: "status",
+    codexSessionId: "control-thread",
+    controlWindowCommand: true,
+  });
+
+  assert.equal((await queue.claimNextMatching((item) => item.controlWindowCommand === true)).id, control.id);
+  assert.equal((await queue.claimNextMatching((item) => item.controlWindowCommand === true)), null);
+  assert.equal((await queue.claimNext()).id, target.id);
+});

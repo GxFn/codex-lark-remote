@@ -82,7 +82,20 @@ export class RemoteCommandQueue {
 
   async claimNext() {
     return this.#mutate((db) => {
-      const command = db.commands.find((item) => item.status === "pending");
+      const pending = db.commands.filter((item) => item.status === "pending");
+      const command = pending.find((item) => item.controlWindowCommand) || pending[0];
+      if (!command) return null;
+      command.status = "running";
+      command.claimedAt = nowIso();
+      db.events.push(eventFor(command.id, "claimed", {}));
+      return command;
+    });
+  }
+
+  async claimNextMatching(predicate) {
+    if (typeof predicate !== "function") return null;
+    return this.#mutate((db) => {
+      const command = db.commands.find((item) => item.status === "pending" && predicate(item));
       if (!command) return null;
       command.status = "running";
       command.claimedAt = nowIso();

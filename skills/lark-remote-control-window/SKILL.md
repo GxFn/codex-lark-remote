@@ -77,7 +77,7 @@ The Feishu/Lark message is a work request for the selected target session.
 3. End the turn immediately after `lark_dispatch_remote_command` succeeds.
 
 Do not inspect files, run tests, or do the work in this control window.
-Do not rewrite the target task or try to use host thread tools directly.
+Do not rewrite the target task or try to use Codex dynamic thread tools directly.
 
 ### `action: "control"`
 
@@ -163,8 +163,8 @@ selection.
 
 - Never do repository work in the control window.
 - Never use shell commands to route Feishu/Lark messages.
-- Never use dynamic host thread tools such as `send_message_to_thread` from this
-  control-window flow; `codex exec` cannot call them reliably.
+- Never use Codex dynamic thread tools from this control-window flow; `codex exec`
+  cannot call them reliably.
 - Never send ordinary Feishu/Lark text directly from JavaScript to the target;
   dispatch must go through stored remote-command state and the Lark Remote
   route/dispatch executor.
@@ -174,8 +174,8 @@ selection.
   `lark_reply_remote_command`, or `lark_request_clarification`.
 - If the target session is busy, still dispatch normally. Busy status alone is
   not failure.
-- Legacy host thread capability snapshots may exist in state files, but normal
-  dispatch must not depend on them.
+- Legacy state files may contain obsolete capability snapshots, but normal
+  dispatch must not read or depend on them.
 - Feishu/Lark cannot approve native Codex Desktop permission dialogs. If a
   native approval is required, use `lark_reply_remote_command` to tell the user
   exactly what must be approved.

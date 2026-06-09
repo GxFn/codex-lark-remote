@@ -703,9 +703,6 @@ test("CodexCliRunner does not fall back to codex exec when local control routing
     dataDir,
     threadId: "control-thread",
     cwd: dataDir,
-    capabilities: {
-      hostThreadSend: { available: true, tool: "send_message_to_thread" },
-    },
   });
 
   let command = {
@@ -760,6 +757,251 @@ test("CodexCliRunner does not fall back to codex exec when local control routing
   await assert.rejects(fs.stat(argsPath), { code: "ENOENT" });
 });
 
+test("CodexCliRunner still routes control-window commands while a target run is busy", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-control-while-busy-"));
+  const queue = new RemoteCommandQueue({ dataDir });
+  await queue.enqueue({
+    id: "rcmd_control_while_busy",
+    source: "lark",
+    mode: "thread_handoff",
+    status: "pending",
+    notifyStarted: false,
+    controlWindowCommand: true,
+    messageId: "om_1",
+    projectRoot: dataDir,
+    prompt: "项目列表",
+    codexSessionId: "control-thread",
+  });
+  const bridgeCalls = [];
+  const runner = new CodexCliRunner({
+    queue,
+    config: {
+      dataDir,
+      runner: { codexPath: "codex" },
+      handoff: { notifyProgress: false },
+    },
+    notifier: { reply: async () => {} },
+    bridgeClient: {
+      readState: async () => ({ url: "mock://bridge", token: "token" }),
+      fetch: async (_state, route, options = {}) => {
+        bridgeCalls.push({ route, body: options.body || null });
+        if (route === "/bridge/remote-command/route") {
+          return {
+            success: true,
+            data: {
+              action: "control_reply",
+              toolInput: {
+                remoteCommandId: "rcmd_control_while_busy",
+                text: "当前可接管项目：CodexPlugin",
+              },
+            },
+          };
+        }
+        if (route === "/bridge/remote-command/reply") {
+          await queue.update(
+            options.body.remoteCommandId,
+            { status: "control_completed", controlStatus: "control_completed", result: options.body.text },
+            "control_reply_recorded",
+          );
+          return { success: true, text: options.body.text };
+        }
+        throw new Error(`unexpected route ${route}`);
+      },
+    },
+  });
+  runner.busy = true;
+
+  await runner.processAll();
+
+  const command = await queue.get("rcmd_control_while_busy");
+  assert.equal(command.status, "control_completed");
+  assert.equal(command.result, "当前可接管项目：CodexPlugin");
+  assert.deepEqual(bridgeCalls.map((call) => call.route), [
+    "/bridge/remote-command/route",
+    "/bridge/remote-command/reply",
+  ]);
+});
+
+test("CodexCliRunner does not cancel local control commands when the control session is busy", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-control-session-busy-"));
+  const sessionPath = path.join(dataDir, "rollout-2026-05-13T10-01-00-control-thread.jsonl");
+  await fs.writeFile(sessionPath, [
+    JSON.stringify({ type: "session_meta", payload: { id: "control-thread", cwd: dataDir, name: "Control window" } }),
+    JSON.stringify({ type: "event_msg", payload: { type: "agent_reasoning", message: "control window is busy" } }),
+    "",
+  ].join("\n"));
+  const queue = new RemoteCommandQueue({ dataDir });
+  await queue.enqueue({
+    id: "rcmd_control_session_busy",
+    source: "lark",
+    mode: "thread_handoff",
+    status: "pending",
+    notifyStarted: false,
+    controlWindowCommand: true,
+    messageId: "om_1",
+    projectRoot: dataDir,
+    prompt: "项目列表",
+    codexSessionId: "control-thread",
+    codexSessionPath: sessionPath,
+  });
+  const runner = new CodexCliRunner({
+    queue,
+    config: {
+      dataDir,
+      runner: { codexPath: "codex" },
+      handoff: { notifyProgress: false, idleDebounceMs: 60_000 },
+    },
+    notifier: { reply: async () => {} },
+    bridgeClient: {
+      readState: async () => ({ url: "mock://bridge", token: "token" }),
+      fetch: async (_state, route, options = {}) => {
+        if (route === "/bridge/remote-command/route") {
+          return {
+            success: true,
+            data: {
+              action: "control_reply",
+              toolInput: {
+                remoteCommandId: "rcmd_control_session_busy",
+                text: "当前可接管项目：CodexPlugin",
+              },
+            },
+          };
+        }
+        if (route === "/bridge/remote-command/reply") {
+          await queue.update(
+            options.body.remoteCommandId,
+            { status: "control_completed", controlStatus: "control_completed", result: options.body.text },
+            "control_reply_recorded",
+          );
+          return { success: true, text: options.body.text };
+        }
+        throw new Error(`unexpected route ${route}`);
+      },
+    },
+  });
+
+  await runner.processAll();
+
+  const command = await queue.get("rcmd_control_session_busy");
+  assert.equal(command.status, "control_completed");
+  assert.equal(command.result, "当前可接管项目：CodexPlugin");
+});
+
+test("CodexCliRunner fails closed when a routed local control tool fails", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-control-fails-"));
+  const queue = new RemoteCommandQueue({ dataDir });
+  await queue.enqueue({
+    id: "rcmd_control_failure",
+    source: "lark",
+    mode: "thread_handoff",
+    status: "pending",
+    notifyStarted: false,
+    controlWindowCommand: true,
+    messageId: "om_1",
+    projectRoot: dataDir,
+    prompt: "别刷命令了",
+    codexSessionId: "control-thread",
+  });
+  const bridgeCalls = [];
+  const runner = new CodexCliRunner({
+    queue,
+    config: {
+      dataDir,
+      runner: { codexPath: "codex" },
+      handoff: { notifyProgress: false },
+    },
+    notifier: { reply: async () => {} },
+    bridgeClient: {
+      readState: async () => ({ url: "mock://bridge", token: "token" }),
+      fetch: async (_state, route, options = {}) => {
+        bridgeCalls.push({ route, body: options.body || null });
+        if (route === "/bridge/remote-command/route") {
+          return {
+            success: true,
+            data: {
+              action: "control",
+              nextTool: "lark_set_command_visibility",
+              toolInput: { enabled: false },
+              completionToolInput: { remoteCommandId: "rcmd_control_failure" },
+            },
+          };
+        }
+        if (route === "/bridge/commands/visibility") {
+          return { success: false, error: "runtime config is not writable" };
+        }
+        throw new Error(`unexpected route ${route}`);
+      },
+    },
+  });
+
+  await runner.processAll();
+
+  const command = await queue.get("rcmd_control_failure");
+  assert.equal(command.status, "failed");
+  assert.match(command.error, /lark_set_command_visibility failed: runtime config is not writable/);
+  assert.deepEqual(bridgeCalls.map((call) => call.route), [
+    "/bridge/remote-command/route",
+    "/bridge/commands/visibility",
+  ]);
+});
+
+test("CodexCliRunner fails closed when local dispatch execution fails", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-dispatch-fails-"));
+  const queue = new RemoteCommandQueue({ dataDir });
+  await queue.enqueue({
+    id: "rcmd_dispatch_failure",
+    source: "lark",
+    mode: "thread_handoff",
+    status: "pending",
+    notifyStarted: false,
+    controlWindowCommand: true,
+    handoffDispatch: true,
+    messageId: "om_1",
+    projectRoot: dataDir,
+    prompt: "全面检查链路",
+    codexSessionId: "control-thread",
+    dispatchTarget: {
+      threadId: "target-thread",
+      name: "检查并修复 codex-lark-remote 功能",
+      cwd: dataDir,
+    },
+  });
+  const runner = new CodexCliRunner({
+    queue,
+    config: {
+      dataDir,
+      runner: { codexPath: "codex" },
+      handoff: { notifyProgress: false },
+    },
+    notifier: { reply: async () => {} },
+    bridgeClient: {
+      readState: async () => ({ url: "mock://bridge", token: "token" }),
+      fetch: async (_state, route, options = {}) => {
+        if (route === "/bridge/remote-command/route") {
+          return {
+            success: true,
+            data: {
+              action: "dispatch",
+              nextTool: "lark_dispatch_remote_command",
+              toolInput: { remoteCommandId: options.body.remoteCommandId },
+            },
+          };
+        }
+        if (route === "/bridge/dispatch/execute") {
+          return { success: false, error: "target queue write failed" };
+        }
+        throw new Error(`unexpected route ${route}`);
+      },
+    },
+  });
+
+  await runner.processAll();
+
+  const command = await queue.get("rcmd_dispatch_failure");
+  assert.equal(command.status, "failed");
+  assert.match(command.error, /lark_dispatch_remote_command failed: target queue write failed/);
+});
+
 test("CodexCliRunner accepts a real routed control-window dispatch record", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-control-dispatch-"));
   const argsPath = path.join(dataDir, "args.json");
@@ -792,10 +1034,6 @@ test("CodexCliRunner accepts a real routed control-window dispatch record", asyn
     dataDir,
     threadId: "control-thread",
     cwd: dataDir,
-    capabilities: {
-      hostThreadSend: { available: true, tool: "send_message_to_thread" },
-      hostThreadRead: { available: true, tool: "read_thread" },
-    },
   });
 
   const queue = new RemoteCommandQueue({ dataDir });

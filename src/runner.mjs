@@ -19,10 +19,12 @@ export class CodexCliRunner {
     this.notifier = notifier;
     this.bridgeClient = bridgeClient || {};
     this.busy = false;
+    this.controlBusy = false;
   }
 
   async processAll() {
-    if (this.busy || this.config.runner?.workerEnabled === false) return;
+    if (this.config.runner?.workerEnabled === false) return;
+    if (this.busy) return this.#processPendingControlCommands();
     this.busy = true;
     try {
       while (true) {
@@ -32,6 +34,20 @@ export class CodexCliRunner {
       }
     } finally {
       this.busy = false;
+    }
+  }
+
+  async #processPendingControlCommands() {
+    if (this.controlBusy || typeof this.queue.claimNextMatching !== "function") return;
+    this.controlBusy = true;
+    try {
+      while (true) {
+        const command = await this.queue.claimNextMatching((item) => item.controlWindowCommand === true);
+        if (!command) return;
+        await this.#runOne(command);
+      }
+    } finally {
+      this.controlBusy = false;
     }
   }
 
@@ -133,6 +149,14 @@ export class CodexCliRunner {
   async #runHandoffOne(command) {
     try {
       if (await this.#isCancelled(command.id)) return;
+      if (command.controlWindowCommand) {
+        if (shouldNotifyStarted(this.config, command)) {
+          const language = await resolveCommandLanguage(this.config, command);
+          await this.#notify(command, formatHandoffStarted({ language, dispatchTarget: command.dispatchTarget }));
+        }
+        await this.#runRemoteControlCommand(command);
+        return;
+      }
       const busy = command.handoffDispatch ? null : await detectBusyHandoffSession(this.config, command);
       if (busy) {
         const language = await resolveCommandLanguage(this.config, command);
@@ -152,10 +176,6 @@ export class CodexCliRunner {
       if (shouldNotifyStarted(this.config, command)) {
         const language = await resolveCommandLanguage(this.config, command);
         await this.#notify(command, formatHandoffStarted({ language, dispatchTarget: command.dispatchTarget }));
-      }
-      if (command.controlWindowCommand) {
-        await this.#runRemoteControlCommand(command);
-        return;
       }
       const progressNotifier = createProgressNotifier({
         command,
@@ -223,46 +243,45 @@ export class CodexCliRunner {
     }
 
     const fetchBridge = this.bridgeClient.fetch || bridgeFetch;
-    const route = await fetchBridge(state, "/bridge/remote-command/route", {
+    const route = requireBridgeSuccess(await fetchBridge(state, "/bridge/remote-command/route", {
       method: "POST",
       body: { remoteCommandId: command.id },
-    });
-    if (!route?.success) throw new Error(route?.error || "Lark Remote route failed");
+    }), "lark_route_remote_command failed");
 
     const data = route.data || {};
     if (data.action === "dispatch") {
-      await fetchBridge(state, "/bridge/dispatch/execute", {
+      requireBridgeSuccess(await fetchBridge(state, "/bridge/dispatch/execute", {
         method: "POST",
         body: data.toolInput || { remoteCommandId: command.id },
-      });
+      }), "lark_dispatch_remote_command failed");
       return;
     }
     if (data.action === "clarify") {
-      await fetchBridge(state, "/bridge/dispatch/clarify", {
+      requireBridgeSuccess(await fetchBridge(state, "/bridge/dispatch/clarify", {
         method: "POST",
         body: data.toolInput || data.completionToolInput || { remoteCommandId: command.id },
-      });
+      }), "lark_request_clarification failed");
       return;
     }
     if (data.action === "blocked") {
-      await fetchBridge(state, "/bridge/dispatch/record", {
+      requireBridgeSuccess(await fetchBridge(state, "/bridge/dispatch/record", {
         method: "POST",
         body: data.toolInput || data.completionToolInput || {
           remoteCommandId: command.id,
           status: "blocked_retryable",
           error: data.reason || data.summary || "Dispatch is blocked.",
         },
-      });
+      }), "lark_record_dispatch failed");
       return;
     }
     if (data.action === "control_reply") {
-      await fetchBridge(state, "/bridge/remote-command/reply", {
+      requireBridgeSuccess(await fetchBridge(state, "/bridge/remote-command/reply", {
         method: "POST",
         body: data.toolInput || data.completionToolInput || {
           remoteCommandId: command.id,
           text: data.text || data.summary || "",
         },
-      });
+      }), "lark_reply_remote_command failed");
       return;
     }
     if (data.action === "control") {
@@ -467,27 +486,30 @@ async function executeRoutedControlTool(state, routeData = {}, remoteCommandId =
   const input = routeData.toolInput || {};
   if (tool === "lark_stop") {
     const text = routeData.summary || "正在关闭飞书连接。";
-    await fetchBridge(state, "/bridge/remote-command/reply", {
+    requireBridgeSuccess(await fetchBridge(state, "/bridge/remote-command/reply", {
       method: "POST",
       body: {
         ...(routeData.completionToolInput || {}),
         remoteCommandId,
         text,
       },
-    });
-    await callBridgeControlTool(state, tool, { ...input, remoteCommandId }, { fetchBridge });
+    }), "lark_reply_remote_command failed");
+    requireBridgeSuccess(
+      await callBridgeControlTool(state, tool, { ...input, remoteCommandId }, { fetchBridge }),
+      "lark_stop failed",
+    );
     return;
   }
-  const result = await callBridgeControlTool(state, tool, input, { fetchBridge });
+  const result = requireBridgeSuccess(await callBridgeControlTool(state, tool, input, { fetchBridge }), `${tool || "control tool"} failed`);
   const text = result?.text || result?.data?.text || result?.message || JSON.stringify(result?.data || result || {});
-  await fetchBridge(state, "/bridge/remote-command/reply", {
+  requireBridgeSuccess(await fetchBridge(state, "/bridge/remote-command/reply", {
     method: "POST",
     body: {
       ...(routeData.completionToolInput || {}),
       remoteCommandId,
       text,
     },
-  });
+  }), "lark_reply_remote_command failed");
 }
 
 async function callBridgeControlTool(state, tool, input = {}, { fetchBridge = bridgeFetch } = {}) {
@@ -568,6 +590,12 @@ async function callBridgeControlTool(state, tool, input = {}, { fetchBridge = br
     default:
       throw new Error(`Unsupported Lark Remote control tool: ${tool || "unknown"}`);
   }
+}
+
+function requireBridgeSuccess(result, fallbackMessage) {
+  if (result && result.success !== false) return result;
+  const error = result?.error || result?.message || result?.text || fallbackMessage || "Lark Remote bridge request failed";
+  throw new Error(error.startsWith(fallbackMessage) ? error : `${fallbackMessage}: ${error}`);
 }
 
 function normalizeDelivery(delivery) {

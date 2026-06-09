@@ -53,13 +53,12 @@ test("processLarkEvent still rejects non-whoami messages outside allowlist", asy
   assert.deepEqual(replies, [{ messageId: "om_1", text: "Permission denied." }]);
 });
 
-test("dispatch prepare ignores legacy host-thread capabilities", async () => {
+test("dispatch prepare does not expose legacy host-thread fields", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-dispatch-record-"));
   await activateHandoff({
     dataDir,
     threadId: "control-thread",
     cwd: dataDir,
-    capabilities: {},
   });
   const queue = new RemoteCommandQueue({ dataDir });
   const command = await queue.enqueue({
@@ -89,7 +88,7 @@ test("dispatch prepare ignores legacy host-thread capabilities", async () => {
   assert.equal(prepared.success, true);
   assert.equal(prepared.data.action, "dispatch");
   assert.equal(prepared.data.target.threadId, "target-thread");
-  assert.equal(prepared.data.capabilities.hostThreadSend.available, false);
+  assert.equal("capabilities" in prepared.data, false);
   assert.equal(prepared.data.targetPrompt, "[Lark Remote dispatch]\n全面检查链路");
 
   const recorded = await recordDispatchCommand(ctx, {
@@ -154,9 +153,6 @@ test("remote command router returns exact next actions", async () => {
     dataDir,
     threadId: "control-thread",
     cwd: dataDir,
-    capabilities: {
-      hostThreadSend: { available: true, tool: "send_message_to_thread" },
-    },
   });
   const queue = new RemoteCommandQueue({ dataDir });
   const dispatchCommand = await queue.enqueue({
@@ -238,7 +234,6 @@ test("remote command router exposes management commands as local bridge actions"
     dataDir,
     threadId: "control-thread",
     cwd: dataDir,
-    capabilities: {},
   });
   const queue = new RemoteCommandQueue({ dataDir });
   const ctx = {
@@ -290,7 +285,6 @@ test("dispatchRemoteCommand queues target delivery and records original command"
     dataDir,
     threadId: "control-thread",
     cwd: dataDir,
-    capabilities: {},
   });
   const queue = new RemoteCommandQueue({ dataDir });
   const command = await queue.enqueue({

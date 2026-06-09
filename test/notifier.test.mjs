@@ -327,6 +327,17 @@ test("stripInternalCodexMetadata removes complete and partial memory citation bl
   );
 });
 
+test("stripInternalCodexMetadata removes Codex environment metadata blocks", () => {
+  assert.equal(
+    stripInternalCodexMetadata("A\n<environment_context>\n<cwd>/tmp/private</cwd>\n</environment_context>\nB"),
+    "A\nB",
+  );
+  assert.equal(
+    stripInternalCodexMetadata("A\n<permissions instructions>\nsecret policy"),
+    "A",
+  );
+});
+
 test("sanitizeLarkTextContent removes common image-only blocks", () => {
   assert.equal(
     sanitizeLarkTextContent("A\n<<ImageDisplayed>>\n![cap][ref]\n[ref]: /tmp/a.png\nB"),

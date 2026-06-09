@@ -265,7 +265,6 @@ async function route(ctx) {
       threadPath: body.threadPath,
       cwd: body.cwd,
       name: body.name,
-      capabilities: body.capabilities,
       requireExplicitThread: body.requireExplicitThread !== false,
       activatedBy: body.activatedBy || "bridge",
     });
@@ -1295,7 +1294,6 @@ export async function prepareDispatchCommand(ctx, remoteCommandId) {
   const takeover = await readTakeover({ dataDir: ctx.config.dataDir });
   const target = normalizeDispatchTarget(command.dispatchTarget)
     || (["active", "pending"].includes(takeover?.state || "") ? normalizeDispatchTarget(takeover.target) : null);
-  const capabilities = controlWindowCapabilities(handoff);
   const data = {
     remoteCommandId: command.id,
     status: command.status,
@@ -1311,7 +1309,6 @@ export async function prepareDispatchCommand(ctx, remoteCommandId) {
       name: handoff?.name || "",
       lockedAt: handoff?.controlWindow?.lockedAt || handoff?.activatedAt || "",
     },
-    capabilities,
   };
 
   if (!handoff?.active) {
@@ -1780,22 +1777,6 @@ function controlWindowRouteContract(route = {}) {
     localRepositoryWorkAllowed: false,
     completionRequired: route.completionTool || "",
     finishAfterCompletionTool: true,
-  };
-}
-
-function controlWindowCapabilities(handoff = {}) {
-  const capabilities = handoff?.controlWindow?.capabilities || handoff?.capabilities || {};
-  return {
-    hostThreadSend: normalizeCapabilitySnapshot(capabilities.hostThreadSend, "send_message_to_thread"),
-    hostThreadRead: normalizeCapabilitySnapshot(capabilities.hostThreadRead, "read_thread"),
-    hostThreadInterrupt: normalizeCapabilitySnapshot(capabilities.hostThreadInterrupt, ""),
-  };
-}
-
-function normalizeCapabilitySnapshot(value, fallbackTool) {
-  return {
-    available: value?.available === true,
-    tool: String(value?.tool || fallbackTool || "").trim(),
   };
 }
 
