@@ -97,17 +97,17 @@ test("buildHandoffPrompt wraps Feishu input as a control-window message by defau
     prompt: "fix README",
   });
 
-  assert.match(prompt, /\[Codex Lark Remote control message\]/);
-  assert.match(prompt, /This is a Feishu\/Lark remote control message/);
-  assert.match(prompt, /First analyze the wrapped Feishu\/Lark message as Lark Remote control input/);
-  assert.match(prompt, /ordinary work\/coding\/task request and no selected target session is present/);
+  assert.match(prompt, /\[Codex Lark Remote control\]/);
+  assert.match(prompt, /Use the Lark Remote Control Window skill and Lark Remote MCP tools/);
+  assert.match(prompt, /Do one control action or one target dispatch, then stop/);
   assert.match(prompt, /remoteCommandId: rcmd_note/);
-  assert.match(prompt, /Lark Remote Control Window skill/);
+  assert.match(prompt, /target: none/);
   assert.match(prompt, /<feishu_lark_message>\nfix README\n<\/feishu_lark_message>/);
-  assert.match(prompt, /Feishu\/Lark cannot click native Codex Desktop permission dialogs/);
-  assert.match(prompt, /Reply with a concise prompt explaining what permission is needed/);
-  assert.match(prompt, /immediately send a concise Feishu\/Lark-suitable final reply and end this turn/);
+  assert.doesNotMatch(prompt, /Control-window routing contract/);
+  assert.doesNotMatch(prompt, /Permission boundary/);
+  assert.doesNotMatch(prompt, /Sender:/);
   assert.doesNotMatch(prompt, /<target_prompt>/);
+  assert.ok(prompt.split("\n").length <= 8);
 });
 
 test("buildHandoffPrompt keeps using the control envelope for subsequent turns", () => {
@@ -117,7 +117,7 @@ test("buildHandoffPrompt keeps using the control envelope for subsequent turns",
     prompt: "fix README",
   });
 
-  assert.match(prompt, /\[Codex Lark Remote control message\]/);
+  assert.match(prompt, /\[Codex Lark Remote control\]/);
   assert.match(prompt, /<feishu_lark_message>\nfix README\n<\/feishu_lark_message>/);
 });
 
@@ -128,11 +128,10 @@ test("buildHandoffPrompt can still annotate Feishu input when configured", () =>
     prompt: "fix README",
   }, { promptStyle: "annotated" });
 
-  assert.match(prompt, /Codex Lark Remote control message/);
-  assert.match(prompt, /Feishu\/Lark/);
-  assert.match(prompt, /Permission boundary:/);
+  assert.match(prompt, /Codex Lark Remote control/);
   assert.match(prompt, /Compatibility note:/);
   assert.match(prompt, /fix README/);
+  assert.doesNotMatch(prompt, /Permission boundary:/);
 });
 
 test("buildHandoffPrompt wraps target dispatch for the control window", () => {
@@ -150,21 +149,19 @@ test("buildHandoffPrompt wraps target dispatch for the control window", () => {
     },
   });
 
-  assert.match(prompt, /\[Codex Lark Remote control message\]/);
+  assert.match(prompt, /\[Codex Lark Remote control\]/);
   assert.match(prompt, /Lark Remote Control Window skill/);
-  assert.match(prompt, /wrapped Feishu\/Lark message as Lark Remote control input/);
-  assert.match(prompt, /ordinary work\/coding\/task request and a selected target session is present/);
-  assert.match(prompt, /Do not inspect repository files, run shell commands, edit code, run tests/);
-  assert.match(prompt, /send_message_to_thread or handoff_thread/);
-  assert.match(prompt, /higher-priority dispatch\/interrupt request/);
-  assert.match(prompt, /end this turn/);
+  assert.match(prompt, /Do one control action or one target dispatch, then stop/);
   assert.match(prompt, /\[Lark Remote dispatch\]/);
   assert.match(prompt, /remoteCommandId: rcmd_dispatch/);
-  assert.match(prompt, /target-thread-1/);
-  assert.match(prompt, /修复 lark 远程派发/);
+  assert.match(prompt, /target: title="修复 lark 远程派发" threadId="target-thread-1" cwd="\/workspace" status="running \(last event running\)"/);
   assert.match(prompt, /<feishu_lark_message>\n优先处理这个变更\n<\/feishu_lark_message>/);
+  assert.match(prompt, /target_prompt:/);
   assert.match(prompt, /<target_prompt>\n\[Lark Remote dispatch\]\n优先处理这个变更\n<\/target_prompt>/);
-  assert.doesNotMatch(prompt, /decide whether to answer/);
+  assert.doesNotMatch(prompt, /Control-window routing contract/);
+  assert.doesNotMatch(prompt, /Permission boundary/);
+  assert.doesNotMatch(prompt, /Selected target session/);
+  assert.ok(prompt.split("\n").length <= 13);
 });
 
 test("CodexCliRunner sends a handoff started acknowledgement by default", async () => {
