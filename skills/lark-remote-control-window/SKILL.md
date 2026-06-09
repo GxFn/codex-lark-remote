@@ -11,14 +11,22 @@ trying to fully classify it in JavaScript.
 
 ## Operating Model
 
-- Treat the Feishu/Lark message as the source of truth.
-- If the prompt contains `[Codex Lark Remote thread dispatch]` and a selected
-  target session, this control window is only a dispatcher. The Feishu/Lark user
-  message is not a task for this window: do not inspect files, run shell
-  commands, edit code, run tests, or answer the requested work here. Deliver the
+- Treat the wrapped Feishu/Lark message as the source of truth.
+- If the prompt contains `[Codex Lark Remote control message]`, first analyze it
+  as Lark Remote control input. Use Lark Remote MCP tools and this skill for
+  status, project/session selection, observation, takeover, queue/history,
+  cancel/approval, or bridge-control requests.
+- If the wrapped message is an ordinary work/coding/task request and a selected
+  target session exists, this control window is only a dispatcher. Deliver the
   provided target prompt to the selected target thread with host thread tools,
-  then reply with concise delivery status. If delivery cannot be verified, say
-  dispatch is blocked instead of doing the task locally.
+  then reply with concise delivery status. Do not inspect files, run shell
+  commands, edit code, run tests, or answer the requested work here.
+- If no target session is selected for an ordinary work request, use Lark Remote
+  MCP tools to help select/take over a target, or explain that no target is
+  selected. Do not execute the work locally in this control window.
+- After completing one control action, target dispatch, or blocked-state report,
+  immediately send a concise final reply and end the turn. Do not continue
+  analysis, start local follow-up work, or chain extra tasks.
 - JavaScript has already intercepted only exact bridge/control keywords such as
   `控制台`, `status`, `observe off`, `exit handoff`, `close Lark connection`, and
   `control:` / `控制:`.
@@ -65,13 +73,12 @@ trying to fully classify it in JavaScript.
 - For "观察 2", "observe session 2", or similar, call
   `codex_lark_observation_targets` when needed, then `codex_lark_observe` with
   `remoteCommandId`.
-- For ordinary coding/work requests while a target is active, this window must
-  only dispatch. Use host thread tools to deliver the target prompt to the
-  selected target thread. Do not inspect the repository, run commands, edit
-  files, run tests, or answer the work request in this control window. Put
-  `[Lark Remote dispatch]` on the first line of Feishu/Lark-origin target
-  prompts so target observation does not echo that prompt back to Feishu/Lark;
-  do not use that marker for Mac-local or automation prompts.
+- For ordinary coding/work requests while a target is active, dispatch the target
+  prompt to the selected target thread. Do not inspect the repository, run
+  commands, edit files, run tests, or answer the work request in this control
+  window. Put `[Lark Remote dispatch]` on the first line of Feishu/Lark-origin
+  target prompts so target observation does not echo that prompt back to
+  Feishu/Lark; do not use that marker for Mac-local or automation prompts.
 - For direct questions about Lark Remote state, prefer `codex_lark_context` or
   `codex_lark_status` and answer concisely.
 
@@ -80,4 +87,4 @@ trying to fully classify it in JavaScript.
 Reply as if writing in a Feishu/Lark mobile chat: concise, same language as the
 user, no raw logs, no secret values, and no internal ids unless the user asks for
 diagnostics. If a tool call changes routing state, summarize the new state and
-the next useful action.
+the next useful action. Once the reply is sent, stop.

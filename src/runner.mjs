@@ -349,46 +349,43 @@ export function buildCodexResumeArgs({ runner = {}, threadId, prompt, outputFile
 
 export function buildHandoffPrompt(command, { promptStyle = "direct" } = {}) {
   if (command.dispatchTarget?.threadId) {
-    return buildThreadDispatchPrompt(command);
+    return buildControlWindowPrompt(command);
   }
 
   if (promptStyle === "direct") {
-    const prompt = command.prompt || "";
-    return command.includeRemoteNote === true ? withHandoffPermissionNote(prompt, command) : prompt;
+    return buildControlWindowPrompt(command);
   }
 
   return [
-    "[Codex Lark Remote handoff]",
-    "The user is sending this message from Feishu/Lark to continue the current Codex conversation.",
-    `Sender: ${command.userName || "lark_user"}${command.userIdHash ? ` (${command.userIdHash})` : ""}`,
+    buildControlWindowPrompt(command),
     "",
-    "Permission boundary:",
-    "Feishu/Lark cannot click native Codex Desktop permission dialogs. If approval, sandbox escalation, network/install permission, or another UI permission is required, do not wait silently. Reply with a concise prompt explaining what permission is needed and whether the user must approve it in Codex Desktop or can provide explicit text consent in Feishu/Lark.",
-    "",
-    "User message:",
-    command.prompt,
+    "Compatibility note:",
+    "This prompt was requested with annotated style, but it still uses the Lark Remote control-message envelope so the control window does not receive a bare task.",
   ].join("\n");
 }
 
-function buildThreadDispatchPrompt(command) {
+function buildControlWindowPrompt(command) {
   const target = command.dispatchTarget || {};
+  const hasTarget = Boolean(target.threadId);
   const targetPrompt = [
     "[Lark Remote dispatch]",
     command.prompt || "",
   ].filter(Boolean).join("\n");
   return [
-    "[Codex Lark Remote thread dispatch]",
-    "You are the dedicated Lark Remote control Codex window, not the target worker thread. JavaScript has not sent this message to the target thread; it only delivered this dispatch request to you.",
+    "[Codex Lark Remote control message]",
+    "This is a Feishu/Lark remote control message for the dedicated Lark Remote control Codex window.",
+    "You are the control window, not the selected target worker thread.",
     "",
-    "Hard dispatch boundary:",
+    "Control-window routing contract:",
     "- Use the Lark Remote Control Window skill if it is available.",
-    "- The Feishu/Lark user message below is NOT a task for this control window.",
-    "- Do not inspect repository files, run shell commands, edit code, run tests, or answer the requested work in this control window.",
-    "- Your only successful action is to deliver the target prompt below to the selected target session with Codex host thread tools such as send_message_to_thread or handoff_thread, then reply with concise delivery status.",
+    "- First analyze the wrapped Feishu/Lark message as Lark Remote control input.",
+    "- If it asks for Lark Remote state, project/session selection, observation, takeover, queue/history/cancel/approval, or bridge control, use Lark Remote MCP tools and skills to handle that control request.",
+    "- If it is an ordinary work/coding/task request and a selected target session is present, deliver the target prompt below to that target session with Codex host thread tools such as send_message_to_thread or handoff_thread.",
+    "- If it is an ordinary work/coding/task request and no selected target session is present, use Lark Remote MCP tools to help the user select/take over a target, or explain that no target is selected.",
+    "- The Feishu/Lark work request is not a task for this control window. Do not inspect repository files, run shell commands, edit code, run tests, or answer the requested work locally in this control window.",
     "- If host thread tools are unavailable, the target thread cannot be addressed, or delivery/readback cannot be verified, stop and tell the Feishu/Lark user that dispatch is blocked. Do not work around this by doing the task here.",
-    "- If the target thread is busy, still deliver as a normal higher-priority dispatch/interrupt request instead of failing because of busy status.",
-    "- Do not claim delivery merely because this dispatch request reached the control window.",
-    "- Keep the final reply concise and suitable for Feishu/Lark.",
+    "- If the selected target thread is busy, still deliver as a normal higher-priority dispatch/interrupt request instead of failing because of busy status.",
+    "- After completing the control action, target dispatch, or blocked-state report, immediately send a concise Feishu/Lark-suitable final reply and end this turn. Do not continue analysis, start local follow-up work, or chain extra tasks.",
     "",
     "Lark Remote command:",
     `- remoteCommandId: ${command.id || ""}`,
@@ -396,11 +393,11 @@ function buildThreadDispatchPrompt(command) {
     "- Do not repeat internal ids in the final Feishu/Lark reply unless the user asks for diagnostics.",
     "",
     "Selected target session:",
-    `- title: ${target.name || "Untitled Codex chat"}`,
-    `- threadId: ${target.threadId || ""}`,
-    target.cwd ? `- cwd: ${target.cwd}` : "",
-    target.status ? `- status: ${target.status}${target.statusReason ? ` (${target.statusReason})` : ""}` : "",
-    target.threadPath ? `- localSessionPath: ${target.threadPath}` : "",
+    hasTarget ? `- title: ${target.name || "Untitled Codex chat"}` : "- none",
+    hasTarget ? `- threadId: ${target.threadId || ""}` : "",
+    hasTarget && target.cwd ? `- cwd: ${target.cwd}` : "",
+    hasTarget && target.status ? `- status: ${target.status}${target.statusReason ? ` (${target.statusReason})` : ""}` : "",
+    hasTarget && target.threadPath ? `- localSessionPath: ${target.threadPath}` : "",
     "",
     "Sender:",
     `${command.userName || "lark_user"}${command.userIdHash ? ` (${command.userIdHash})` : ""}`,
@@ -408,27 +405,16 @@ function buildThreadDispatchPrompt(command) {
     "Permission boundary:",
     "Feishu/Lark cannot click native Codex Desktop permission dialogs. If approval, sandbox escalation, network/install permission, or another UI permission is required, do not wait silently. Reply with a concise prompt explaining what permission is needed and whether the user must approve it in Codex Desktop or can provide explicit text consent in Feishu/Lark.",
     "",
-    "Target prompt to deliver exactly:",
-    "<target_prompt>",
-    targetPrompt,
-    "</target_prompt>",
-  ].filter((line) => line !== "").join("\n");
-}
-
-function withHandoffPermissionNote(prompt, command = {}) {
-  return [
-    prompt,
+    "Wrapped Feishu/Lark message:",
+    "<feishu_lark_message>",
+    command.prompt || "",
+    "</feishu_lark_message>",
     "",
-    "<codex_lark_remote_note>",
-    `remoteCommandId: ${command.id || ""}`,
-    "Use the Lark Remote Control Window skill if it is available.",
-    "Use remoteCommandId with Lark Remote MCP tools when they need to anchor actions such as observation to the current Feishu/Lark message. Do not repeat internal ids in the final Feishu/Lark reply unless the user asks for diagnostics.",
-    "Lark Remote JavaScript intercepted only explicit bridge/control keywords before this reached you. For ordinary Feishu/Lark text, use your Codex agent abilities, available skills, and available MCP tools to decide whether to answer directly, inspect Lark Remote status, choose targets, or perform thread dispatch.",
-    "This message came from Feishu/Lark remote takeover. Feishu/Lark cannot click native Codex Desktop permission dialogs. If approval, sandbox escalation, network/install permission, or another UI permission is required, do not wait silently. Reply with a concise prompt explaining what permission is needed and whether the user must approve it in Codex Desktop or can provide explicit text consent in Feishu/Lark.",
-    "</codex_lark_remote_note>",
-  ]
-    .filter(Boolean)
-    .join("\n");
+    hasTarget ? "Target prompt to deliver exactly when dispatching to the selected target:" : "",
+    hasTarget ? "<target_prompt>" : "",
+    hasTarget ? targetPrompt : "",
+    hasTarget ? "</target_prompt>" : "",
+  ].filter((line) => line !== "").join("\n");
 }
 
 function normalizeDelivery(delivery) {

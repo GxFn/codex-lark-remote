@@ -89,7 +89,7 @@ test("buildCodexResumeArgs can keep the git repo check when explicitly requested
   assert.equal(args.includes("--skip-git-repo-check"), false);
 });
 
-test("buildHandoffPrompt sends Feishu input as direct Codex conversation text by default", () => {
+test("buildHandoffPrompt wraps Feishu input as a control-window message by default", () => {
   const prompt = buildHandoffPrompt({
     id: "rcmd_note",
     userName: "ou_user",
@@ -98,15 +98,20 @@ test("buildHandoffPrompt sends Feishu input as direct Codex conversation text by
     includeRemoteNote: true,
   });
 
-  assert.match(prompt, /^fix README/);
+  assert.match(prompt, /\[Codex Lark Remote control message\]/);
+  assert.match(prompt, /This is a Feishu\/Lark remote control message/);
+  assert.match(prompt, /First analyze the wrapped Feishu\/Lark message as Lark Remote control input/);
+  assert.match(prompt, /ordinary work\/coding\/task request and no selected target session is present/);
   assert.match(prompt, /remoteCommandId: rcmd_note/);
   assert.match(prompt, /Lark Remote Control Window skill/);
-  assert.match(prompt, /available skills, and available MCP tools/);
+  assert.match(prompt, /<feishu_lark_message>\nfix README\n<\/feishu_lark_message>/);
   assert.match(prompt, /Feishu\/Lark cannot click native Codex Desktop permission dialogs/);
   assert.match(prompt, /Reply with a concise prompt explaining what permission is needed/);
+  assert.match(prompt, /immediately send a concise Feishu\/Lark-suitable final reply and end this turn/);
+  assert.doesNotMatch(prompt, /<target_prompt>/);
 });
 
-test("buildHandoffPrompt omits the Feishu takeover note after the first handoff turn", () => {
+test("buildHandoffPrompt keeps using the control envelope after the first handoff turn", () => {
   const prompt = buildHandoffPrompt({
     userName: "ou_user",
     userIdHash: "u_hash",
@@ -114,9 +119,9 @@ test("buildHandoffPrompt omits the Feishu takeover note after the first handoff 
     includeRemoteNote: false,
   });
 
-  assert.equal(prompt, "fix README");
+  assert.match(prompt, /\[Codex Lark Remote control message\]/);
+  assert.match(prompt, /<feishu_lark_message>\nfix README\n<\/feishu_lark_message>/);
   assert.doesNotMatch(prompt, /codex_lark_remote_note/);
-  assert.doesNotMatch(prompt, /Feishu\/Lark cannot click native Codex Desktop permission dialogs/);
 });
 
 test("buildHandoffPrompt can still annotate Feishu input when configured", () => {
@@ -126,9 +131,10 @@ test("buildHandoffPrompt can still annotate Feishu input when configured", () =>
     prompt: "fix README",
   }, { promptStyle: "annotated" });
 
-  assert.match(prompt, /Codex Lark Remote handoff/);
+  assert.match(prompt, /Codex Lark Remote control message/);
   assert.match(prompt, /Feishu\/Lark/);
   assert.match(prompt, /Permission boundary:/);
+  assert.match(prompt, /Compatibility note:/);
   assert.match(prompt, /fix README/);
 });
 
@@ -147,17 +153,19 @@ test("buildHandoffPrompt wraps target dispatch for the control window", () => {
     },
   });
 
-  assert.match(prompt, /\[Codex Lark Remote thread dispatch\]/);
+  assert.match(prompt, /\[Codex Lark Remote control message\]/);
   assert.match(prompt, /Lark Remote Control Window skill/);
-  assert.match(prompt, /JavaScript has not sent this message to the target thread/);
-  assert.match(prompt, /NOT a task for this control window/);
+  assert.match(prompt, /wrapped Feishu\/Lark message as Lark Remote control input/);
+  assert.match(prompt, /ordinary work\/coding\/task request and a selected target session is present/);
   assert.match(prompt, /Do not inspect repository files, run shell commands, edit code, run tests/);
   assert.match(prompt, /send_message_to_thread or handoff_thread/);
   assert.match(prompt, /higher-priority dispatch\/interrupt request/);
+  assert.match(prompt, /end this turn/);
   assert.match(prompt, /\[Lark Remote dispatch\]/);
   assert.match(prompt, /remoteCommandId: rcmd_dispatch/);
   assert.match(prompt, /target-thread-1/);
   assert.match(prompt, /修复 lark 远程派发/);
+  assert.match(prompt, /<feishu_lark_message>\n优先处理这个变更\n<\/feishu_lark_message>/);
   assert.match(prompt, /<target_prompt>\n\[Lark Remote dispatch\]\n优先处理这个变更\n<\/target_prompt>/);
   assert.doesNotMatch(prompt, /decide whether to answer/);
 });
