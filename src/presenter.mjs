@@ -977,8 +977,8 @@ export function buildTakeoverConfirmCard(target, options = {}) {
       {
         tag: "markdown",
         content: language === "en"
-          ? `**${escapeCardText(title)}**\n${actionTitle}\n${takeoverTargetDetailsMarkdown(target, language)}\n\nAfter confirmation, future Lark messages route to this Codex thread.`
-          : `**${escapeCardText(title)}**\n${actionTitle}\n${takeoverTargetDetailsMarkdown(target, language)}\n\n确认后，飞书后续消息会路由到这个 Codex 线程。`,
+          ? `**${actionTitle}**\n${takeoverTargetDetailsMarkdown(target, language)}\n\nAfter confirmation, future Lark messages route to this Codex thread.`
+          : `**${actionTitle}**\n${takeoverTargetDetailsMarkdown(target, language)}\n\n确认后，飞书后续消息会路由到这个 Codex 线程。`,
       },
       {
         tag: "action",
