@@ -131,7 +131,7 @@ export class CodexCliRunner {
   async #runHandoffOne(command) {
     try {
       if (await this.#isCancelled(command.id)) return;
-      const busy = await detectBusyHandoffSession(this.config, command);
+      const busy = command.handoffDispatch ? null : await detectBusyHandoffSession(this.config, command);
       if (busy) {
         const language = await resolveCommandLanguage(this.config, command);
         const message = formatHandoffSessionBusy(command, busy, { language });
@@ -160,6 +160,25 @@ export class CodexCliRunner {
       const result = await this.#runCodexResume(command, prompt, { onEvent: progressNotifier });
       if (await this.#isCancelled(command.id)) return;
       const language = await resolveCommandLanguage(this.config, command);
+      if (command.controlWindowCommand) {
+        const latest = await this.queue.get(command.id);
+        if (hasControlWindowRecord(latest)) return;
+        const blocked = await this.queue.update(
+          command.id,
+          {
+            status: "blocked_retryable",
+            error: language === "en"
+              ? "The control window turn ended without recording a Lark Remote result."
+              : "控制窗口回合结束，但没有记录 Lark Remote 处理结果。",
+            result: "",
+            progressSummary: result.progressSummary || "",
+            completedAt: nowIso(),
+          },
+          "control_record_missing",
+        );
+        await this.#notify(blocked || command, formatFinal(blocked || command));
+        return;
+      }
       const diffSummary = command.projectRoot ? await gitMaybe(["-C", command.projectRoot, "diff", "--stat"]) : "";
 
       const updated = await this.queue.update(
@@ -293,14 +312,19 @@ function shouldNotifyStarted(config, command) {
 }
 
 function formatHandoffStarted(options = {}) {
-  if (options.dispatchTarget?.threadId) {
-    return options.language === "en"
-      ? "Received. The control Codex window is preparing thread dispatch."
-      : "已收到，控制 Codex 窗口正在准备线程派发。";
-  }
   return options.language === "en"
     ? "Received. The control Codex window is handling this message."
     : "已收到，控制 Codex 窗口正在处理这条消息。";
+}
+
+function hasControlWindowRecord(command = {}) {
+  return [
+    "control_completed",
+    "dispatch_sent",
+    "blocked_retryable",
+    "waiting_clarification",
+    "failed",
+  ].includes(command?.controlStatus || command?.dispatchStatus || command?.status);
 }
 
 async function detectBusyHandoffSession(config = {}, command = {}) {
@@ -367,32 +391,22 @@ export function buildHandoffPrompt(command, { promptStyle = "direct" } = {}) {
 function buildControlWindowPrompt(command) {
   const target = command.dispatchTarget || {};
   const hasTarget = Boolean(target.threadId);
-  const targetLine = hasTarget
-    ? [
-        `title="${target.name || "Untitled Codex chat"}"`,
-        `threadId="${target.threadId || ""}"`,
-        target.cwd ? `cwd="${target.cwd}"` : "",
-        target.status ? `status="${target.status}${target.statusReason ? ` (${target.statusReason})` : ""}"` : "",
-      ].filter(Boolean).join(" ")
-    : "none";
-  const targetPrompt = [
-    "[Lark Remote dispatch]",
-    command.prompt || "",
-  ].filter(Boolean).join("\n");
   return [
-    "[Codex Lark Remote control]",
-    "Use the Lark Remote Control Window skill and Lark Remote MCP tools if available. Do one control action or one target dispatch, then stop.",
+    "[Lark Remote control message]",
     command.id ? `remoteCommandId: ${command.id}` : "",
-    `target: ${targetLine}`,
-    "message:",
+    "",
+    "activeTarget:",
+    hasTarget ? `- title: ${target.name || "Untitled Codex chat"}` : "- none",
+    hasTarget ? `- threadId: ${target.threadId || ""}` : "",
+    hasTarget && target.status ? `- status: ${target.status}${target.statusReason ? ` (${target.statusReason})` : ""}` : "",
+    hasTarget && target.cwd ? `- cwd: ${target.cwd}` : "",
+    "",
+    "feishuMessage:",
     "<feishu_lark_message>",
     command.prompt || "",
     "</feishu_lark_message>",
     "",
-    hasTarget ? "target_prompt:" : "",
-    hasTarget ? "<target_prompt>" : "",
-    hasTarget ? targetPrompt : "",
-    hasTarget ? "</target_prompt>" : "",
+    "Use the Lark Remote Control Window skill. Do exactly one control action or one target dispatch, record the result with Lark Remote MCP when required, then end this turn.",
   ].filter((line) => line !== "").join("\n");
 }
 
@@ -714,6 +728,7 @@ function summarizeWatcherUserPrompt(event, { eventOptions = {}, includeUserPromp
 
 function createProgressNotifier({ command, config, notify }) {
   const handoff = config.handoff || {};
+  if (command.controlWindowCommand) return async () => {};
   if (handoff.notifyProgress === false || command.mode !== "thread_handoff") return async () => {};
   let lastText = "";
 
@@ -745,7 +760,7 @@ function isSubmittedHandoffPrompt(text, { command = {}, submittedPrompt = "" } =
   return Boolean(
     (submitted && normalized === submitted)
     || (raw && normalized === raw)
-    || /\[Codex Lark Remote (?:handoff|thread dispatch)\]/i.test(text)
+    || /\[(?:Codex )?Lark Remote (?:handoff|thread dispatch|control message|control)\]/i.test(text)
     || /Feishu\/Lark user message to dispatch:/i.test(text)
   );
 }

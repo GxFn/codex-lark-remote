@@ -97,17 +97,17 @@ test("buildHandoffPrompt wraps Feishu input as a control-window message by defau
     prompt: "fix README",
   });
 
-  assert.match(prompt, /\[Codex Lark Remote control\]/);
-  assert.match(prompt, /Use the Lark Remote Control Window skill and Lark Remote MCP tools/);
-  assert.match(prompt, /Do one control action or one target dispatch, then stop/);
+  assert.match(prompt, /\[Lark Remote control message\]/);
+  assert.match(prompt, /Use the Lark Remote Control Window skill/);
+  assert.match(prompt, /record the result with Lark Remote MCP/);
   assert.match(prompt, /remoteCommandId: rcmd_note/);
-  assert.match(prompt, /target: none/);
+  assert.match(prompt, /activeTarget:\n- none/);
   assert.match(prompt, /<feishu_lark_message>\nfix README\n<\/feishu_lark_message>/);
   assert.doesNotMatch(prompt, /Control-window routing contract/);
   assert.doesNotMatch(prompt, /Permission boundary/);
   assert.doesNotMatch(prompt, /Sender:/);
   assert.doesNotMatch(prompt, /<target_prompt>/);
-  assert.ok(prompt.split("\n").length <= 8);
+  assert.ok(prompt.split("\n").length <= 12);
 });
 
 test("buildHandoffPrompt keeps using the control envelope for subsequent turns", () => {
@@ -117,7 +117,7 @@ test("buildHandoffPrompt keeps using the control envelope for subsequent turns",
     prompt: "fix README",
   });
 
-  assert.match(prompt, /\[Codex Lark Remote control\]/);
+  assert.match(prompt, /\[Lark Remote control message\]/);
   assert.match(prompt, /<feishu_lark_message>\nfix README\n<\/feishu_lark_message>/);
 });
 
@@ -128,7 +128,7 @@ test("buildHandoffPrompt can still annotate Feishu input when configured", () =>
     prompt: "fix README",
   }, { promptStyle: "annotated" });
 
-  assert.match(prompt, /Codex Lark Remote control/);
+  assert.match(prompt, /Lark Remote control message/);
   assert.match(prompt, /Compatibility note:/);
   assert.match(prompt, /fix README/);
   assert.doesNotMatch(prompt, /Permission boundary:/);
@@ -149,19 +149,22 @@ test("buildHandoffPrompt wraps target dispatch for the control window", () => {
     },
   });
 
-  assert.match(prompt, /\[Codex Lark Remote control\]/);
+  assert.match(prompt, /\[Lark Remote control message\]/);
   assert.match(prompt, /Lark Remote Control Window skill/);
-  assert.match(prompt, /Do one control action or one target dispatch, then stop/);
-  assert.match(prompt, /\[Lark Remote dispatch\]/);
+  assert.match(prompt, /record the result with Lark Remote MCP/);
+  assert.doesNotMatch(prompt, /\[Lark Remote dispatch\]/);
   assert.match(prompt, /remoteCommandId: rcmd_dispatch/);
-  assert.match(prompt, /target: title="修复 lark 远程派发" threadId="target-thread-1" cwd="\/workspace" status="running \(last event running\)"/);
+  assert.match(prompt, /- title: 修复 lark 远程派发/);
+  assert.match(prompt, /- threadId: target-thread-1/);
+  assert.match(prompt, /- status: running \(last event running\)/);
+  assert.match(prompt, /- cwd: \/workspace/);
   assert.match(prompt, /<feishu_lark_message>\n优先处理这个变更\n<\/feishu_lark_message>/);
-  assert.match(prompt, /target_prompt:/);
-  assert.match(prompt, /<target_prompt>\n\[Lark Remote dispatch\]\n优先处理这个变更\n<\/target_prompt>/);
+  assert.doesNotMatch(prompt, /target_prompt:/);
+  assert.doesNotMatch(prompt, /<target_prompt>/);
   assert.doesNotMatch(prompt, /Control-window routing contract/);
   assert.doesNotMatch(prompt, /Permission boundary/);
   assert.doesNotMatch(prompt, /Selected target session/);
-  assert.ok(prompt.split("\n").length <= 13);
+  assert.ok(prompt.split("\n").length <= 14);
 });
 
 test("CodexCliRunner sends a handoff started acknowledgement by default", async () => {
@@ -347,6 +350,125 @@ test("CodexCliRunner suppresses handoff notifications after handoff is off", asy
 
   assert.equal(command.status, "completed");
   assert.deepEqual(replies, []);
+});
+
+test("CodexCliRunner accepts explicit control-window completion records", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-control-record-"));
+  const fakeCodex = path.join(dataDir, "fake-codex");
+  await fs.writeFile(fakeCodex, "#!/bin/sh\necho '{\"type\":\"turn.completed\"}'\nexit 0\n");
+  await fs.chmod(fakeCodex, 0o755);
+
+  let command = {
+    id: "rcmd_control_recorded",
+    mode: "thread_handoff",
+    status: "pending",
+    notifyStarted: false,
+    controlWindowCommand: true,
+    messageId: "om_1",
+    projectRoot: dataDir,
+    prompt: "项目列表",
+    codexSessionId: "control-thread",
+  };
+  const replies = [];
+  const queue = {
+    claimNext: async () => {
+      if (command.status !== "pending") return null;
+      command = { ...command, status: "running" };
+      return command;
+    },
+    update: async (_id, patch) => {
+      command = { ...command, ...patch };
+      return command;
+    },
+    get: async () => {
+      command = {
+        ...command,
+        status: "control_completed",
+        controlStatus: "control_completed",
+        result: "当前可接管项目：CodexPlugin",
+      };
+      return command;
+    },
+  };
+  const runner = new CodexCliRunner({
+    queue,
+    config: {
+      dataDir,
+      runner: { codexPath: fakeCodex },
+      handoff: { notifyProgress: true },
+    },
+    notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+  });
+
+  await runner.processAll();
+
+  assert.equal(command.status, "control_completed");
+  assert.deepEqual(replies, []);
+});
+
+test("CodexCliRunner does not treat dispatch resume exit code as delivery success", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-dispatch-record-"));
+  const fakeCodex = path.join(dataDir, "fake-codex");
+  await fs.writeFile(fakeCodex, "#!/bin/sh\necho '{\"type\":\"turn.completed\"}'\nexit 0\n");
+  await fs.chmod(fakeCodex, 0o755);
+  await activateHandoff({
+    dataDir,
+    threadId: "control-thread",
+    cwd: dataDir,
+    capabilities: {
+      hostThreadSend: { available: true, tool: "send_message_to_thread" },
+    },
+  });
+
+  let command = {
+    id: "rcmd_dispatch_missing_record",
+    source: "lark",
+    mode: "thread_handoff",
+    status: "pending",
+    notifyStarted: false,
+    controlWindowCommand: true,
+    handoffDispatch: true,
+    messageId: "om_1",
+    projectRoot: dataDir,
+    prompt: "修复问题",
+    codexSessionId: "control-thread",
+    dispatchTarget: {
+      threadId: "target-thread",
+      name: "检查并修复 codex-lark-remote 功能",
+    },
+  };
+  const replies = [];
+  const queue = {
+    claimNext: async () => {
+      if (command.status !== "pending") return null;
+      command = { ...command, status: "running" };
+      return command;
+    },
+    update: async (_id, patch) => {
+      command = { ...command, ...patch };
+      return command;
+    },
+    get: async () => command,
+  };
+  const runner = new CodexCliRunner({
+    queue,
+    config: {
+      dataDir,
+      runner: { codexPath: fakeCodex },
+      handoff: { notifyProgress: true },
+    },
+    notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+  });
+
+  await runner.processAll();
+
+  assert.equal(command.status, "blocked_retryable");
+  assert.match(command.error, /没有记录 Lark Remote 处理结果/);
+  assert.equal(replies.length, 2);
+  assert.equal(replies[0].messageId, "om_1");
+  assert.equal(replies[0].text, "已收到，控制 Codex 窗口正在处理这条消息。");
+  assert.equal(replies[1].messageId, "om_1");
+  assert.match(replies[1].text, /没有记录 Lark Remote 处理结果/);
 });
 
 test("CodexCliRunner only echoes non-Lark user prompts during handoff progress", async () => {
@@ -916,14 +1038,14 @@ test("createSessionProgressWatcher can suppress or rewrite user prompt notificat
     sessionPath,
     intervalMs: 10,
     includeUserPrompts: true,
-    userPromptText: (_event, prompt) => prompt.includes("Codex Lark Remote") ? "" : `external: ${prompt}`,
+    userPromptText: (_event, prompt) => prompt.includes("Lark Remote") ? "" : `external: ${prompt}`,
     onEvent: async (_event, summary) => summaries.push(summary),
   });
   await watcher.start();
   await fs.appendFile(
     sessionPath,
     [
-      JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: "[Codex Lark Remote handoff]\n来自飞书" } }),
+      JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: "[Lark Remote handoff]\n来自飞书" } }),
       JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: "自动化继续执行" } }),
       "",
     ].join("\n"),

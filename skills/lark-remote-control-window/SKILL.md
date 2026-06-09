@@ -1,90 +1,82 @@
 ---
 name: lark-remote-control-window
-description: Use when a Codex control window receives a Feishu/Lark message through Lark Remote, especially prompts containing Codex Lark Remote handoff, thread dispatch, remoteCommandId, or instructions to decide project/window routing with MCP tools.
+description: Use when a Codex control window receives a Feishu/Lark message through Lark Remote, especially prompts containing Lark Remote control messages, remoteCommandId, takeover, observation, or thread dispatch.
 ---
 
 # Lark Remote Control Window
 
-Use this skill when this Codex conversation is the dedicated Lark Remote control
-window. The Feishu/Lark bridge intentionally sends ordinary text here instead of
-trying to fully classify it in JavaScript.
+This Codex conversation is the Lark Remote control window. It routes and
+dispatches Feishu/Lark requests. It is not the target worker thread.
 
-## Operating Model
+## Core Contract
 
-- Treat the wrapped Feishu/Lark message as the source of truth.
-- If the prompt contains `[Codex Lark Remote control message]`, first analyze it
-  as Lark Remote control input. Use Lark Remote MCP tools and this skill for
-  status, project/session selection, observation, takeover, queue/history,
-  cancel/approval, or bridge-control requests.
-- If the wrapped message is an ordinary work/coding/task request and a selected
-  target session exists, this control window is only a dispatcher. Deliver the
-  provided target prompt to the selected target thread with host thread tools,
-  then reply with concise delivery status. Do not inspect files, run shell
-  commands, edit code, run tests, or answer the requested work here.
-- If no target session is selected for an ordinary work request, use Lark Remote
-  MCP tools to help select/take over a target, or explain that no target is
-  selected. Do not execute the work locally in this control window.
-- After completing one control action, target dispatch, or blocked-state report,
-  immediately send a concise final reply and end the turn. Do not continue
-  analysis, start local follow-up work, or chain extra tasks.
-- JavaScript has already intercepted only exact bridge/control keywords such as
-  `控制台`, `status`, `observe off`, `exit handoff`, `close Lark connection`, and
-  `control:` / `控制:`.
-- For all other text, decide whether to answer directly, inspect Lark Remote
-  state, list/select projects or windows, start observation, or dispatch work to
-  a selected target thread.
-- Use available Lark Remote MCP tools before guessing from prose.
-- Use host thread tools for real cross-thread delivery. JavaScript does not send
-  ordinary Feishu/Lark text directly to the target thread.
-- If host thread tools are unavailable, the target cannot be addressed, or
-  delivery/readback cannot be verified, fail closed and tell the Feishu/Lark user
-  what is blocked.
+- Treat `[Lark Remote control message]` prompts as Lark Remote control input.
+- First classify the wrapped Feishu/Lark message as either a Lark Remote control
+  action, a target work request, or a clarification case.
+- Do not inspect repositories, run shell commands, edit files, run tests, or do
+  the requested coding work in this control window.
+- For ordinary work requests with a selected target, send only the prepared
+  `targetPrompt` to the target thread with a Codex host thread tool, then call
+  `lark_record_dispatch`.
+- For non-dispatch control actions, use the focused Lark Remote MCP tool for the
+  action, then call `lark_reply_remote_command` with the concise user-visible
+  result.
+- If host thread dispatch is unavailable or rejected, call
+  `lark_record_dispatch` with `status: "blocked"` or `status: "failed"`.
+- If target or intent is ambiguous, call `lark_request_clarification`.
+- After one control action, one target dispatch, or one blocked/clarification
+  report, send a concise final reply and end the turn.
 
-## Useful Lark Remote MCP Tools
+## Dispatch Flow
 
-- `codex_lark_context`: first-stop snapshot for bridge status, active handoff,
-  takeover target, observation state, recent commands, projects, and windows.
-- `codex_lark_status`: compact bridge and routing status.
-- `codex_lark_takeover_projects`: list local Codex projects from session records.
-- `codex_lark_takeover_project`: select a project and return windows in it.
-- `codex_lark_takeover_targets`: list windows for a project cwd.
-- `codex_lark_takeover`: select or execute a target window.
-- `codex_lark_takeover_clear`: clear the current target while keeping the bridge
-  and control window connected.
-- `codex_lark_observation_targets`: list read-only observation candidates.
-- `codex_lark_observe`: start read-only observation. Pass the `remoteCommandId`
-  shown in the current prompt so the stream can anchor to the current
-  Feishu/Lark message.
-- `codex_lark_observe_stop`: stop observation.
-- `codex_lark_history`, `codex_lark_task`, `codex_lark_cancel`, and
-  `codex_lark_approve`: inspect and operate on queued Lark Remote commands.
-- `codex_lark_handoff_off`: detach this control window without stopping the
+1. Only after deciding the message is an ordinary work request for the selected
+   target, call `lark_prepare_dispatch({ remoteCommandId })`.
+2. If `action` is `dispatch`, use the Codex host thread send tool named in the
+   returned capability snapshot when available, normally `send_message_to_thread`.
+   Send `targetPrompt` to `target.threadId`.
+3. After the host tool accepts the message, call:
+   `lark_record_dispatch({ remoteCommandId, status: "sent", targetThreadId,
+   targetTitle, hostTool, readbackOk, evidence })`.
+4. If the host tool is unavailable, rejected, or cannot address the thread,
+   call `lark_record_dispatch({ remoteCommandId, status: "blocked", error })`.
+5. If `lark_prepare_dispatch` returns `action: "clarify"`, call
+   `lark_request_clarification` with a short question for Feishu/Lark.
+6. If `lark_prepare_dispatch` returns `action: "blocked"`, call
+   `lark_record_dispatch({ remoteCommandId, status: "blocked", error: reason })`.
+
+Do not call `lark_prepare_dispatch` for control actions such as status,
+project/session listing, target selection, observation, cancellation, or bridge
+shutdown. For those actions, use the matching control tool and finish with
+`lark_reply_remote_command`.
+
+## Control Tools
+
+- `lark_get_bridge_status`: bridge, WebSocket, queue, handoff, takeover, and
+  observation status.
+- `lark_list_projects`: list local Codex projects from session records.
+- `lark_select_project`: select a project and return sessions in it.
+- `lark_list_project_sessions`: list sessions for a project cwd.
+- `lark_select_target`: choose a target session without confirming takeover.
+- `lark_confirm_takeover`: confirm takeover for the selected session.
+- `lark_clear_active_target`: clear the selected/active target.
+- `lark_list_observation_targets`: list read-only observation candidates.
+- `lark_start_observation`: start read-only observation. Pass `remoteCommandId`
+  when present.
+- `lark_stop_observation`: stop read-only observation.
+- `lark_get_remote_command`: read exactly one remote command.
+- `lark_list_remote_commands`: inspect recent remote commands for diagnostics.
+- `lark_cancel_remote_command`: cancel a pending/running/waiting remote command.
+- `lark_reply_remote_command`: send the final Feishu/Lark reply for a
+  non-dispatch control action and mark the command handled.
+- `lark_unlock_control_window`: detach this control window without stopping the
   bridge.
-- `codex_lark_stop`: stop the bridge; only use after explicit confirmation.
+- `lark_stop`: stop the bridge only after explicit confirmation.
 
-## Routing Heuristics
-
-- For "项目列表", "project list", "有哪些项目", call
-  `codex_lark_takeover_projects`.
-- For "进入项目 2", "enter project two", or a project name/cwd, call
-  `codex_lark_takeover_project`.
-- For "窗口列表", "session list", or "有哪些会话", call
-  `codex_lark_takeover_targets`, using the current or selected project cwd.
-- For "观察 2", "observe session 2", or similar, call
-  `codex_lark_observation_targets` when needed, then `codex_lark_observe` with
-  `remoteCommandId`.
-- For ordinary coding/work requests while a target is active, dispatch the target
-  prompt to the selected target thread. Do not inspect the repository, run
-  commands, edit files, run tests, or answer the work request in this control
-  window. Put `[Lark Remote dispatch]` on the first line of Feishu/Lark-origin
-  target prompts so target observation does not echo that prompt back to
-  Feishu/Lark; do not use that marker for Mac-local or automation prompts.
-- For direct questions about Lark Remote state, prefer `codex_lark_context` or
-  `codex_lark_status` and answer concisely.
+There is no context snapshot tool. Use the specific tool that matches the
+single action you need.
 
 ## Reply Contract
 
-Reply as if writing in a Feishu/Lark mobile chat: concise, same language as the
-user, no raw logs, no secret values, and no internal ids unless the user asks for
-diagnostics. If a tool call changes routing state, summarize the new state and
-the next useful action. Once the reply is sent, stop.
+Reply like a Feishu/Lark mobile chat: concise, same language as the user, no raw
+logs, no secret values, no queue ids or internal ids unless the user asks for
+diagnostics. Once the reply is sent, stop.

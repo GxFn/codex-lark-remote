@@ -13,7 +13,7 @@ import { bridgeFetch, bridgeStatus, readBridgeState, startBridgeProcess, stopBri
 
 const tools = [
   {
-    name: "codex_lark_configure",
+    name: "lark_configure",
     description: "Write or update ~/.codex-lark-remote/config.json from Feishu/Lark setup details supplied in the Codex chat. Returns a sanitized summary and never prints secrets.",
     inputSchema: {
       type: "object",
@@ -65,8 +65,8 @@ const tools = [
     },
   },
   {
-    name: "codex_lark_status",
-    description: "Return Codex Lark Remote bridge, queue, and runner status.",
+    name: "lark_get_bridge_status",
+    description: "Return Lark Remote bridge, queue, and runner status.",
     inputSchema: {
       type: "object",
       properties: {
@@ -76,22 +76,7 @@ const tools = [
     },
   },
   {
-    name: "codex_lark_context",
-    description: "Return a control-window context snapshot: bridge status, active handoff/takeover/observation state, recent Lark Remote commands, and optional project/window candidates.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        dataDir: { type: "string" },
-        configPath: { type: "string" },
-        limit: { type: "number", default: 10 },
-        cwd: { type: "string", description: "Optional project cwd for included window candidates." },
-        includeProjects: { type: "boolean", default: true },
-        includeTargets: { type: "boolean", default: true },
-      },
-    },
-  },
-  {
-    name: "codex_lark_check_auth",
+    name: "lark_check_auth",
     description: "Check whether configured Feishu/Lark app credentials can acquire a tenant access token. Does not print secrets.",
     inputSchema: {
       type: "object",
@@ -102,7 +87,7 @@ const tools = [
     },
   },
   {
-    name: "codex_lark_verify_setup",
+    name: "lark_verify_setup",
     description: "Verify first-run Feishu/Lark long-connection setup: App credentials, local bridge, WebSocket connection, and the event/callback checks the user should run in Feishu Open Platform.",
     inputSchema: {
       type: "object",
@@ -115,7 +100,7 @@ const tools = [
     },
   },
   {
-    name: "codex_lark_diagnose",
+    name: "lark_diagnose",
     description: "Return a sanitized readiness checklist for continuing the current Codex conversation from Feishu/Lark.",
     inputSchema: {
       type: "object",
@@ -128,8 +113,8 @@ const tools = [
     },
   },
   {
-    name: "codex_lark_start",
-    description: "Advanced setup-only: start the local bridge without attaching a control Codex window. For normal remote control, use codex_lark_handoff or codex_lark_prepare_takeover.",
+    name: "lark_start",
+    description: "Advanced setup-only: start the local bridge without attaching a control Codex window. For normal remote control, use lark_lock_control_window or lark_prepare_takeover.",
     inputSchema: {
       type: "object",
       properties: {
@@ -139,16 +124,44 @@ const tools = [
     },
   },
   {
-    name: "codex_lark_handoff",
-    description: "Attach this Codex conversation to the local Codex Lark Remote bridge by storing local routing state. Existing chat history is not sent to Feishu/Lark; future Feishu/Lark messages and Codex replies may pass through the configured bot. Requires explicit user consent.",
+    name: "lark_lock_control_window",
+    description: "Attach and lock this Codex conversation as the Lark Remote control window. Existing chat history is not sent to Feishu/Lark. Also stores the host thread capability snapshot for later dispatch.",
     inputSchema: {
       type: "object",
+      required: ["confirmedLocalBridgeHandoff", "capabilities"],
       properties: {
         dataDir: { type: "string" },
         configPath: { type: "string" },
         threadId: { type: "string", description: "Optional explicit Codex thread/session id. When omitted, Codex request metadata is used; the tool does not guess by workspace path." },
         cwd: { type: "string", description: "Optional workspace cwd used when resolving the current thread." },
         checkAuth: { type: "boolean", description: "Also call Feishu/Lark auth API. Defaults to false." },
+        capabilities: {
+          type: "object",
+          description: "Silent capability snapshot confirmed by the current Codex window.",
+          properties: {
+            hostThreadSend: {
+              type: "object",
+              properties: {
+                available: { type: "boolean" },
+                tool: { type: "string" },
+              },
+            },
+            hostThreadRead: {
+              type: "object",
+              properties: {
+                available: { type: "boolean" },
+                tool: { type: "string" },
+              },
+            },
+            hostThreadInterrupt: {
+              type: "object",
+              properties: {
+                available: { type: "boolean" },
+                tool: { type: "string" },
+              },
+            },
+          },
+        },
         confirmedLocalBridgeHandoff: {
           type: "boolean",
           description: "Set true only after the user explicitly approved storing local thread routing for this conversation so Feishu/Lark can continue it through the local bridge.",
@@ -157,14 +170,19 @@ const tools = [
     },
   },
   {
-    name: "codex_lark_prepare_takeover",
+    name: "lark_prepare_takeover",
     description: "Prepare Feishu/Lark-driven takeover from this Codex conversation. This starts the bridge, attaches this conversation as the control window, and stores local takeover routing state; allowed Feishu/Lark users choose the project and window to inspect or take over.",
     inputSchema: {
       type: "object",
+      required: ["confirmedLocalBridgeHandoff", "capabilities"],
       properties: {
         dataDir: { type: "string" },
         configPath: { type: "string" },
         cwd: { type: "string", description: "Optional workspace cwd used when resolving takeover targets." },
+        capabilities: {
+          type: "object",
+          description: "Silent control-window host thread capability snapshot.",
+        },
         confirmedLocalBridgeHandoff: {
           type: "boolean",
           description: "Set true only after the user explicitly approved storing local takeover routing scope for this project.",
@@ -173,7 +191,7 @@ const tools = [
     },
   },
   {
-    name: "codex_lark_takeover_projects",
+    name: "lark_list_projects",
     description: "List Codex projects discovered from local Codex session records so the control Codex window can decide project/window routing itself.",
     inputSchema: {
       type: "object",
@@ -187,7 +205,7 @@ const tools = [
     },
   },
   {
-    name: "codex_lark_takeover_project",
+    name: "lark_select_project",
     description: "Select a Codex project by list number, cwd, or name fragment and return that project's takeover-ready Codex windows.",
     inputSchema: {
       type: "object",
@@ -203,7 +221,7 @@ const tools = [
     },
   },
   {
-    name: "codex_lark_takeover_targets",
+    name: "lark_list_project_sessions",
     description: "List Codex windows for a chosen project cwd. Feishu/Lark normally starts from the project list, then enters a project before choosing a window.",
     inputSchema: {
       type: "object",
@@ -216,8 +234,8 @@ const tools = [
     },
   },
   {
-    name: "codex_lark_takeover",
-    description: "Select or execute takeover for a Codex window. By default this should be driven from Feishu/Lark card actions; Codex can use it for diagnostics or manual control.",
+    name: "lark_select_target",
+    description: "Select a Codex window as the pending Lark Remote target without confirming takeover.",
     inputSchema: {
       type: "object",
       properties: {
@@ -226,12 +244,25 @@ const tools = [
         selector: { type: "string", description: "Target option number, thread id prefix, or title fragment." },
         threadId: { type: "string" },
         optionIndex: { type: "number" },
-        execute: { type: "boolean", description: "When true, execute takeover. When false, only select/view the target." },
       },
     },
   },
   {
-    name: "codex_lark_takeover_clear",
+    name: "lark_confirm_takeover",
+    description: "Confirm takeover for a selected Codex window so future Feishu/Lark work messages can be dispatched to it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dataDir: { type: "string" },
+        configPath: { type: "string" },
+        selector: { type: "string", description: "Target option number, thread id prefix, or title fragment." },
+        threadId: { type: "string" },
+        optionIndex: { type: "number" },
+      },
+    },
+  },
+  {
+    name: "lark_clear_active_target",
     description: "Clear the current selected/active dispatch target while keeping the Lark bridge and control Codex window connected.",
     inputSchema: {
       type: "object",
@@ -242,7 +273,7 @@ const tools = [
     },
   },
   {
-    name: "codex_lark_observation_targets",
+    name: "lark_list_observation_targets",
     description: "List observable local Codex sessions for read-only progress streaming.",
     inputSchema: {
       type: "object",
@@ -255,7 +286,7 @@ const tools = [
     },
   },
   {
-    name: "codex_lark_observe",
+    name: "lark_start_observation",
     description: "Start read-only observation for a Codex session. Pass remoteCommandId from the current Lark Remote prompt so the stream can be anchored to the current Feishu/Lark message.",
     inputSchema: {
       type: "object",
@@ -272,7 +303,7 @@ const tools = [
     },
   },
   {
-    name: "codex_lark_observe_stop",
+    name: "lark_stop_observation",
     description: "Stop the current read-only observation stream.",
     inputSchema: {
       type: "object",
@@ -283,7 +314,7 @@ const tools = [
     },
   },
   {
-    name: "codex_lark_handoff_off",
+    name: "lark_unlock_control_window",
     description: "Detach the current control Codex window from the Lark bridge while keeping the bridge process available.",
     inputSchema: {
       type: "object",
@@ -294,8 +325,8 @@ const tools = [
     },
   },
   {
-    name: "codex_lark_stop",
-    description: "Stop the local Codex Lark Remote bridge process.",
+    name: "lark_stop",
+    description: "Stop the local Lark Remote bridge process.",
     inputSchema: {
       type: "object",
       properties: {
@@ -305,8 +336,8 @@ const tools = [
     },
   },
   {
-    name: "codex_lark_task",
-    description: "Advanced: return one queued Codex Lark Remote item by id.",
+    name: "lark_get_remote_command",
+    description: "Return one queued Lark Remote command by id.",
     inputSchema: {
       type: "object",
       required: ["id"],
@@ -318,8 +349,8 @@ const tools = [
     },
   },
   {
-    name: "codex_lark_history",
-    description: "Advanced: return recent queued Codex Lark Remote items.",
+    name: "lark_list_remote_commands",
+    description: "Return recent Lark Remote commands.",
     inputSchema: {
       type: "object",
       properties: {
@@ -330,22 +361,8 @@ const tools = [
     },
   },
   {
-    name: "codex_lark_send",
-    description: "Advanced: create a queued Codex Lark Remote item manually through the running bridge.",
-    inputSchema: {
-      type: "object",
-      required: ["prompt"],
-      properties: {
-        prompt: { type: "string" },
-        repoKey: { type: "string" },
-        dataDir: { type: "string" },
-        configPath: { type: "string" },
-      },
-    },
-  },
-  {
-    name: "codex_lark_cancel",
-    description: "Advanced: cancel a pending, running, or waiting_review queued item.",
+    name: "lark_cancel_remote_command",
+    description: "Cancel a pending, running, or waiting command.",
     inputSchema: {
       type: "object",
       required: ["id"],
@@ -357,14 +374,62 @@ const tools = [
     },
   },
   {
-    name: "codex_lark_approve",
-    description: "Advanced: approve a gated action such as test, commit, or push.",
+    name: "lark_prepare_dispatch",
+    description: "Prepare target-thread dispatch after the control window has decided that a Feishu/Lark remote command is an ordinary work request for the selected target session.",
     inputSchema: {
       type: "object",
-      required: ["id", "action"],
+      required: ["remoteCommandId"],
       properties: {
-        id: { type: "string" },
-        action: { type: "string", enum: ["test", "commit", "push", "review"] },
+        remoteCommandId: { type: "string" },
+        dataDir: { type: "string" },
+        configPath: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "lark_record_dispatch",
+    description: "Record the result of a control-window host thread dispatch. This is the only success signal for active-target dispatch.",
+    inputSchema: {
+      type: "object",
+      required: ["remoteCommandId", "status"],
+      properties: {
+        remoteCommandId: { type: "string" },
+        status: { type: "string", enum: ["sent", "dispatch_sent", "blocked", "blocked_retryable", "waiting_clarification", "failed"] },
+        targetThreadId: { type: "string" },
+        targetTitle: { type: "string" },
+        hostTool: { type: "string" },
+        readbackOk: { type: "boolean" },
+        evidence: { type: "string" },
+        error: { type: "string" },
+        dataDir: { type: "string" },
+        configPath: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "lark_request_clarification",
+    description: "Ask the Feishu/Lark user for clarification for one remote command and mark it waiting_clarification.",
+    inputSchema: {
+      type: "object",
+      required: ["remoteCommandId", "question"],
+      properties: {
+        remoteCommandId: { type: "string" },
+        question: { type: "string" },
+        dataDir: { type: "string" },
+        configPath: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "lark_reply_remote_command",
+    description: "Send one concise Feishu/Lark reply for a non-dispatch control-window command and mark that command handled.",
+    inputSchema: {
+      type: "object",
+      required: ["remoteCommandId", "text"],
+      properties: {
+        remoteCommandId: { type: "string" },
+        text: { type: "string" },
+        status: { type: "string", enum: ["completed", "control_completed", "blocked", "blocked_retryable", "failed"] },
         dataDir: { type: "string" },
         configPath: { type: "string" },
       },
@@ -417,17 +482,17 @@ async function handleRequest(request) {
 }
 
 async function callTool(name, args, request = {}) {
-  if (name === "codex_lark_configure") {
+  if (name === "lark_configure") {
     return textContent(formatConfigUpdate(await updateRuntimeConfig(args)));
   }
-  if (name === "codex_lark_start") {
+  if (name === "lark_start") {
     const config = await loadConfig(args);
     if (!hasLarkAppCredentials(config)) return textContent(formatMissingLarkCredentials(config));
     const bridge = await ensureBridge(args);
     if (!bridge.running) return textContent(formatBridgeStartFailure(bridge, "start"));
     return textContent(formatDiagnostics(await diagnoseLarkRemote(args)));
   }
-  if (name === "codex_lark_handoff") {
+  if (name === "lark_lock_control_window") {
     if (args.confirmedLocalBridgeHandoff !== true) {
       return textContent(formatHandoffConsentRequired());
     }
@@ -450,13 +515,14 @@ async function callTool(name, args, request = {}) {
         threadId: handoffArgs.threadId,
         threadPath: handoffArgs.threadPath,
         cwd: handoffArgs.cwd,
+        capabilities: args.capabilities,
         requireExplicitThread: true,
         activatedBy: "mcp",
       },
     });
     return textContent(formatHandoff(await diagnoseLarkRemote(handoffArgs)));
   }
-  if (name === "codex_lark_prepare_takeover") {
+  if (name === "lark_prepare_takeover") {
     if (args.confirmedLocalBridgeHandoff !== true) {
       return textContent(formatTakeoverConsentRequired());
     }
@@ -469,7 +535,7 @@ async function callTool(name, args, request = {}) {
       return textContent(formatMissingThreadContext());
     }
     if (!takeoverArgs.cwd) {
-      return textContent("Codex Lark Remote cannot prepare takeover because the current workspace cwd is unavailable.");
+      return textContent("Lark Remote cannot prepare takeover because the current workspace cwd is unavailable.");
     }
     const bridge = await ensureBridge(takeoverArgs);
     const state = bridge.state || await readBridgeState(takeoverArgs);
@@ -482,6 +548,7 @@ async function callTool(name, args, request = {}) {
         threadId: takeoverArgs.threadId,
         threadPath: takeoverArgs.threadPath,
         cwd: takeoverArgs.cwd,
+        capabilities: args.capabilities,
         requireExplicitThread: true,
         activatedBy: "mcp-takeover",
       },
@@ -496,28 +563,28 @@ async function callTool(name, args, request = {}) {
       },
     });
     return textContent([
-      "Codex Lark Remote takeover control is ready.",
+      "Lark Remote takeover control is ready.",
       `Control window: ${String(takeoverArgs.threadId).slice(0, 8)}`,
       `Started from: ${takeoverArgs.cwd}`,
       "",
       "From Feishu/Lark, send /codex windows to choose a Codex project, then choose a window to observe or take over.",
     ].join("\n"));
   }
-  if (name === "codex_lark_stop") {
+  if (name === "lark_stop") {
     return textContent(formatJson(await stopBridge(args)));
   }
-  if (name === "codex_lark_status") {
+  if (name === "lark_get_bridge_status") {
     return textContent(formatStatus(await bridgeStatus(args)));
   }
-  if (name === "codex_lark_check_auth") {
+  if (name === "lark_check_auth") {
     const config = await loadConfig(args);
     const notifier = new LarkNotifier(config.lark || {});
     return textContent(formatJson(await notifier.checkAuth()));
   }
-  if (name === "codex_lark_verify_setup") {
+  if (name === "lark_verify_setup") {
     return textContent(formatSetupVerification(await verifyLarkSetup(args)));
   }
-  if (name === "codex_lark_diagnose") {
+  if (name === "lark_diagnose") {
     const diagnostics = await diagnoseLarkRemote(args);
     return textContent(args.json ? formatJson(diagnostics) : formatDiagnostics(diagnostics));
   }
@@ -537,30 +604,11 @@ async function callTool(name, args, request = {}) {
     };
   }
 
-  if (name === "codex_lark_history") {
+  if (name === "lark_list_remote_commands") {
     const limit = Number(args.limit || 20);
     return textContent(formatJson(await bridgeFetch(state, `/bridge/tasks?limit=${limit}`)));
   }
-  if (name === "codex_lark_context") {
-    const queryParams = new URLSearchParams();
-    if (args.limit) queryParams.set("limit", String(Number(args.limit)));
-    if (args.cwd) queryParams.set("cwd", args.cwd);
-    if (args.includeProjects === false) queryParams.set("projects", "false");
-    if (args.includeTargets === false) queryParams.set("targets", "false");
-    const query = queryParams.toString() ? `?${queryParams}` : "";
-    return textContent(formatJson(await bridgeFetch(state, `/bridge/context${query}`)));
-  }
-  if (name === "codex_lark_send") {
-    return textContent(
-      formatJson(
-        await bridgeFetch(state, "/bridge/tasks", {
-          method: "POST",
-          body: { prompt: args.prompt, repoKey: args.repoKey },
-        }),
-      ),
-    );
-  }
-  if (name === "codex_lark_takeover_projects") {
+  if (name === "lark_list_projects") {
     const queryParams = new URLSearchParams();
     if (args.limit) queryParams.set("limit", String(Number(args.limit)));
     if (args.page) queryParams.set("page", String(Number(args.page)));
@@ -569,7 +617,7 @@ async function callTool(name, args, request = {}) {
     const result = await bridgeFetch(state, `/bridge/takeover/projects${query}`);
     return textContent(result.text || formatJson(result.data));
   }
-  if (name === "codex_lark_takeover_project") {
+  if (name === "lark_select_project") {
     const result = await bridgeFetch(state, "/bridge/takeover/project/select", {
       method: "POST",
       body: {
@@ -582,7 +630,7 @@ async function callTool(name, args, request = {}) {
     });
     return textContent(result.text || formatJson(result.data));
   }
-  if (name === "codex_lark_takeover_targets") {
+  if (name === "lark_list_project_sessions") {
     const queryParams = new URLSearchParams();
     if (args.limit) queryParams.set("limit", String(Number(args.limit)));
     if (args.cwd) queryParams.set("cwd", args.cwd);
@@ -590,8 +638,8 @@ async function callTool(name, args, request = {}) {
     const result = await bridgeFetch(state, `/bridge/takeover/targets${query}`);
     return textContent(result.text || formatJson(result.data));
   }
-  if (name === "codex_lark_takeover") {
-    const result = await bridgeFetch(state, args.execute === true ? "/bridge/takeover/execute" : "/bridge/takeover/select", {
+  if (name === "lark_select_target") {
+    const result = await bridgeFetch(state, "/bridge/takeover/select", {
       method: "POST",
       body: {
         selector: args.selector,
@@ -601,11 +649,22 @@ async function callTool(name, args, request = {}) {
     });
     return textContent(result.text || formatJson(result.data));
   }
-  if (name === "codex_lark_takeover_clear") {
+  if (name === "lark_confirm_takeover") {
+    const result = await bridgeFetch(state, "/bridge/takeover/execute", {
+      method: "POST",
+      body: {
+        selector: args.selector,
+        threadId: args.threadId,
+        optionIndex: args.optionIndex,
+      },
+    });
+    return textContent(result.text || formatJson(result.data));
+  }
+  if (name === "lark_clear_active_target") {
     const result = await bridgeFetch(state, "/bridge/takeover", { method: "DELETE" });
     return textContent(result.text || formatJson(result.data));
   }
-  if (name === "codex_lark_observation_targets") {
+  if (name === "lark_list_observation_targets") {
     const queryParams = new URLSearchParams();
     if (args.limit) queryParams.set("limit", String(Number(args.limit)));
     if (args.cwd) queryParams.set("cwd", args.cwd);
@@ -613,7 +672,7 @@ async function callTool(name, args, request = {}) {
     const result = await bridgeFetch(state, `/bridge/observation/targets${query}`);
     return textContent(result.text || formatJson(result.data));
   }
-  if (name === "codex_lark_observe") {
+  if (name === "lark_start_observation") {
     const result = await bridgeFetch(state, "/bridge/observation/start", {
       method: "POST",
       body: {
@@ -628,17 +687,17 @@ async function callTool(name, args, request = {}) {
     });
     return textContent(result.text || formatJson(result.data));
   }
-  if (name === "codex_lark_observe_stop") {
+  if (name === "lark_stop_observation") {
     const result = await bridgeFetch(state, "/bridge/observation", { method: "DELETE" });
     return textContent(result.text || formatJson(result.data));
   }
-  if (name === "codex_lark_handoff_off") {
+  if (name === "lark_unlock_control_window") {
     return textContent(formatJson(await bridgeFetch(state, "/bridge/handoff", { method: "DELETE" })));
   }
-  if (name === "codex_lark_task") {
+  if (name === "lark_get_remote_command") {
     return textContent(formatJson(await bridgeFetch(state, `/bridge/tasks/${encodeURIComponent(args.id)}`)));
   }
-  if (name === "codex_lark_cancel") {
+  if (name === "lark_cancel_remote_command") {
     return textContent(
       formatJson(
         await bridgeFetch(state, `/bridge/tasks/${encodeURIComponent(args.id)}/cancel`, {
@@ -647,15 +706,45 @@ async function callTool(name, args, request = {}) {
       ),
     );
   }
-  if (name === "codex_lark_approve") {
-    return textContent(
-      formatJson(
-        await bridgeFetch(state, `/bridge/tasks/${encodeURIComponent(args.id)}/approve`, {
-          method: "POST",
-          body: { action: args.action || "review" },
-        }),
-      ),
-    );
+  if (name === "lark_prepare_dispatch") {
+    return textContent(formatJson(await bridgeFetch(state, "/bridge/dispatch/prepare", {
+      method: "POST",
+      body: { remoteCommandId: args.remoteCommandId },
+    })));
+  }
+  if (name === "lark_record_dispatch") {
+    return textContent(formatJson(await bridgeFetch(state, "/bridge/dispatch/record", {
+      method: "POST",
+      body: {
+        remoteCommandId: args.remoteCommandId,
+        status: args.status,
+        targetThreadId: args.targetThreadId,
+        targetTitle: args.targetTitle,
+        hostTool: args.hostTool,
+        readbackOk: args.readbackOk,
+        evidence: args.evidence,
+        error: args.error,
+      },
+    })));
+  }
+  if (name === "lark_request_clarification") {
+    return textContent(formatJson(await bridgeFetch(state, "/bridge/dispatch/clarify", {
+      method: "POST",
+      body: {
+        remoteCommandId: args.remoteCommandId,
+        question: args.question,
+      },
+    })));
+  }
+  if (name === "lark_reply_remote_command") {
+    return textContent(formatJson(await bridgeFetch(state, "/bridge/remote-command/reply", {
+      method: "POST",
+      body: {
+        remoteCommandId: args.remoteCommandId,
+        text: args.text,
+        status: args.status,
+      },
+    })));
   }
   return {
     isError: true,
@@ -704,15 +793,15 @@ function formatBridgeStartFailure(result = {}, operation = "bridge startup") {
   const reason = result.message || "Bridge did not report a running state.";
   const logPath = result.config?.dataDir ? `${result.config.dataDir}/bridge.log` : "~/.codex-lark-remote/bridge.log";
   const retry = operation === "start"
-    ? "Retry codex_lark_start, or retry codex_lark_handoff after explicit consent."
+    ? "Retry lark_start, or retry lark_lock_control_window after explicit consent."
     : operation === "handoff"
-      ? "Retry codex_lark_handoff after fixing the reason above."
+      ? "Retry lark_lock_control_window after fixing the reason above."
       : operation === "takeover preparation"
-        ? "Retry codex_lark_prepare_takeover after fixing the reason above."
+        ? "Retry lark_prepare_takeover after fixing the reason above."
         : "Start or attach Lark Remote after fixing the reason above.";
 
   return [
-    "Codex Lark Remote bridge could not start.",
+    "Lark Remote bridge could not start.",
     `Reason: ${reason}`,
     `Log: ${logPath}`,
     "",
@@ -731,29 +820,29 @@ function textContent(text) {
 
 function formatHandoffConsentRequired() {
   return [
-    "Codex Lark Remote handoff requires explicit consent.",
+    "Lark Remote handoff requires explicit consent.",
     "",
-    "This stores local routing state for the current Codex thread in the local Codex Lark Remote bridge. Existing chat history is not sent to Feishu/Lark. Future Feishu/Lark messages and Codex replies may pass through your configured bot while handoff is active.",
+    "This stores local routing state for the current Codex thread in the local Lark Remote bridge. Existing chat history is not sent to Feishu/Lark. Future Feishu/Lark messages and Codex replies may pass through your configured bot while handoff is active.",
     "",
     "If you consent, reply in this Codex chat with:",
-    "I approve Codex Lark Remote local bridge handoff for this conversation.",
+    "I approve Lark Remote local bridge handoff for this conversation.",
   ].join("\n");
 }
 
 function formatTakeoverConsentRequired() {
   return [
-    "Codex Lark Remote takeover preparation requires explicit consent.",
+    "Lark Remote takeover preparation requires explicit consent.",
     "",
-    "This starts or reuses the local Codex Lark Remote bridge, attaches this Codex window as the control window, and stores local takeover routing state. It does not send existing chat history to Feishu/Lark, and it does not attach this Codex window as the takeover target. Allowed Feishu/Lark users will choose a project, then choose a window, and must confirm before takeover.",
+    "This starts or reuses the local Lark Remote bridge, attaches this Codex window as the control window, and stores local takeover routing state. It does not send existing chat history to Feishu/Lark, and it does not attach this Codex window as the takeover target. Allowed Feishu/Lark users will choose a project, then choose a window, and must confirm before takeover.",
     "",
     "If you consent, reply in this Codex chat with:",
-    "I approve Codex Lark Remote takeover preparation for this project.",
+    "I approve Lark Remote takeover preparation for this project.",
   ].join("\n");
 }
 
 function formatMissingThreadContext() {
   return [
-    "Codex Lark Remote cannot safely bind this window.",
+    "Lark Remote cannot safely bind this window.",
     "",
     "The Codex host did not provide the current conversation thread id or exact session path to the plugin call. To avoid routing Feishu/Lark messages into another Codex window that happens to share the same workspace path, handoff was not started.",
     "",

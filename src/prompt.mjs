@@ -1,23 +1,23 @@
 import { shortHash } from "./config.mjs";
 
 export function buildRunnerPrompt(command, config) {
-  const context = buildRemoteContext(command, config);
+  const taskPacket = buildRemoteTaskPacket(command, config);
   return [
     "Use the Lark Remote skill.",
     "",
     "If the skill is unavailable, follow these rules: work only in the provided worktree, keep the final report concise for a mobile chat, do not expose secrets or long logs, and do not commit, push, merge, or publish unless approval is explicitly present.",
     "",
-    context,
+    taskPacket,
     "",
     "User request from Lark:",
     command.normalizedTask || command.prompt,
   ].join("\n");
 }
 
-export function buildRemoteContext(command, config) {
+export function buildRemoteTaskPacket(command, config) {
   const policy = config.policy || {};
   return [
-    "<codex_lark_remote_context>",
+    "<lark_remote_legacy_worktree_task>",
     `task_id: ${command.id}`,
     "source: lark",
     `repo_key: ${command.repoKey}`,
@@ -49,7 +49,7 @@ export function buildRemoteContext(command, config) {
     "  feishu_lark_cannot_click_codex_desktop_permission_ui: true",
     "  if_permission_or_approval_is_required: send_a_clear_lark_prompt_instead_of_waiting",
     "  mention_whether_the_user_must_return_to_codex_desktop_or_can_reply_with_text_consent",
-    "</codex_lark_remote_context>",
+    "</lark_remote_legacy_worktree_task>",
   ].join("\n");
 }
 

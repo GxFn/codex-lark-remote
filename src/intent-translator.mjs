@@ -106,7 +106,7 @@ async function translateWithCodex(input = {}) {
 
 function buildCodexIntentPrompt(input = {}) {
   return [
-    "You are the intent translator for Codex Lark Remote.",
+    "You are the intent translator for Lark Remote.",
     "Translate the Feishu/Lark user message into exactly one JSON object.",
     "Do not execute tasks. Do not edit files. Do not call tools. Do not write Markdown.",
     "Use only these intent names:",

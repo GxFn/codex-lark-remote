@@ -41,7 +41,7 @@ export class KeepAwakeController {
       child.once?.("error", (error) => {
         this.lastError = error.message;
         if (this.child === child) this.child = null;
-        this.logger?.warn?.(`Codex Lark Remote keep-awake failed: ${error.message}`);
+        this.logger?.warn?.(`Lark Remote keep-awake failed: ${error.message}`);
       });
       child.once?.("exit", () => {
         if (this.child === child) this.child = null;
@@ -50,7 +50,7 @@ export class KeepAwakeController {
       return this.status({ message: "started" });
     } catch (error) {
       this.lastError = error.message;
-      this.logger?.warn?.(`Codex Lark Remote keep-awake failed: ${error.message}`);
+      this.logger?.warn?.(`Lark Remote keep-awake failed: ${error.message}`);
       return this.status({ message: "failed" });
     }
   }

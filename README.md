@@ -103,8 +103,8 @@ The short successful path is:
 1. Install and enable the plugin in Codex.
 2. Create a Feishu/Lark internal app and copy its App ID/App Secret.
 3. Tell Codex `copied` or `已复制`; Codex reads the clipboard and calls
-   `codex_lark_configure`.
-4. Let Codex run `codex_lark_check_auth` and `codex_lark_verify_setup`.
+   `lark_configure`.
+4. Let Codex run `lark_check_auth` and `lark_verify_setup`.
 5. Verify long-connection Event Configuration and Callback Configuration in the
    Feishu/Lark Open Platform while the bridge is running.
 6. Return to Codex and explicitly approve connecting the current Codex
@@ -275,14 +275,15 @@ become idle. During takeover, prompts that Lark Remote itself sent from
 Feishu/Lark are not echoed back; prompts appended by other sources, such as
 automation or local Codex input, are echoed as `User prompt:` separators.
 
-The control Codex window can inspect and change Lark Remote state with MCP
-tools such as `codex_lark_context`, `codex_lark_takeover_projects`,
-`codex_lark_takeover_project`, `codex_lark_takeover_targets`,
-`codex_lark_takeover`, `codex_lark_takeover_clear`,
-`codex_lark_observation_targets`, `codex_lark_observe`, and
-`codex_lark_observe_stop`. The bundled Lark Remote Control Window skill tells
-the control window to use these tools together with Codex host thread tools
-before guessing from prose.
+The control Codex window uses focused Lark Remote MCP tools instead of a broad
+context snapshot: `lark_prepare_dispatch` / `lark_record_dispatch` for target
+thread delivery, `lark_list_projects` / `lark_select_project` /
+`lark_list_project_sessions` for project and session routing,
+`lark_select_target` / `lark_confirm_takeover` for takeover, and
+`lark_start_observation` / `lark_stop_observation` for read-only streams.
+Non-dispatch control actions finish through `lark_reply_remote_command`. The
+bundled Lark Remote Control Window skill tells the control window to pair those
+tools with Codex host thread tools and to explicitly record the final result.
 
 ## Behavior And Boundaries
 
@@ -353,7 +354,7 @@ entrypoint changes.
 
 | Symptom | Check |
 | --- | --- |
-| `codex_lark_*` tools are missing | Refresh or re-enable the plugin, then start a new Codex conversation. |
+| `lark_*` tools are missing | Refresh or re-enable the plugin, then start a new Codex conversation. |
 | `status` says `websocket disabled` | Confirm `appId`, `appSecret`, and `lark.domain` in `~/.codex-lark-remote/config.json`. |
 | Feishu/Lark replies twice | Stop stale bridge processes or duplicate plugin installations. |
 | Codex edits the plugin cache | Start handoff from a Codex conversation whose cwd is the project you want to edit. |

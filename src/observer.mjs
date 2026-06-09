@@ -215,7 +215,7 @@ export class CodexSessionObserver {
     try {
       await this.notifier.reply(this.state.messageId, summary);
     } catch (error) {
-      this.logger.warn?.(`Codex Lark Remote observer notify failed: ${error.message}`);
+      this.logger.warn?.(`Lark Remote observer notify failed: ${error.message}`);
     }
   }
 
@@ -226,7 +226,7 @@ export class CodexSessionObserver {
     try {
       await this.notifier.reply(this.temporaryState.messageId, summary);
     } catch (error) {
-      this.logger.warn?.(`Codex Lark Remote temporary observer notify failed: ${error.message}`);
+      this.logger.warn?.(`Lark Remote temporary observer notify failed: ${error.message}`);
     }
   }
 }
@@ -235,7 +235,7 @@ function takeoverVisibleUserPrompt(prompt) {
   const text = String(prompt || "").trim();
   if (!text) return "";
   if (/^\[Lark Remote dispatch\]/i.test(text)) return "";
-  if (/\[Codex Lark Remote (?:handoff|thread dispatch)\]/i.test(text)) return "";
+  if (/\[Lark Remote (?:handoff|thread dispatch)\]/i.test(text)) return "";
   if (/Feishu\/Lark user message to dispatch:/i.test(text)) return "";
   return text;
 }

@@ -25,7 +25,7 @@ test("buildRunnerPrompt includes Lark remote context and safety contract", () =>
   );
 
   assert.match(prompt, /Use the Lark Remote skill/);
-  assert.match(prompt, /<codex_lark_remote_context>/);
+  assert.match(prompt, /<lark_remote_legacy_worktree_task>/);
   assert.match(prompt, /worktree_path: \/worktree/);
   assert.match(prompt, /require_review_for_commit: true/);
   assert.match(prompt, /feishu_lark_cannot_click_codex_desktop_permission_ui: true/);

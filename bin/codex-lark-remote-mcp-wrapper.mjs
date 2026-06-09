@@ -53,7 +53,7 @@ function assertRuntimeTarballReady() {
   } catch {
     // The structured wrapper diagnostic below gives the actionable path.
   }
-  const error = new Error(`Packaged Codex Lark Remote runtime tarball is missing: ${runtimeTarball}`);
+  const error = new Error(`Packaged Lark Remote runtime tarball is missing: ${runtimeTarball}`);
   error.code = "CODEX_LARK_REMOTE_RUNTIME_TARBALL_MISSING";
   throw error;
 }
@@ -103,7 +103,7 @@ function startRuntime() {
   child.on("error", (error) => {
     releaseStartupLock("child-error");
     cleanupRunCache(1, null);
-    process.stderr.write(`Failed to start Codex Lark Remote MCP runtime through npx: ${error.message}\n`);
+    process.stderr.write(`Failed to start Lark Remote MCP runtime through npx: ${error.message}\n`);
     process.exit(1);
   });
 }
@@ -157,7 +157,7 @@ async function acquireStartupLock() {
       }
       if (waitMs > timeoutMs) {
         throw new Error(
-          `Timed out waiting for Codex Lark Remote npm cache lock: ${lockDir}; owner=${JSON.stringify(
+          `Timed out waiting for Lark Remote npm cache lock: ${lockDir}; owner=${JSON.stringify(
             readLockOwner(),
           )}; waitMs=${waitMs}; timeoutMs=${timeoutMs}`,
         );
@@ -275,5 +275,5 @@ function logWrapperDiagnostic(event, data) {
     source: "codex-lark-remote-mcp-wrapper",
     ...data,
   };
-  process.stderr.write(`[Codex Lark Remote MCP wrapper] ${JSON.stringify(payload)}\n`);
+  process.stderr.write(`[Lark Remote MCP wrapper] ${JSON.stringify(payload)}\n`);
 }

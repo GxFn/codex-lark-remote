@@ -70,9 +70,9 @@ test("formatHandoff gives first-run setup guidance when app credentials are miss
   assert.match(text, /explicit consent|明确同意/);
   assert.match(text, /clipboard/);
   assert.match(text, /已复制/);
-  assert.match(text, /codex_lark_verify_setup/);
+  assert.match(text, /lark_verify_setup/);
   assert.doesNotMatch(text, /Current thread: [0-9a-f-]{36}/);
-  assert.match(text, /codex_lark_configure/);
-  assert.doesNotMatch(formatDiagnostics(diagnostics), /Run codex_lark_start/);
+  assert.match(text, /lark_configure/);
+  assert.doesNotMatch(formatDiagnostics(diagnostics), /Run lark_start/);
   assert.doesNotMatch(formatDiagnostics(diagnostics), /repos|worktree|isolated/i);
 });

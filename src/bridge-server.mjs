@@ -210,50 +210,6 @@ async function route(ctx) {
     });
   }
 
-  if (req.method === "GET" && url.pathname === "/bridge/context") {
-    const limit = Number(url.searchParams.get("limit") || 10);
-    const includeProjects = url.searchParams.get("projects") !== "false";
-    const includeTargets = url.searchParams.get("targets") !== "false";
-    const status = {
-      version: await readPackageVersion(),
-      counts: await ctx.queue.counts(),
-      workerBusy: ctx.runner.busy,
-      handoff: await readHandoff({ dataDir: ctx.config.dataDir }),
-      observation: await readObservation({ dataDir: ctx.config.dataDir }),
-      takeover: await readTakeover({ dataDir: ctx.config.dataDir }),
-      observer: ctx.observer?.status(),
-      keepAwake: ctx.keepAwake?.status(),
-      larkWs: ctx.larkWs?.status(),
-      repos: Object.keys(ctx.config.repos || {}),
-    };
-    const recent = typeof ctx.queue.list === "function" ? await ctx.queue.list({ limit }) : [];
-    const projects = includeProjects
-      ? await listTakeoverProjects({
-          dataDir: ctx.config.dataDir,
-          limit: ctx.config.takeover?.projectLimit || 20,
-          idleDebounceMs: ctx.config.takeover?.idleDebounceMs,
-        }).catch((error) => ({ error: error.message }))
-      : null;
-    const cwd = url.searchParams.get("cwd") || status.takeover?.project?.cwd || status.takeover?.target?.cwd || status.handoff?.cwd || "";
-    const targets = includeTargets
-      ? await listTakeoverTargets({
-          dataDir: ctx.config.dataDir,
-          cwd,
-          limit: 10,
-          idleDebounceMs: ctx.config.takeover?.idleDebounceMs,
-        }).catch((error) => ({ error: error.message }))
-      : null;
-    return sendJson(res, 200, {
-      success: true,
-      data: {
-        status,
-        recent,
-        projects,
-        targets,
-      },
-    });
-  }
-
   if (req.method === "POST" && ["/bridge/stop", "/bridge/lark/stop"].includes(url.pathname)) {
     sendJson(res, 200, { success: true, message: "Stopping bridge" });
     ctx.larkWs?.stop();
@@ -294,12 +250,37 @@ async function route(ctx) {
       threadPath: body.threadPath,
       cwd: body.cwd,
       name: body.name,
+      capabilities: body.capabilities,
       requireExplicitThread: body.requireExplicitThread !== false,
       activatedBy: body.activatedBy || "bridge",
     });
     const keepAwake = ctx.keepAwake?.start();
     const startupNotice = await maybeSendStartupIntro(ctx, { reason: "handoff" });
     return sendJson(res, 200, { success: true, data, keepAwake, startupNotice });
+  }
+
+  if (req.method === "POST" && url.pathname === "/bridge/dispatch/prepare") {
+    const { body } = await readJson(req);
+    const prepared = await prepareDispatchCommand(ctx, body.remoteCommandId || body.commandId || body.id);
+    return sendJson(res, prepared.success ? 200 : 404, prepared);
+  }
+
+  if (req.method === "POST" && url.pathname === "/bridge/dispatch/record") {
+    const { body } = await readJson(req);
+    const recorded = await recordDispatchCommand(ctx, body);
+    return sendJson(res, recorded.success ? 200 : 400, recorded);
+  }
+
+  if (req.method === "POST" && url.pathname === "/bridge/dispatch/clarify") {
+    const { body } = await readJson(req);
+    const clarified = await requestDispatchClarification(ctx, body);
+    return sendJson(res, clarified.success ? 200 : 400, clarified);
+  }
+
+  if (req.method === "POST" && url.pathname === "/bridge/remote-command/reply") {
+    const { body } = await readJson(req);
+    const replied = await replyRemoteCommand(ctx, body);
+    return sendJson(res, replied.success ? 200 : 400, replied);
   }
 
   if (req.method === "DELETE" && url.pathname === "/bridge/handoff") {
@@ -484,17 +465,11 @@ async function route(ctx) {
   }
 
   if (req.method === "POST" && url.pathname === "/bridge/tasks") {
-    const { body } = await readJson(req);
-    const created = await enqueueTask(ctx, {
-      repoKey: body.repoKey || ctx.config.defaultRepo,
-      text: body.prompt || body.text || "",
-      messageId: "",
-      chatIdHash: "",
-      userIdHash: "manual",
-      userName: "developer",
+    await readJson(req);
+    return sendJson(res, 410, {
+      success: false,
+      error: "Legacy worktree tasks are disabled. Use the Lark Remote control window and target dispatch flow.",
     });
-    ctx.runner.processAll().catch(() => {});
-    return sendJson(res, 200, { success: true, data: created });
   }
 
   const taskMatch = url.pathname.match(/^\/bridge\/tasks\/([^/]+)(?:\/([^/]+))?$/);
@@ -817,13 +792,17 @@ async function handleChatAction(ctx, event, action) {
   }
 
   const runningHandoffCommand = handoff ? await findRunningHandoffTask(ctx, handoff) : null;
-  if (handoff && !runningHandoffCommand) {
-    const busy = await detectBusyHandoffSession(ctx, handoff);
-    if (busy) return ctx.notifier.reply(event.messageId, formatHandoffSessionBusy(handoff, busy, { language }));
+
+  if (!handoff) {
+    return ctx.notifier.reply(
+      event.messageId,
+      language === "en"
+        ? "No Lark Remote control window is connected. Start Lark Remote from a trusted Codex conversation, then choose a project/session target."
+        : "当前没有已连接的 Lark Remote 控制窗口。请先从可信 Codex 会话启动 Lark Remote，再选择项目/会话目标。",
+    );
   }
 
-  const created = handoff
-    ? await enqueueHandoffTask(ctx, {
+  const created = await enqueueHandoffTask(ctx, {
         handoff,
         dispatchTarget: ["active", "pending"].includes(takeover?.state || "") ? takeover.target : null,
         takeover,
@@ -833,14 +812,6 @@ async function handleChatAction(ctx, event, action) {
         userIdHash: event.userIdHash,
         userName: event.senderName,
         runningCommand: runningHandoffCommand,
-      })
-    : await enqueueTask(ctx, {
-        repoKey: action.repoKey,
-        text: action.taskText,
-        messageId: event.messageId,
-        chatIdHash: event.chatIdHash,
-        userIdHash: event.userIdHash,
-        userName: event.senderName,
   });
   if (created.handoffGuidance) {
     await ctx.notifier.reply(event.messageId, formatGuidanceQueued(created));
@@ -1202,6 +1173,220 @@ async function handleCardAction(ctx, event) {
   }
 }
 
+export async function prepareDispatchCommand(ctx, remoteCommandId) {
+  const command = remoteCommandId && typeof ctx.queue.get === "function" ? await ctx.queue.get(remoteCommandId) : null;
+  if (!command) {
+    return { success: false, error: "Remote command not found." };
+  }
+  if (command.mode !== "thread_handoff") {
+    return { success: false, error: "Remote command is not a control-window dispatch command.", data: { remoteCommandId: command.id } };
+  }
+
+  const handoff = await readHandoff({ dataDir: ctx.config.dataDir });
+  const takeover = await readTakeover({ dataDir: ctx.config.dataDir });
+  const target = normalizeDispatchTarget(command.dispatchTarget)
+    || (["active", "pending"].includes(takeover?.state || "") ? normalizeDispatchTarget(takeover.target) : null);
+  const capabilities = controlWindowCapabilities(handoff);
+  const data = {
+    remoteCommandId: command.id,
+    status: command.status,
+    action: "dispatch",
+    recordRequired: true,
+    feishuMessage: command.normalizedTask || command.prompt || "",
+    target,
+    targetPrompt: buildTargetDispatchPrompt(command),
+    controlWindow: {
+      threadId: handoff?.threadId || "",
+      threadPath: handoff?.threadPath || "",
+      cwd: handoff?.cwd || "",
+      name: handoff?.name || "",
+      lockedAt: handoff?.controlWindow?.lockedAt || handoff?.activatedAt || "",
+    },
+    capabilities,
+  };
+
+  if (!handoff?.active) {
+    return {
+      success: true,
+      data: { ...data, action: "blocked", targetPrompt: "", reason: "No active Lark Remote control window is locked." },
+      text: "No active Lark Remote control window is locked.",
+    };
+  }
+  if (!capabilities.hostThreadSend.available) {
+    return {
+      success: true,
+      data: {
+        ...data,
+        action: "blocked",
+        targetPrompt: "",
+        reason: "The locked control window did not confirm a host thread send tool.",
+      },
+      text: "The locked control window did not confirm a host thread send tool.",
+    };
+  }
+  if (!target?.threadId) {
+    return {
+      success: true,
+      data: {
+        ...data,
+        action: "clarify",
+        targetPrompt: "",
+        reason: "No selected target session is available for this work request.",
+      },
+      text: "No selected target session is available for this work request.",
+    };
+  }
+  return {
+    success: true,
+    data,
+    text: `Dispatch prepared for ${target.name || target.threadId}.`,
+  };
+}
+
+export async function recordDispatchCommand(ctx, input = {}) {
+  const remoteCommandId = input.remoteCommandId || input.commandId || input.id || "";
+  const command = remoteCommandId && typeof ctx.queue.get === "function" ? await ctx.queue.get(remoteCommandId) : null;
+  if (!command) return { success: false, error: "Remote command not found." };
+  const status = normalizeDispatchRecordStatus(input.status);
+  if (!status) return { success: false, error: "Invalid dispatch status.", data: { remoteCommandId: command.id } };
+
+  const language = await languageForEvent(ctx, { chatIdHash: command.chatIdHash, text: command.prompt });
+  const text = formatDispatchRecordText(command, {
+    status,
+    language,
+    targetTitle: input.targetTitle || input.target?.name || command.dispatchTarget?.name || "",
+    error: input.error || input.reason || "",
+  });
+  const now = nowIso();
+  const updated = await ctx.queue.update(
+    command.id,
+    {
+      status,
+      dispatchStatus: status,
+      dispatchRecordedAt: now,
+      dispatchTargetThreadId: input.targetThreadId || input.target?.threadId || command.dispatchTarget?.threadId || "",
+      dispatchHostTool: input.hostTool || input.tool || "",
+      dispatchReadbackOk: input.readbackOk === true,
+      dispatchEvidence: input.evidence || input.readback || "",
+      result: status === "dispatch_sent" ? text : "",
+      error: status === "dispatch_sent" ? "" : text,
+      completedAt: ["dispatch_sent", "blocked_retryable", "failed"].includes(status) ? now : command.completedAt || "",
+    },
+    "dispatch_recorded",
+  );
+  if (updated?.messageId) await replyMaybe(ctx, updated.messageId, text);
+  return { success: true, data: updated, text };
+}
+
+export async function requestDispatchClarification(ctx, input = {}) {
+  const remoteCommandId = input.remoteCommandId || input.commandId || input.id || "";
+  const command = remoteCommandId && typeof ctx.queue.get === "function" ? await ctx.queue.get(remoteCommandId) : null;
+  if (!command) return { success: false, error: "Remote command not found." };
+  const language = await languageForEvent(ctx, { chatIdHash: command.chatIdHash, text: command.prompt });
+  const question = String(input.question || "").trim()
+    || (language === "en" ? "Which Codex session should receive this message?" : "这条消息要投递到哪个 Codex 会话？");
+  const now = nowIso();
+  const updated = await ctx.queue.update(
+    command.id,
+    {
+      status: "waiting_clarification",
+      dispatchStatus: "waiting_clarification",
+      clarificationQuestion: question,
+      dispatchRecordedAt: now,
+      error: question,
+    },
+    "dispatch_clarification_requested",
+  );
+  if (updated?.messageId) await replyMaybe(ctx, updated.messageId, question);
+  return { success: true, data: updated, text: question };
+}
+
+export async function replyRemoteCommand(ctx, input = {}) {
+  const remoteCommandId = input.remoteCommandId || input.commandId || input.id || "";
+  const command = remoteCommandId && typeof ctx.queue.get === "function" ? await ctx.queue.get(remoteCommandId) : null;
+  if (!command) return { success: false, error: "Remote command not found." };
+  if (command.mode !== "thread_handoff") {
+    return { success: false, error: "Remote command is not a control-window command.", data: { remoteCommandId: command.id } };
+  }
+  const text = String(input.text || input.message || "").trim();
+  if (!text) return { success: false, error: "Reply text is required.", data: { remoteCommandId: command.id } };
+  const status = normalizeRemoteReplyStatus(input.status);
+  const now = nowIso();
+  const updated = await ctx.queue.update(
+    command.id,
+    {
+      status,
+      controlStatus: status,
+      controlRecordedAt: now,
+      result: status === "control_completed" ? text : "",
+      error: status === "control_completed" ? "" : text,
+      completedAt: ["control_completed", "blocked_retryable", "failed"].includes(status) ? now : command.completedAt || "",
+    },
+    "control_reply_recorded",
+  );
+  if (updated?.messageId) await replyMaybe(ctx, updated.messageId, text);
+  return { success: true, data: updated, text };
+}
+
+function buildTargetDispatchPrompt(command = {}) {
+  const prompt = String(command.normalizedTask || command.prompt || "").trim();
+  return ["[Lark Remote dispatch]", prompt].filter(Boolean).join("\n");
+}
+
+function controlWindowCapabilities(handoff = {}) {
+  const capabilities = handoff?.controlWindow?.capabilities || handoff?.capabilities || {};
+  return {
+    hostThreadSend: normalizeCapabilitySnapshot(capabilities.hostThreadSend, "send_message_to_thread"),
+    hostThreadRead: normalizeCapabilitySnapshot(capabilities.hostThreadRead, "read_thread"),
+    hostThreadInterrupt: normalizeCapabilitySnapshot(capabilities.hostThreadInterrupt, ""),
+  };
+}
+
+function normalizeCapabilitySnapshot(value, fallbackTool) {
+  return {
+    available: value?.available === true,
+    tool: String(value?.tool || fallbackTool || "").trim(),
+  };
+}
+
+function normalizeDispatchRecordStatus(status) {
+  const value = String(status || "").trim().toLowerCase();
+  if (["sent", "dispatch_sent", "delivered"].includes(value)) return "dispatch_sent";
+  if (["blocked", "blocked_retryable", "retryable"].includes(value)) return "blocked_retryable";
+  if (["clarify", "waiting_clarification"].includes(value)) return "waiting_clarification";
+  if (["failed", "failure", "error"].includes(value)) return "failed";
+  return "";
+}
+
+function normalizeRemoteReplyStatus(status) {
+  const value = String(status || "").trim().toLowerCase();
+  if (!value || ["done", "completed", "complete", "control_completed"].includes(value)) return "control_completed";
+  if (["blocked", "blocked_retryable", "retryable"].includes(value)) return "blocked_retryable";
+  if (["failed", "failure", "error"].includes(value)) return "failed";
+  return "control_completed";
+}
+
+function formatDispatchRecordText(command = {}, options = {}) {
+  const language = options.language === "en" ? "en" : "zh";
+  const title = options.targetTitle || command.dispatchTarget?.name || command.dispatchTarget?.threadId || "";
+  if (options.status === "dispatch_sent") {
+    return language === "en"
+      ? `Dispatched to: ${title || "selected Codex session"}`
+      : `已派发到：${title || "已选 Codex 会话"}`;
+  }
+  if (options.status === "waiting_clarification") {
+    return options.error || (language === "en" ? "Waiting for clarification." : "等待确认。");
+  }
+  if (options.status === "blocked_retryable") {
+    const reason = options.error || (language === "en" ? "Host thread dispatch is temporarily unavailable." : "宿主线程派发暂时不可用。");
+    return language === "en"
+      ? `Dispatch is blocked but retained.\nReason: ${reason}`
+      : `暂时无法派发，消息已保留。\n原因：${reason}`;
+  }
+  const reason = options.error || (language === "en" ? "Unknown dispatch failure." : "未知派发失败。");
+  return language === "en" ? `Dispatch failed.\nReason: ${reason}` : `派发失败。\n原因：${reason}`;
+}
+
 async function enqueueTask(ctx, input) {
   const repo = ctx.config.repos?.[input.repoKey];
   if (!repo?.path) throw new Error(`Repo is not configured: ${input.repoKey}`);
@@ -1228,6 +1413,7 @@ async function enqueueHandoffTask(ctx, input) {
     presentation: "chat",
     notifyQueued: guidance || ctx.config.handoff?.notifyQueued === true,
     notifyStarted: ctx.config.handoff?.notifyStarted !== false,
+    controlWindowCommand: true,
     handoffGuidance: guidance,
     handoffDispatch: Boolean(dispatchTarget),
     dispatchTarget,

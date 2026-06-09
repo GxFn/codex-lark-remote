@@ -146,7 +146,7 @@ test("bridge stop confirmation explains it closes the connection", () => {
   const rendered = JSON.stringify(buildBridgeStopConfirmCard());
 
   assert.match(text, /确认关闭飞书连接/);
-  assert.match(text, /停止本机 Codex Lark Remote bridge/);
+  assert.match(text, /停止本机 Lark Remote bridge/);
   assert.match(text, /重新启动插件/);
   assert.match(rendered, /确认关闭连接/);
   assert.match(rendered, /bridge_stop_execute/);

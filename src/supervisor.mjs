@@ -63,7 +63,7 @@ export async function startBridgeProcess(options = {}) {
   const bridgeUrl = new URL("../bin/codex-lark-bridge.mjs", import.meta.url);
   const logPath = bridgeLogFilePath(config.dataDir);
   const logFd = fsSync.openSync(logPath, "a");
-  fsSync.writeSync(logFd, `\n[${new Date().toISOString()}] starting Codex Lark Remote bridge\n`);
+  fsSync.writeSync(logFd, `\n[${new Date().toISOString()}] starting Lark Remote bridge\n`);
   const child = spawn(process.execPath, [bridgeUrl.pathname, "--port", "0"], {
     detached: true,
     stdio: ["ignore", logFd, logFd],

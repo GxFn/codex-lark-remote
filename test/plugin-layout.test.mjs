@@ -31,8 +31,8 @@ const readmePairs = [
       /## Configure Feishu\/Lark/,
       /## Start From Codex/,
       /https:\/\/github\.com\/GxFn\/codex-lark-remote\.git/,
-      /codex_lark_configure/,
-      /codex_lark_verify_setup/,
+      /lark_configure/,
+      /lark_verify_setup/,
       /takeover 1/,
       /clipboard/,
       /\bstatus\b/,
@@ -47,8 +47,8 @@ const readmePairs = [
       /## 配置飞书\/Lark/,
       /## 从 Codex 启动/,
       /https:\/\/github\.com\/GxFn\/codex-lark-remote\.git/,
-      /codex_lark_configure/,
-      /codex_lark_verify_setup/,
+      /lark_configure/,
+      /lark_verify_setup/,
       /接管 1/,
       /已复制/,
       /\bstatus\b/,
@@ -96,7 +96,8 @@ test("keeps the repository root as the plugin root", async () => {
     assert.equal(entryStat.isSymbolicLink(), false, `${entry} must be a real plugin-root file or directory`);
   }
 
-  await assert.rejects(fs.lstat(new URL("../docs", import.meta.url)), { code: "ENOENT" }, "docs should not ship in the plugin root");
+  const docsStat = await fs.lstat(new URL("../docs", import.meta.url));
+  assert.equal(docsStat.isDirectory(), true, "implementation docs may ship at the plugin root");
 });
 
 test("keeps full plugin-root READMEs", async () => {
@@ -119,11 +120,11 @@ test("keeps startup guidance on the plugin MCP path", async () => {
     new URL("../skills/lark-remote/SKILL.md", import.meta.url),
     "utf8",
   );
-  assert.match(skill, /Use the plugin MCP tools only/);
-  assert.match(skill, /fall back to shell commands/);
-  assert.match(skill, /plugin MCP server is not loaded/);
+  assert.match(skill, /Use Lark Remote MCP tools only/);
+  assert.match(skill, /lark_\*/);
+  assert.match(skill, /MCP server is not loaded/);
   assert.match(skill, /explicit consent/);
-  assert.match(skill, /confirmedLocalBridgeHandoff: true/);
+  assert.match(skill, /capabilities/);
 });
 
 test("exposes control-window MCP tools and skill guidance", async () => {
@@ -140,16 +141,21 @@ test("exposes control-window MCP tools and skill guidance", async () => {
     "utf8",
   );
   const requiredTools = [
-    "codex_lark_context",
-    "codex_lark_takeover_projects",
-    "codex_lark_takeover_project",
-    "codex_lark_takeover_targets",
-    "codex_lark_takeover",
-    "codex_lark_takeover_clear",
-    "codex_lark_observation_targets",
-    "codex_lark_observe",
-    "codex_lark_observe_stop",
-    "codex_lark_handoff_off",
+    "lark_prepare_dispatch",
+    "lark_record_dispatch",
+    "lark_request_clarification",
+    "lark_reply_remote_command",
+    "lark_get_bridge_status",
+    "lark_list_projects",
+    "lark_select_project",
+    "lark_list_project_sessions",
+    "lark_select_target",
+    "lark_confirm_takeover",
+    "lark_clear_active_target",
+    "lark_list_observation_targets",
+    "lark_start_observation",
+    "lark_stop_observation",
+    "lark_unlock_control_window",
   ];
 
   for (const toolName of requiredTools) {
@@ -159,10 +165,14 @@ test("exposes control-window MCP tools and skill guidance", async () => {
   }
 
   assert.match(controlSkill, /remoteCommandId/);
-  assert.match(controlSkill, /host thread tools/);
-  assert.match(controlSkill, /JavaScript does not send/);
-  assert.match(startupSkill, /Lark Remote Control Window skill/);
-  assert.match(startupSkill, /codex_lark_context/);
+  assert.match(controlSkill, /host thread/);
+  assert.match(controlSkill, /lark_prepare_dispatch/);
+  assert.match(controlSkill, /lark_record_dispatch/);
+  assert.match(startupSkill, /capability snapshot/);
+  assert.doesNotMatch(server, /name: "lark_context"/);
+  assert.doesNotMatch(server, /name: "lark_send"/);
+  assert.doesNotMatch(server, /name: "lark_approve"/);
+  assert.doesNotMatch(controlSkill, /lark_context/);
 });
 
 test("declares a plugin-root cwd for the MCP server", async () => {
@@ -227,7 +237,7 @@ test("keeps startup tools from circular start and handoff guidance", async () =>
     "utf8",
   );
 
-  assert.doesNotMatch(server, /Use codex_lark_start first/);
+  assert.doesNotMatch(server, /Use lark_start first/);
   assert.match(server, /formatBridgeStartFailure\(bridge, "start"\)/);
   assert.match(server, /formatBridgeStartFailure\(bridge, "handoff"\)/);
   assert.match(server, /formatBridgeStartFailure\(bridge, "takeover preparation"\)/);

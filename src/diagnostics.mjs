@@ -26,9 +26,9 @@ export async function diagnoseLarkRemote(options = {}) {
   const issues = [];
   const warnings = [];
   if (!appCredentialsConfigured) {
-    issues.push("Feishu/Lark App ID/App Secret are missing. Save them with codex_lark_configure before starting the bridge.");
+    issues.push("Feishu/Lark App ID/App Secret are missing. Save them with lark_configure before starting the bridge.");
   } else if (!status.running) {
-    issues.push("Bridge is not running. Start it with codex_lark_handoff from a trusted Codex conversation, then use the Feishu/Lark console.");
+    issues.push("Bridge is not running. Start it with lark_prepare_takeover or lark_lock_control_window from a trusted Codex conversation, then use the Feishu/Lark console.");
   }
   if (!webSocketEnabled && !publicUrl) warnings.push("Public callback URL is not configured.");
   if (webSocketEnabled && status.data?.larkWs?.lastError) warnings.push(status.data.larkWs.lastError);
@@ -94,7 +94,7 @@ export async function diagnoseLarkRemote(options = {}) {
 
 export function formatDiagnostics(diagnostics) {
   return [
-    "Codex Lark Remote diagnostics",
+    "Lark Remote diagnostics",
     `Ready: ${diagnostics.ok ? "yes" : "no"}`,
     `Bridge: ${diagnostics.checks.bridgeRunning ? "running" : "stopped"}`,
     `Config: ${diagnostics.paths?.configPath || "-"}`,
@@ -117,7 +117,7 @@ export function formatHandoff(diagnostics) {
   const handoff = diagnostics.handoff;
   if (!diagnostics.checks.appCredentialsConfigured) {
     return [
-      "Codex Lark Remote",
+      "Lark Remote",
       "Status: configuration required",
       "Bridge: not started",
       "Conversation: not attached",
@@ -130,7 +130,7 @@ export function formatHandoff(diagnostics) {
       .join("\n");
   }
   return [
-    "Codex Lark Remote",
+    "Lark Remote",
     diagnostics.ok ? "Status: ready for Feishu/Lark" : "Status: needs attention",
     `Feishu/Lark: ${formatTransport(diagnostics)}`,
     `Domain: ${diagnostics.lark.domainLabel || "-"}`,
@@ -186,16 +186,16 @@ function buildNextActions({ config, status, webhookUrl, publicUrl, webSocketEnab
     actions.push("In Event Configuration, choose long connection/WebSocket and subscribe to im.message.receive_v1.");
     actions.push("In Callback Configuration, choose long connection/WebSocket and subscribe to card.action.trigger.");
     actions.push("Copy App ID/App Secret to the clipboard, then return to Codex and say 已复制.");
-    actions.push("Codex should read the clipboard, call codex_lark_configure, then run codex_lark_check_auth and codex_lark_verify_setup. Use allowedUsers: [] only for the first private setup.");
+    actions.push("Codex should read the clipboard, call lark_configure, then run lark_check_auth and lark_verify_setup. Use allowedUsers: [] only for the first private setup.");
     return actions;
   }
-  if (!status.running) actions.push("Run codex_lark_handoff from a trusted Codex conversation to start the local bridge and open the Feishu/Lark console.");
+  if (!status.running) actions.push("Run lark_prepare_takeover or lark_lock_control_window from a trusted Codex conversation to start the local bridge and open the Feishu/Lark console.");
   if (webSocketEnabled) {
     const larkWs = status.data?.larkWs || {};
     const webSocketConnected = Boolean(larkWs.connected);
     const eventSeen = Boolean(larkWs.lastMessageEventAt);
     const callbackSeen = Boolean(larkWs.lastCardActionAt);
-    actions.push("Run codex_lark_verify_setup during first-time setup or troubleshooting to confirm the WebSocket connection before Feishu verify/save.");
+    actions.push("Run lark_verify_setup during first-time setup or troubleshooting to confirm the WebSocket connection before Feishu verify/save.");
     if (webSocketConnected && (!eventSeen || !callbackSeen)) {
       actions.push("First complete Feishu Event Configuration: choose long connection, add im.message.receive_v1, then click verify/save.");
       actions.push("Then complete Feishu Callback Configuration: choose long connection, add card.action.trigger, then click verify/save.");

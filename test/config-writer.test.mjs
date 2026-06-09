@@ -63,7 +63,7 @@ test("updateRuntimeConfig writes config and returns a sanitized summary", async 
   assert.match(text, /configuration saved/);
   assert.match(text, /Lark international/);
   assert.match(text, /Startup intro target: configured/);
-  assert.match(text, /codex_lark_verify_setup/);
+  assert.match(text, /lark_verify_setup/);
   assert.match(text, /控制台 or console/);
   assert.doesNotMatch(text, /secret_value|token_value|encrypt_value/);
 });

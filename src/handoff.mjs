@@ -12,6 +12,7 @@ export async function activateHandoff(options = {}) {
     ...options,
     requireExplicitThread: options.requireExplicitThread !== false,
   });
+  const capabilities = normalizeControlWindowCapabilities(options.capabilities || options.controlWindowCapabilities || {});
   const state = {
     active: true,
     mode: "resume",
@@ -22,9 +23,51 @@ export async function activateHandoff(options = {}) {
     activatedAt: nowIso(),
     activatedBy: options.activatedBy || "codex",
     source: thread.source || "",
+    controlWindow: {
+      threadId: thread.threadId,
+      threadPath: thread.threadPath || "",
+      cwd: thread.cwd || options.cwd || "",
+      name: thread.name || "",
+      lockedAt: nowIso(),
+      lockedBy: options.activatedBy || "codex",
+      capabilities,
+    },
   };
   await fs.writeFile(handoffFilePath(dataDir), `${JSON.stringify(state, null, 2)}\n`);
   return state;
+}
+
+export function normalizeControlWindowCapabilities(input = {}) {
+  const hostThreadSend = normalizeCapability(input.hostThreadSend, {
+    available: input.hostThreadSend === true || input.sendMessageToThread === true,
+    tool: input.hostThreadSendTool || input.sendMessageToThreadTool || "send_message_to_thread",
+  });
+  const hostThreadRead = normalizeCapability(input.hostThreadRead, {
+    available: input.hostThreadRead === true || input.readThread === true,
+    tool: input.hostThreadReadTool || input.readThreadTool || "read_thread",
+  });
+  const hostThreadInterrupt = normalizeCapability(input.hostThreadInterrupt, {
+    available: input.hostThreadInterrupt === true || input.handoffThread === true,
+    tool: input.hostThreadInterruptTool || input.handoffThreadTool || "",
+  });
+  return {
+    hostThreadSend,
+    hostThreadRead,
+    hostThreadInterrupt,
+  };
+}
+
+function normalizeCapability(value, fallback = {}) {
+  if (value && typeof value === "object") {
+    return {
+      available: value.available === true,
+      tool: String(value.tool || fallback.tool || "").trim(),
+    };
+  }
+  return {
+    available: fallback.available === true,
+    tool: String(fallback.tool || "").trim(),
+  };
 }
 
 export async function readHandoff(options = {}) {

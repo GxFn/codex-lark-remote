@@ -3,7 +3,7 @@ import { truncateForLark } from "./notifier.mjs";
 export function formatHelp(options = {}) {
   if (languageOf(options) === "en") {
     return [
-      "Codex Lark Remote",
+      "Lark Remote",
       "",
       "Use the console to choose local Codex projects and sessions. After takeover, normal messages go to the dedicated control Codex window as thread-dispatch requests for the selected session.",
       "Console: send console, project list, session list, enter project 1, observe session 2, takeover 2.",
@@ -22,7 +22,7 @@ export function formatHelp(options = {}) {
     ].join("\n");
   }
   return [
-    "Codex Lark Remote",
+    "Lark Remote",
     "",
     "可以从控制台选择本机 Codex 项目和会话；接管后普通需求会交给专用 Codex 控制窗口，作为被选中会话的线程派发请求。",
     "控制台：发送控制台、项目列表、会话列表、进入项目 1、观察会话 2、接管 2。",
@@ -301,7 +301,7 @@ export function formatBridgeStopConfirm(options = {}) {
     return [
       "Close the Lark connection?",
       "",
-      "This stops the local Codex Lark Remote bridge and disconnects the Lark WebSocket.",
+      "This stops the local Lark Remote bridge and disconnects the Lark WebSocket.",
       "After closing, Lark messages will no longer enter Codex. Restart the plugin in Codex to reconnect.",
       "If you only want to end the current takeover, send exit handoff.",
     ].join("\n");
@@ -309,7 +309,7 @@ export function formatBridgeStopConfirm(options = {}) {
   return [
     "确认关闭飞书连接？",
     "",
-    "这会停止本机 Codex Lark Remote bridge，并断开飞书 WebSocket。",
+    "这会停止本机 Lark Remote bridge，并断开飞书 WebSocket。",
     "关闭后，飞书里的普通消息不会再进入 Codex；需要回到 Codex 里重新启动插件才能恢复。",
     "如果只是退出当前会话接管，请发送“退出接管”或 exit handoff。",
   ].join("\n");
@@ -366,12 +366,12 @@ export function formatBridgeStopping(options = {}) {
   if (languageOf(options) === "en") {
     return [
       "Closing the Lark connection.",
-      "The local Codex Lark Remote bridge and Lark WebSocket will stop. Restart the plugin in Codex to reconnect.",
+      "The local Lark Remote bridge and Lark WebSocket will stop. Restart the plugin in Codex to reconnect.",
     ].join("\n");
   }
   return [
     "正在关闭飞书连接。",
-    "本机 Codex Lark Remote bridge 和飞书 WebSocket 会停止；之后需要在 Codex 里重新启动插件。",
+    "本机 Lark Remote bridge 和飞书 WebSocket 会停止；之后需要在 Codex 里重新启动插件。",
   ].join("\n");
 }
 
@@ -383,7 +383,7 @@ export function formatBridgeStopCancelled(options = {}) {
 export function formatWhoami(event) {
   const preferredId = event.senderId || event.openId || event.unionId || "";
   return [
-    "Codex Lark Remote whoami",
+    "Lark Remote whoami",
     `senderIdType: ${event.senderIdType || "unknown"}`,
     `senderId: ${event.senderId || "unknown"}`,
     event.openId && event.openId !== event.senderId ? `openId: ${event.openId}` : "",
@@ -459,7 +459,7 @@ export function buildSetupVerificationCard(report = {}) {
 export function formatBridgeStatus({ config, counts, workerBusy, url, larkWs, handoff, observation, takeover, keepAwake }) {
   const transport = config.lark?.transport || "websocket";
   return [
-    "Codex Lark Remote status",
+    "Lark Remote status",
     `Bridge: ${url || "running"}`,
     `Feishu/Lark: ${formatLarkTransport({ transport, larkWs })}`,
     `Conversation: ${formatHandoffState(handoff)}`,
@@ -565,20 +565,20 @@ export function formatObservationList(targets = [], observation = null, options 
 export function formatObservationStatus(observation, options = {}) {
   const language = languageOf(options);
   if (language === "en") {
-    if (!observation?.active) return "Codex Lark Remote observation: off";
+    if (!observation?.active) return "Lark Remote observation: off";
     return [
       observation.name || "Untitled Codex chat",
-      "Codex Lark Remote observation: active",
+      "Lark Remote observation: active",
       `Thread: ${String(observation.threadId || "").slice(0, 8) || "unknown"}`,
       observation.cwd ? `Folder: ${observation.cwd}` : "",
       "This is read-only progress streaming. Lark messages are not sent to the observed session.",
       "Reply observe off to stop observing.",
     ].filter(Boolean).join("\n");
   }
-  if (!observation?.active) return "Codex Lark Remote 观察：已关闭";
+  if (!observation?.active) return "Lark Remote 观察：已关闭";
   return [
     observation.name || "未命名 Codex 对话",
-    "Codex Lark Remote 观察：已开启",
+    "Lark Remote 观察：已开启",
     `线程: ${String(observation.threadId || "").slice(0, 8) || "unknown"}`,
     observation.cwd ? `目录: ${observation.cwd}` : "",
     "这是只读进度串流，飞书消息不会发送到被观察的会话。",
@@ -1041,6 +1041,20 @@ export function formatGuidanceQueued(command) {
 }
 
 export function formatFinal(command) {
+  if (command.mode === "thread_handoff") {
+    if (command.status === "control_completed") {
+      return command.result || "已处理。";
+    }
+    if (command.status === "dispatch_sent") {
+      return command.result || "已派发到已选 Codex 会话。";
+    }
+    if (command.status === "blocked_retryable") {
+      return command.error || "暂时无法派发，消息已保留。";
+    }
+    if (command.status === "waiting_clarification") {
+      return command.error || command.clarificationQuestion || "等待确认。";
+    }
+  }
   if (command.status === "failed") {
     return [
       `Task failed: ${command.id}`,

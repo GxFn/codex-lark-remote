@@ -97,8 +97,8 @@ marketplace，里面只有一个指向仓库根目录的插件条目。只有在
 1. 在 Codex 中安装并启用插件。
 2. 创建飞书/Lark 内部应用，复制 App ID 和 App Secret。
 3. 回到 Codex，说 `已复制` 或 `copied`；Codex 会读取剪贴板并调用
-   `codex_lark_configure`。
-4. 让 Codex 运行 `codex_lark_check_auth` 和 `codex_lark_verify_setup`。
+   `lark_configure`。
+4. 让 Codex 运行 `lark_check_auth` 和 `lark_verify_setup`。
 5. 在 bridge 运行时，到飞书/Lark 开放平台验证长连接事件配置和回调配置。
 6. 回到 Codex，明确同意把当前 Codex 会话连接到 Lark Remote。
 7. 从飞书/Lark 给机器人发送 `whoami`，再把返回的 `senderId` 加入
@@ -248,13 +248,14 @@ LLM 输出在聊天里连成一段。
 飞书来源的新提示词，例如自动化或本地 Codex 输入，会作为 `用户提示：` 分隔消息
 同步到飞书。
 
-控制 Codex 窗口可以通过 `codex_lark_context`、
-`codex_lark_takeover_projects`、`codex_lark_takeover_project`、
-`codex_lark_takeover_targets`、`codex_lark_takeover`、
-`codex_lark_takeover_clear`、`codex_lark_observation_targets`、
-`codex_lark_observe` 和 `codex_lark_observe_stop` 等 MCP 工具检查和改变
-Lark Remote 状态。随插件发布的 Lark Remote Control Window skill 会提示控制窗口
-优先结合这些工具和 Codex 宿主线程工具判断，而不是只靠 JS 侧猜语义。
+控制 Codex 窗口使用职责专一的 Lark Remote MCP 工具，而不是宽泛 context 快照：
+`lark_prepare_dispatch` / `lark_record_dispatch` 负责目标线程派发，
+`lark_list_projects` / `lark_select_project` / `lark_list_project_sessions`
+负责项目和会话路由，`lark_select_target` / `lark_confirm_takeover`
+负责接管，`lark_start_observation` / `lark_stop_observation` 负责只读观察，
+非派发控制动作通过 `lark_reply_remote_command` 回复并完成。
+随插件发布的 Lark Remote Control Window skill 会提示控制窗口结合这些工具和
+Codex 宿主线程工具，并显式记录最终结果。
 
 接管是可写的，但普通飞书/Lark 消息不会直接进入目标会话；它们会先进入开启连接的
 Codex 控制窗口，再由控制窗口使用 Codex 宿主线程工具派发到选中的目标会话。
@@ -321,7 +322,7 @@ Codex 插件根目录会通过一个小 wrapper 和 `runtime.tgz` 启动 MCP。
 
 | 现象 | 检查 |
 | --- | --- |
-| 当前没有 `codex_lark_*` 工具 | 刷新或重新启用插件，然后新开一个 Codex 对话。 |
+| 当前没有 `lark_*` 工具 | 刷新或重新启用插件，然后新开一个 Codex 对话。 |
 | `status` 显示 `websocket disabled` | 检查 `~/.codex-lark-remote/config.json` 里的 `appId`、`appSecret` 和 `lark.domain`。 |
 | 同一条飞书/Lark 消息收到两次回复 | 停止旧 bridge 进程或重复插件安装。 |
 | Codex 改到了插件缓存目录 | 从目标项目所在的 Codex 对话里启动接管。 |
