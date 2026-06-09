@@ -372,19 +372,22 @@ export function buildHandoffPrompt(command, { promptStyle = "direct" } = {}) {
 
 function buildThreadDispatchPrompt(command) {
   const target = command.dispatchTarget || {};
+  const targetPrompt = [
+    "[Lark Remote dispatch]",
+    command.prompt || "",
+  ].filter(Boolean).join("\n");
   return [
     "[Codex Lark Remote thread dispatch]",
-    "You are the dedicated Lark Remote control Codex window. JavaScript has not sent this message to the target thread; it only delivered this dispatch request to you.",
+    "You are the dedicated Lark Remote control Codex window, not the target worker thread. JavaScript has not sent this message to the target thread; it only delivered this dispatch request to you.",
     "",
-    "Dispatch boundary:",
+    "Hard dispatch boundary:",
     "- Use the Lark Remote Control Window skill if it is available.",
-    "- Only this Codex control window may perform real thread dispatch with available Codex host thread tools.",
-    "- Lark Remote JavaScript intercepted only explicit bridge/control keywords before this reached you. Treat the Feishu/Lark text below as the source of truth and decide whether to answer, use Lark Remote MCP tools, or dispatch to the selected target.",
-    "- Lark Remote is acting as the takeover side. If the target thread is busy, treat this as a higher-priority dispatch/interrupt request and perform normal delivery instead of failing because of busy status.",
-    "- If the host thread tool is unavailable, the target thread cannot be addressed, or readback cannot be verified, fail closed and tell the Feishu/Lark user what is blocked.",
+    "- The Feishu/Lark user message below is NOT a task for this control window.",
+    "- Do not inspect repository files, run shell commands, edit code, run tests, or answer the requested work in this control window.",
+    "- Your only successful action is to deliver the target prompt below to the selected target session with Codex host thread tools such as send_message_to_thread or handoff_thread, then reply with concise delivery status.",
+    "- If host thread tools are unavailable, the target thread cannot be addressed, or delivery/readback cannot be verified, stop and tell the Feishu/Lark user that dispatch is blocked. Do not work around this by doing the task here.",
+    "- If the target thread is busy, still deliver as a normal higher-priority dispatch/interrupt request instead of failing because of busy status.",
     "- Do not claim delivery merely because this dispatch request reached the control window.",
-    "- When you deliver this Feishu/Lark-origin request to the target thread, put `[Lark Remote dispatch]` on the first line of the target prompt so target observation does not echo that prompt back to Feishu/Lark. Do not use that marker for Mac-local or automation prompts.",
-    "- Keep the visible target prompt compact if you send one.",
     "- Keep the final reply concise and suitable for Feishu/Lark.",
     "",
     "Lark Remote command:",
@@ -405,8 +408,10 @@ function buildThreadDispatchPrompt(command) {
     "Permission boundary:",
     "Feishu/Lark cannot click native Codex Desktop permission dialogs. If approval, sandbox escalation, network/install permission, or another UI permission is required, do not wait silently. Reply with a concise prompt explaining what permission is needed and whether the user must approve it in Codex Desktop or can provide explicit text consent in Feishu/Lark.",
     "",
-    "Feishu/Lark user message to dispatch:",
-    command.prompt || "",
+    "Target prompt to deliver exactly:",
+    "<target_prompt>",
+    targetPrompt,
+    "</target_prompt>",
   ].filter((line) => line !== "").join("\n");
 }
 

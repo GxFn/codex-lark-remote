@@ -150,12 +150,16 @@ test("buildHandoffPrompt wraps target dispatch for the control window", () => {
   assert.match(prompt, /\[Codex Lark Remote thread dispatch\]/);
   assert.match(prompt, /Lark Remote Control Window skill/);
   assert.match(prompt, /JavaScript has not sent this message to the target thread/);
+  assert.match(prompt, /NOT a task for this control window/);
+  assert.match(prompt, /Do not inspect repository files, run shell commands, edit code, run tests/);
+  assert.match(prompt, /send_message_to_thread or handoff_thread/);
   assert.match(prompt, /higher-priority dispatch\/interrupt request/);
   assert.match(prompt, /\[Lark Remote dispatch\]/);
   assert.match(prompt, /remoteCommandId: rcmd_dispatch/);
   assert.match(prompt, /target-thread-1/);
   assert.match(prompt, /修复 lark 远程派发/);
-  assert.match(prompt, /优先处理这个变更/);
+  assert.match(prompt, /<target_prompt>\n\[Lark Remote dispatch\]\n优先处理这个变更\n<\/target_prompt>/);
+  assert.doesNotMatch(prompt, /decide whether to answer/);
 });
 
 test("CodexCliRunner sends a handoff started acknowledgement by default", async () => {

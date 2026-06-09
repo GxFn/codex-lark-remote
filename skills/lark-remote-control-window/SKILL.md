@@ -12,6 +12,13 @@ trying to fully classify it in JavaScript.
 ## Operating Model
 
 - Treat the Feishu/Lark message as the source of truth.
+- If the prompt contains `[Codex Lark Remote thread dispatch]` and a selected
+  target session, this control window is only a dispatcher. The Feishu/Lark user
+  message is not a task for this window: do not inspect files, run shell
+  commands, edit code, run tests, or answer the requested work here. Deliver the
+  provided target prompt to the selected target thread with host thread tools,
+  then reply with concise delivery status. If delivery cannot be verified, say
+  dispatch is blocked instead of doing the task locally.
 - JavaScript has already intercepted only exact bridge/control keywords such as
   `控制台`, `status`, `observe off`, `exit handoff`, `close Lark connection`, and
   `control:` / `控制:`.
@@ -58,12 +65,13 @@ trying to fully classify it in JavaScript.
 - For "观察 2", "observe session 2", or similar, call
   `codex_lark_observation_targets` when needed, then `codex_lark_observe` with
   `remoteCommandId`.
-- For ordinary coding/work requests while a target is active, use host thread
-  tools to deliver to the selected target thread. Keep the delivered prompt
-  compact and include enough Feishu/Lark context. Put `[Lark Remote dispatch]`
-  on the first line of Feishu/Lark-origin target prompts so target observation
-  does not echo that prompt back to Feishu/Lark; do not use that marker for
-  Mac-local or automation prompts.
+- For ordinary coding/work requests while a target is active, this window must
+  only dispatch. Use host thread tools to deliver the target prompt to the
+  selected target thread. Do not inspect the repository, run commands, edit
+  files, run tests, or answer the work request in this control window. Put
+  `[Lark Remote dispatch]` on the first line of Feishu/Lark-origin target
+  prompts so target observation does not echo that prompt back to Feishu/Lark;
+  do not use that marker for Mac-local or automation prompts.
 - For direct questions about Lark Remote state, prefer `codex_lark_context` or
   `codex_lark_status` and answer concisely.
 
