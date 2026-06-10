@@ -56,13 +56,13 @@ First-time users do not need to clone this repository.
 Install the approved marketplace artifact:
 
 ```bash
-npx codex-marketplace add GxFn/codex-lark-remote --plugin
+npx codex-marketplace add GxFn/LarkRemote/plugins/codex-lark-remote --plugin
 ```
 
 To pin the reviewed release:
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.3.0/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/LarkRemote/tree/v0.3.0/plugins/codex-lark-remote --plugin
 ```
 
 Then restart or refresh Codex if the plugin list does not update immediately.
@@ -73,14 +73,14 @@ If Codex asks for a GitHub target or direct artifact path, use the plugin
 subdirectory:
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.3.0/plugins/codex-lark-remote
+https://github.com/GxFn/LarkRemote/tree/v0.3.0/plugins/codex-lark-remote
 ```
 
 If the Codex dialog separates source, ref, and sparse path, fill it like this:
 
 ```text
 Source:
-https://github.com/GxFn/codex-lark-remote.git
+https://github.com/GxFn/LarkRemote.git
 
 Git ref:
 v0.3.0
@@ -332,7 +332,7 @@ For local development, register this repository as a local marketplace:
 ```toml
 [marketplaces.gxfn]
 source_type = "local"
-source = "/absolute/path/to/codex-lark-remote"
+source = "/absolute/path/to/LarkRemote"
 
 [plugins."codex-lark-remote@gxfn"]
 enabled = true

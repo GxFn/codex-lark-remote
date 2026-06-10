@@ -6,8 +6,8 @@
     "name": "gaoxuefeng",
     "url": "https://github.com/GxFn"
   },
-  "homepage": "https://github.com/GxFn/codex-lark-remote#readme",
-  "repository": "https://github.com/GxFn/codex-lark-remote",
+  "homepage": "https://github.com/GxFn/LarkRemote#readme",
+  "repository": "https://github.com/GxFn/LarkRemote",
   "license": "MIT",
   "keywords": [
     "codex",
@@ -32,7 +32,7 @@
       "Read",
       "Write"
     ],
-    "websiteURL": "https://github.com/GxFn/codex-lark-remote#readme",
+    "websiteURL": "https://github.com/GxFn/LarkRemote#readme",
     "defaultPrompt": [
       "Start Lark Remote for this Codex workspace",
       "Configure Lark Remote with my Feishu/Lark app credentials",

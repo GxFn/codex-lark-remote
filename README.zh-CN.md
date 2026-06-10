@@ -51,13 +51,13 @@ bridge 是 local-first 的。启动时不会把已有 Codex 聊天历史发送�
 安装已经审核的 marketplace 插件：
 
 ```bash
-npx codex-marketplace add GxFn/codex-lark-remote --plugin
+npx codex-marketplace add GxFn/LarkRemote/plugins/codex-lark-remote --plugin
 ```
 
 如果要固定到当前审核版本：
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.3.0/plugins/codex-lark-remote --plugin
+npx codex-marketplace add https://github.com/GxFn/LarkRemote/tree/v0.3.0/plugins/codex-lark-remote --plugin
 ```
 
 安装后如果 Codex 插件列表没有立刻刷新，重启或刷新 Codex。
@@ -67,14 +67,14 @@ npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.3.0/
 如果 Codex 要求填写 GitHub target 或直接 artifact path，请填写插件子目录：
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.3.0/plugins/codex-lark-remote
+https://github.com/GxFn/LarkRemote/tree/v0.3.0/plugins/codex-lark-remote
 ```
 
 如果 Codex 弹窗把来源、Git 引用、稀疏路径拆开填写，请这样填：
 
 ```text
 来源：
-https://github.com/GxFn/codex-lark-remote.git
+https://github.com/GxFn/LarkRemote.git
 
 Git 引用：
 v0.3.0
@@ -292,7 +292,7 @@ Lark Remote 接管的是对话输入输出链路，不是 Codex Desktop 的原�
 ```toml
 [marketplaces.gxfn]
 source_type = "local"
-source = "/absolute/path/to/codex-lark-remote"
+source = "/absolute/path/to/LarkRemote"
 
 [plugins."codex-lark-remote@gxfn"]
 enabled = true

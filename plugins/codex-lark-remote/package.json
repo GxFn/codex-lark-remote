@@ -5,11 +5,11 @@
   "type": "module",
   "bin": {
     "codex-lark-remote": "./bin/codex-lark-bridge.mjs",
-    "codex-lark-remote-mcp": "./bin/codex-lark-remote-mcp.mjs"
+    "codex-lark-remote-mcp": "./bin/lark-remote-start.mjs"
   },
   "scripts": {
     "bridge": "node ./bin/codex-lark-bridge.mjs",
-    "mcp": "node ./bin/codex-lark-remote-mcp.mjs"
+    "mcp": "node ./bin/lark-remote-start.mjs"
   },
   "keywords": [
     "codex",
@@ -25,8 +25,8 @@
     "name": "gaoxuefeng",
     "url": "https://github.com/GxFn"
   },
-  "homepage": "https://github.com/GxFn/codex-lark-remote#readme",
-  "repository": "https://github.com/GxFn/codex-lark-remote",
+  "homepage": "https://github.com/GxFn/LarkRemote#readme",
+  "repository": "https://github.com/GxFn/LarkRemote",
   "license": "MIT",
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.63.1"

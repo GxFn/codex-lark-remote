@@ -52,7 +52,7 @@ const readmePairs = [
       /## Configure Feishu\/Lark/,
       /## Start From Codex/,
       /plugins\/codex-lark-remote/,
-      /https:\/\/github\.com\/GxFn\/codex-lark-remote\.git/,
+      /https:\/\/github\.com\/GxFn\/LarkRemote\.git/,
       /lark_configure/,
       /lark_verify_setup/,
       /takeover 1/,
@@ -70,7 +70,7 @@ const readmePairs = [
       /## 配置飞书\/Lark/,
       /## 从 Codex 启动/,
       /plugins\/codex-lark-remote/,
-      /https:\/\/github\.com\/GxFn\/codex-lark-remote\.git/,
+      /https:\/\/github\.com\/GxFn\/LarkRemote\.git/,
       /lark_configure/,
       /lark_verify_setup/,
       /接管 1/,
@@ -120,7 +120,7 @@ test("keeps plugin metadata aligned with repository-local marketplace convention
   );
   const rootPackageJson = JSON.parse(await fs.readFile(new URL("../package.json", import.meta.url), "utf8"));
 
-  assert.equal(rootPackageJson.name, "codex-lark-remote-repo");
+  assert.equal(rootPackageJson.name, "lark-remote-repo");
   assert.deepEqual(rootPackageJson.workspaces, ["plugins/codex-lark-remote"]);
 
   assert.equal(manifest.name, "codex-lark-remote");
@@ -129,10 +129,10 @@ test("keeps plugin metadata aligned with repository-local marketplace convention
   assert.equal(manifest.version, "0.3.0");
   assert.equal(manifest.author?.name, "gaoxuefeng");
   assert.equal(manifest.author?.url, "https://github.com/GxFn");
-  assert.equal(manifest.homepage, "https://github.com/GxFn/codex-lark-remote#readme");
-  assert.equal(manifest.repository, "https://github.com/GxFn/codex-lark-remote");
+  assert.equal(manifest.homepage, "https://github.com/GxFn/LarkRemote#readme");
+  assert.equal(manifest.repository, "https://github.com/GxFn/LarkRemote");
   assert.equal(manifest.interface?.developerName, "GxFn");
-  assert.equal(manifest.interface?.websiteURL, "https://github.com/GxFn/codex-lark-remote#readme");
+  assert.equal(manifest.interface?.websiteURL, "https://github.com/GxFn/LarkRemote#readme");
   assert.deepEqual(manifest.interface?.capabilities, ["Interactive", "Read", "Write"]);
   assert.ok(manifest.keywords.includes("codex-plugin"));
   assert.ok(manifest.keywords.includes("local-first"));
@@ -265,18 +265,29 @@ test("exposes control-window MCP tools and skill guidance", async () => {
   assert.doesNotMatch(controlSkill, /lark_context/);
 });
 
-test("declares a direct plugin-bundle MCP server without the rejected runtime tarball wrapper", async () => {
+test("declares a plugin-bundle MCP server with first-run dependency bootstrap", async () => {
   const config = JSON.parse(
     await fs.readFile(new URL("../plugins/codex-lark-remote/.mcp.json", import.meta.url), "utf8"),
   );
   const server = config.mcpServers?.["lark-remote"];
+  const bootstrap = await fs.readFile(
+    new URL("../plugins/codex-lark-remote/bin/lark-remote-start.mjs", import.meta.url),
+    "utf8",
+  );
 
   assert.equal(server?.command, "node");
   assert.deepEqual(server?.args, [
-    "./bin/codex-lark-remote-mcp.mjs",
+    "./bin/lark-remote-start.mjs",
   ]);
   assert.equal(server?.cwd, ".");
   assert.equal(server?.default_tools_approval_mode, "approve");
+  assert.match(bootstrap, /npm/);
+  assert.match(bootstrap, /install/);
+  assert.match(bootstrap, /--package-lock=false/);
+  assert.match(bootstrap, /--ignore-scripts/);
+  assert.match(bootstrap, /--silent/);
+  assert.match(bootstrap, /codex-lark-remote-mcp\.mjs/);
+  assert.doesNotMatch(bootstrap, /process\.stdout\.write/);
 });
 
 test("keeps example runner config compatible with plugin tools", async () => {
