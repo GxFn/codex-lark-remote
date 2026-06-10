@@ -20,6 +20,7 @@ export class CodexCliRunner {
     this.bridgeClient = bridgeClient || {};
     this.busy = false;
     this.controlBusy = false;
+    this.runnerId = `runner_${process.pid}_${Date.now().toString(36)}`;
   }
 
   async processAll() {
@@ -27,8 +28,9 @@ export class CodexCliRunner {
     if (this.busy) return this.#processPendingControlCommands();
     this.busy = true;
     try {
+      await this.recoverStaleRunningCommands();
       while (true) {
-        const command = await this.queue.claimNext();
+        const command = await this.queue.claimNext(this.#claimOptions());
         if (!command) return;
         await this.#runOne(command);
       }
@@ -42,7 +44,7 @@ export class CodexCliRunner {
     this.controlBusy = true;
     try {
       while (true) {
-        const command = await this.queue.claimNextMatching((item) => item.controlWindowCommand === true);
+        const command = await this.queue.claimNextMatching((item) => item.controlWindowCommand === true, this.#claimOptions());
         if (!command) return;
         await this.#runOne(command);
       }
@@ -51,10 +53,23 @@ export class CodexCliRunner {
     }
   }
 
-  async #runOne(command) {
-    if (command.mode === "thread_handoff") return this.#runHandoffOne(command);
+  async recoverStaleRunningCommands() {
+    if (typeof this.queue.recoverStaleRunning !== "function") return [];
+    const staleMs = Number(this.config.runner?.staleRunningMs || 5 * 60 * 1000);
+    const recovered = await this.queue.recoverStaleRunning({
+      staleMs,
+      language: this.config.intent?.language || "zh",
+    });
+    for (const command of recovered) {
+      await this.#notify(command, formatFinal(command));
+    }
+    return recovered;
+  }
 
+  async #runOne(command) {
+    const heartbeat = this.#startHeartbeat(command);
     try {
+      if (command.mode === "thread_handoff") return await this.#runHandoffOne(command);
       await this.#notify(command, `Task started: ${command.id}`);
       const prepared = await this.#prepareWorktree(command);
       command = await this.queue.update(
@@ -103,6 +118,8 @@ export class CodexCliRunner {
         status: "failed",
         error: formattedError,
       }));
+    } finally {
+      heartbeat.stop();
     }
   }
 
@@ -300,7 +317,7 @@ export class CodexCliRunner {
       outputFile,
       cwd: command.projectRoot,
     });
-    const sessionWatcher = createSessionProgressWatcher({
+    const sessionWatcher = command.targetWindowDispatch ? null : createSessionProgressWatcher({
       sessionPath: command.codexSessionPath,
       onEvent,
       eventOptions: {
@@ -308,7 +325,7 @@ export class CodexCliRunner {
         language,
       },
     });
-    await sessionWatcher.start();
+    await sessionWatcher?.start();
     let result;
     try {
       result = await runProcess(runner.codexPath || "codex", args, {
@@ -321,7 +338,7 @@ export class CodexCliRunner {
         },
       });
     } finally {
-      await sessionWatcher.stop();
+      await sessionWatcher?.stop();
     }
     try {
       const finalFromFile = (await fs.readFile(outputFile, "utf8")).trim();
@@ -373,6 +390,29 @@ export class CodexCliRunner {
     } catch {
       return false;
     }
+  }
+
+  #claimOptions() {
+    return { runnerPid: process.pid, runnerId: this.runnerId };
+  }
+
+  #startHeartbeat(command) {
+    if (!command?.id || typeof this.queue.heartbeat !== "function") return { stop() {} };
+    const intervalMs = Number(this.config.runner?.heartbeatMs || 10_000);
+    let stopped = false;
+    const touch = () => {
+      if (stopped) return;
+      Promise.resolve(this.queue.heartbeat(command.id, this.#claimOptions())).catch(() => {});
+    };
+    touch();
+    const timer = setInterval(touch, Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 10_000);
+    timer.unref?.();
+    return {
+      stop() {
+        stopped = true;
+        clearInterval(timer);
+      },
+    };
   }
 }
 

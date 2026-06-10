@@ -7,6 +7,7 @@ export class RemoteCommandQueue {
   constructor({ dataDir }) {
     this.dataDir = dataDir;
     this.filePath = queueFilePath(dataDir);
+    this.mutationChain = Promise.resolve();
   }
 
   async enqueue(input) {
@@ -80,25 +81,32 @@ export class RemoteCommandQueue {
     return counts;
   }
 
-  async claimNext() {
+  async claimNext(options = {}) {
+    const claim = claimMetadata(options);
     return this.#mutate((db) => {
       const pending = db.commands.filter((item) => item.status === "pending");
-      const command = pending.find((item) => item.controlWindowCommand) || pending[0];
+      const eligible = pending.filter((item) => !isTargetDispatchBlockedByRunning(db, item));
+      const command = eligible.find((item) => item.controlWindowCommand) || eligible[0];
       if (!command) return null;
       command.status = "running";
-      command.claimedAt = nowIso();
+      Object.assign(command, claim);
       db.events.push(eventFor(command.id, "claimed", {}));
       return command;
     });
   }
 
-  async claimNextMatching(predicate) {
+  async claimNextMatching(predicate, options = {}) {
     if (typeof predicate !== "function") return null;
+    const claim = claimMetadata(options);
     return this.#mutate((db) => {
-      const command = db.commands.find((item) => item.status === "pending" && predicate(item));
+      const command = db.commands.find((item) =>
+        item.status === "pending"
+        && predicate(item)
+        && !isTargetDispatchBlockedByRunning(db, item)
+      );
       if (!command) return null;
       command.status = "running";
-      command.claimedAt = nowIso();
+      Object.assign(command, claim);
       db.events.push(eventFor(command.id, "claimed", {}));
       return command;
     });
@@ -111,6 +119,51 @@ export class RemoteCommandQueue {
       Object.assign(command, patch);
       db.events.push(eventFor(id, eventKind, patch));
       return command;
+    });
+  }
+
+  async heartbeat(id, input = {}) {
+    return this.#mutate((db) => {
+      const command = db.commands.find((item) => item.id === id);
+      if (!command || command.status !== "running") return command || null;
+      command.runnerHeartbeatAt = input.at || nowIso();
+      if (input.runnerPid) command.runnerPid = input.runnerPid;
+      if (input.runnerId) command.runnerId = input.runnerId;
+      return command;
+    });
+  }
+
+  async recoverStaleRunning(input = {}) {
+    const staleMs = Number(input.staleMs || 0);
+    if (!Number.isFinite(staleMs) || staleMs <= 0) return [];
+    const now = input.now || nowIso();
+    const nowMs = Date.parse(now);
+    const recovered = [];
+    return this.#mutate((db) => {
+      for (const command of db.commands) {
+        if (command.status !== "running") continue;
+        const heartbeatAt = command.runnerHeartbeatAt || command.claimedAt || command.createdAt || "";
+        const heartbeatMs = Date.parse(heartbeatAt);
+        const runnerPid = Number(command.runnerPid || 0);
+        const stale = Number.isFinite(nowMs) && Number.isFinite(heartbeatMs) && nowMs - heartbeatMs > staleMs;
+        const ownerGone = runnerPid > 0 && !isProcessAlive(runnerPid);
+        if (!stale && !ownerGone) continue;
+
+        const language = input.language === "en" ? "en" : "zh";
+        const reason = input.reason || (language === "en"
+          ? "Lark Remote runner was interrupted before this command finished."
+          : "Lark Remote 执行器中断，命令未完成。");
+        command.status = command.targetWindowDispatch ? "failed" : "blocked_retryable";
+        command.error = reason;
+        command.completedAt = now;
+        db.events.push(eventFor(command.id, "stale_running_recovered", {
+          reason,
+          previousRunnerPid: command.runnerPid || "",
+          previousHeartbeatAt: heartbeatAt,
+        }));
+        recovered.push({ ...command });
+      }
+      return recovered;
     });
   }
 
@@ -143,10 +196,15 @@ export class RemoteCommandQueue {
   }
 
   async #mutate(fn) {
-    const db = await this.#read();
-    const result = fn(db);
-    await this.#write(db);
-    return result;
+    const run = async () => {
+      const db = await this.#read();
+      const result = fn(db);
+      await this.#write(db);
+      return result;
+    };
+    const next = this.mutationChain.then(run, run);
+    this.mutationChain = next.catch(() => {});
+    return next;
   }
 
   async #read() {
@@ -167,7 +225,7 @@ export class RemoteCommandQueue {
 
   async #write(db) {
     await ensureDir(this.dataDir);
-    const tmp = `${this.filePath}.${process.pid}.tmp`;
+    const tmp = `${this.filePath}.${process.pid}.${newId("tmp")}.tmp`;
     await fs.writeFile(tmp, `${JSON.stringify(db, null, 2)}\n`);
     await fs.rename(tmp, this.filePath);
   }
@@ -181,4 +239,33 @@ function eventFor(commandId, kind, payload) {
     payload,
     createdAt: nowIso(),
   };
+}
+
+function claimMetadata(input = {}) {
+  const at = nowIso();
+  return {
+    claimedAt: at,
+    runnerHeartbeatAt: at,
+    runnerPid: input.runnerPid || process.pid,
+    runnerId: input.runnerId || "",
+  };
+}
+
+function isTargetDispatchBlockedByRunning(db, command) {
+  if (!command?.targetWindowDispatch || !command.codexSessionId) return false;
+  return db.commands.some((item) =>
+    item !== command
+    && item.status === "running"
+    && item.targetWindowDispatch === true
+    && item.codexSessionId === command.codexSessionId
+  );
+}
+
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }

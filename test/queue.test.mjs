@@ -125,3 +125,126 @@ test("RemoteCommandQueue can claim only pending control-window commands", async 
   assert.equal((await queue.claimNextMatching((item) => item.controlWindowCommand === true)), null);
   assert.equal((await queue.claimNext()).id, target.id);
 });
+
+test("RemoteCommandQueue serializes target-window dispatches for the same target thread", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-queue-target-serial-"));
+  const queue = new RemoteCommandQueue({ dataDir: dir });
+
+  const first = await queue.enqueue({
+    source: "lark",
+    mode: "thread_handoff",
+    repoKey: "current",
+    projectRoot: "/workspace",
+    prompt: "first",
+    codexSessionId: "target-thread",
+    targetWindowDispatch: true,
+  });
+  const second = await queue.enqueue({
+    source: "lark",
+    mode: "thread_handoff",
+    repoKey: "current",
+    projectRoot: "/workspace",
+    prompt: "second",
+    codexSessionId: "target-thread",
+    targetWindowDispatch: true,
+  });
+
+  assert.equal((await queue.claimNext({ runnerPid: process.pid, runnerId: "runner-a" })).id, first.id);
+  assert.equal(await queue.claimNext({ runnerPid: process.pid, runnerId: "runner-a" }), null);
+
+  await queue.update(first.id, { status: "completed", completedAt: new Date().toISOString() }, "done");
+  assert.equal((await queue.claimNext({ runnerPid: process.pid, runnerId: "runner-a" })).id, second.id);
+});
+
+test("RemoteCommandQueue records claim ownership and heartbeats", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-queue-heartbeat-"));
+  const queue = new RemoteCommandQueue({ dataDir: dir });
+
+  const created = await queue.enqueue({
+    repoKey: "demo",
+    projectRoot: "/tmp/demo",
+    prompt: "fix tests",
+  });
+  const claimed = await queue.claimNext({ runnerPid: 12345, runnerId: "runner-test" });
+
+  assert.equal(claimed.id, created.id);
+  assert.equal(claimed.runnerPid, 12345);
+  assert.equal(claimed.runnerId, "runner-test");
+  assert.match(claimed.runnerHeartbeatAt, /^\d{4}-\d{2}-\d{2}T/);
+
+  const heartbeat = await queue.heartbeat(created.id, {
+    at: "2026-06-10T00:00:00.000Z",
+    runnerPid: 23456,
+    runnerId: "runner-new",
+  });
+  assert.equal(heartbeat.runnerHeartbeatAt, "2026-06-10T00:00:00.000Z");
+  assert.equal(heartbeat.runnerPid, 23456);
+  assert.equal(heartbeat.runnerId, "runner-new");
+});
+
+test("RemoteCommandQueue serializes concurrent heartbeat and completion writes", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-queue-concurrent-"));
+  const queue = new RemoteCommandQueue({ dataDir: dir });
+
+  const created = await queue.enqueue({
+    source: "lark",
+    mode: "thread_handoff",
+    projectRoot: "/workspace",
+    prompt: "dispatch",
+    codexSessionId: "target-thread",
+    targetWindowDispatch: true,
+  });
+  await queue.claimNext({ runnerPid: process.pid, runnerId: "runner-a" });
+
+  await Promise.all([
+    queue.heartbeat(created.id, {
+      at: "2026-06-10T00:00:01.000Z",
+      runnerPid: process.pid,
+      runnerId: "runner-a",
+    }),
+    queue.update(
+      created.id,
+      { status: "completed", result: "done", completedAt: "2026-06-10T00:00:02.000Z" },
+      "done",
+    ),
+  ]);
+
+  const latest = await queue.get(created.id);
+  assert.equal(latest.status, "completed");
+  assert.equal(latest.result, "done");
+});
+
+test("RemoteCommandQueue recovers stale target dispatches instead of leaving them running forever", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-queue-stale-"));
+  const queue = new RemoteCommandQueue({ dataDir: dir });
+
+  const created = await queue.enqueue({
+    source: "lark",
+    mode: "thread_handoff",
+    repoKey: "current",
+    projectRoot: "/workspace",
+    prompt: "stale dispatch",
+    codexSessionId: "target-thread",
+    targetWindowDispatch: true,
+  });
+  await queue.claimNext({ runnerPid: process.pid, runnerId: "old-runner" });
+  await queue.update(
+    created.id,
+    { runnerHeartbeatAt: "2026-06-10T00:00:00.000Z" },
+    "test_heartbeat_backdated",
+  );
+
+  const recovered = await queue.recoverStaleRunning({
+    now: "2026-06-10T00:10:00.000Z",
+    staleMs: 60_000,
+    language: "zh",
+  });
+
+  assert.equal(recovered.length, 1);
+  assert.equal(recovered[0].id, created.id);
+  assert.equal(recovered[0].status, "failed");
+  assert.match(recovered[0].error, /执行器中断/);
+  const latest = await queue.get(created.id);
+  assert.equal(latest.status, "failed");
+  assert.match(latest.completedAt, /^2026-06-10T00:10:00.000Z$/);
+});

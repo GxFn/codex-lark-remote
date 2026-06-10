@@ -1054,6 +1054,12 @@ export function formatFinal(command) {
     if (command.status === "waiting_clarification") {
       return command.error || command.clarificationQuestion || "等待确认。";
     }
+    if (command.status === "failed" && command.targetWindowDispatch) {
+      return [
+        "派发未完成，消息已保留。",
+        command.error || "目标 Codex 会话没有返回处理结果。",
+      ].filter(Boolean).join("\n");
+    }
   }
   if (command.status === "failed") {
     return [

@@ -437,7 +437,7 @@ test("CodexCliRunner accepts explicit control-window completion records", async 
 
   await runner.processAll();
 
-  assert.equal(command.status, "control_completed");
+  assert.equal(command.status, "control_completed", command.error);
   assert.equal(command.result, "当前可接管项目：CodexPlugin");
   assert.deepEqual(bridgeCalls.map((call) => call.route), [
     "/bridge/remote-command/route",
@@ -523,7 +523,7 @@ test("CodexCliRunner executes control-window commands through the bridge client 
 
   await runner.processAll();
 
-  assert.equal(command.status, "control_completed");
+  assert.equal(command.status, "control_completed", command.error);
   assert.deepEqual(bridgeCalls.map((call) => call.route), [
     "/bridge/remote-command/route",
     "/bridge/remote-command/reply",
@@ -599,7 +599,7 @@ test("CodexCliRunner executes routed local control bridge tools", async () => {
 
   await runner.processAll();
 
-  assert.equal(command.status, "control_completed");
+  assert.equal(command.status, "control_completed", command.error);
   assert.equal(command.result, "Command display: off");
   assert.deepEqual(bridgeCalls.map((call) => call.route), [
     "/bridge/remote-command/route",
@@ -678,7 +678,7 @@ test("CodexCliRunner replies before stopping the bridge for routed stop", async 
 
   await runner.processAll();
 
-  assert.equal(command.status, "control_completed");
+  assert.equal(command.status, "control_completed", command.error);
   assert.equal(command.result, "正在关闭飞书连接。");
   assert.deepEqual(bridgeCalls.map((call) => call.route), [
     "/bridge/remote-command/route",
@@ -812,7 +812,7 @@ test("CodexCliRunner still routes control-window commands while a target run is 
   await runner.processAll();
 
   const command = await queue.get("rcmd_control_while_busy");
-  assert.equal(command.status, "control_completed");
+  assert.equal(command.status, "control_completed", command.error);
   assert.equal(command.result, "当前可接管项目：CodexPlugin");
   assert.deepEqual(bridgeCalls.map((call) => call.route), [
     "/bridge/remote-command/route",
@@ -881,7 +881,7 @@ test("CodexCliRunner does not cancel local control commands when the control ses
   await runner.processAll();
 
   const command = await queue.get("rcmd_control_session_busy");
-  assert.equal(command.status, "control_completed");
+  assert.equal(command.status, "control_completed", command.error);
   assert.equal(command.result, "当前可接管项目：CodexPlugin");
 });
 
@@ -1004,7 +1004,9 @@ test("CodexCliRunner accepts a real routed control-window dispatch record", asyn
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-control-dispatch-"));
   const argsPath = path.join(dataDir, "args.json");
   const deliveriesPath = path.join(dataDir, "host-deliveries.jsonl");
+  const sessionPath = path.join(dataDir, "rollout-target-thread.jsonl");
   const fakeCodex = path.join(dataDir, "fake-codex");
+  await fs.writeFile(sessionPath, "");
   await fs.writeFile(fakeCodex, [
     "#!/usr/bin/env node",
     "const fs = require('node:fs');",
@@ -1014,6 +1016,7 @@ test("CodexCliRunner accepts a real routed control-window dispatch record", asyn
     "  const prompt = args.at(-1) || '';",
     "  if (prompt.startsWith('[Lark Remote dispatch]')) {",
     `    fs.appendFileSync(${JSON.stringify(deliveriesPath)}, JSON.stringify({ prompt }) + '\\n');`,
+    `    fs.appendFileSync(${JSON.stringify(sessionPath)}, JSON.stringify({ type: 'event_msg', payload: { type: 'agent_message', phase: 'commentary', message: '不应该通过 session watcher 发送到飞书。' } }) + '\\n');`,
     "    console.log(JSON.stringify({ type: 'response_item', payload: { type: 'message', phase: 'final_answer', message: '目标线程已收到并处理任务。' } }));",
     "    console.log(JSON.stringify({ type: 'turn.completed' }));",
     "    return;",
@@ -1074,6 +1077,7 @@ test("CodexCliRunner accepts a real routed control-window dispatch record", asyn
           userIdHash: original.userIdHash,
           userName: original.userName,
           codexSessionId: original.dispatchTarget.threadId,
+          codexSessionPath: sessionPath,
         });
         await queue.update(
           original.id,
@@ -1120,7 +1124,7 @@ test("CodexCliRunner accepts a real routed control-window dispatch record", asyn
     config: {
       dataDir,
       runner: { codexPath: fakeCodex, ignoreUserConfig: true },
-      handoff: { notifyProgress: false, notifyStarted: false },
+      handoff: { notifyProgress: true, notifyStarted: false },
     },
     notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
     bridgeClient,
@@ -1141,6 +1145,7 @@ test("CodexCliRunner accepts a real routed control-window dispatch record", asyn
       text: "目标线程已收到并处理任务。",
     },
   ]);
+  assert.equal(replies.some((reply) => /session watcher/.test(reply.text)), false);
 
   const argRuns = (await fs.readFile(argsPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
   assert.equal(argRuns.length, 1);
@@ -1163,6 +1168,54 @@ test("CodexCliRunner accepts a real routed control-window dispatch record", asyn
   assert.equal(targetCommand.targetWindowDispatch, true);
   assert.equal(targetCommand.controlWindowCommand, false);
   assert.equal(targetCommand.codexSessionId, "target-thread");
+  assert.equal(targetCommand.codexSessionPath, sessionPath);
+});
+
+test("CodexCliRunner recovers stale target dispatch commands and notifies Lark", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-runner-stale-target-"));
+  const queue = new RemoteCommandQueue({ dataDir });
+  await queue.enqueue({
+    id: "rcmd_stale_target",
+    source: "lark",
+    mode: "thread_handoff",
+    presentation: "chat",
+    notifyStarted: false,
+    messageId: "om_1",
+    projectRoot: dataDir,
+    prompt: "[Lark Remote dispatch]\n测试连通性",
+    codexSessionId: "target-thread",
+    targetWindowDispatch: true,
+    handoffDispatch: true,
+  });
+  await queue.claimNext({ runnerPid: process.pid, runnerId: "old-runner" });
+  await queue.update(
+    "rcmd_stale_target",
+    { runnerHeartbeatAt: "2026-06-10T00:00:00.000Z" },
+    "test_heartbeat_backdated",
+  );
+
+  const replies = [];
+  const runner = new CodexCliRunner({
+    queue,
+    config: {
+      dataDir,
+      runner: { codexPath: "codex", staleRunningMs: 60_000 },
+      handoff: { notifyProgress: false, notifyStarted: false },
+    },
+    notifier: { reply: async (messageId, text) => replies.push({ messageId, text }) },
+  });
+
+  await runner.processAll();
+
+  const command = await queue.get("rcmd_stale_target");
+  assert.equal(command.status, "failed");
+  assert.match(command.error, /执行器中断/);
+  assert.deepEqual(replies, [
+    {
+      messageId: "om_1",
+      text: "派发未完成，消息已保留。\nLark Remote 执行器中断，命令未完成。",
+    },
+  ]);
 });
 
 test("CodexCliRunner suppresses user prompt echoes during handoff progress", async () => {

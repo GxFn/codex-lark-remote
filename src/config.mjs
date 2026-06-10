@@ -114,6 +114,8 @@ export function defaultConfig(dataDir = resolveDataDir()) {
       model: "",
       codexPath: "codex",
       timeoutMs: 30 * 60 * 1000,
+      heartbeatMs: 10 * 1000,
+      staleRunningMs: 5 * 60 * 1000,
       workerEnabled: true,
     },
     handoff: {
