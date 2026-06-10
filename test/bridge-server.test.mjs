@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { dispatchRemoteCommand, prepareDispatchCommand, processLarkEvent, recordDispatchCommand, replyRemoteCommand, routeRemoteCommand, startBridge } from "../src/bridge-server.mjs";
-import { configFilePath, stateFilePath } from "../src/config.mjs";
+import { configFilePath, stateFilePath, takeoverFilePath } from "../src/config.mjs";
 import { activateHandoff, readHandoff } from "../src/handoff.mjs";
 import { readIntentSession } from "../src/intent-state.mjs";
 import { readObservation } from "../src/observer.mjs";
@@ -1342,6 +1342,64 @@ test("processLarkEvent confirms before stopping the Feishu bridge", async () => 
   await processLarkEvent(ctx, cardActionEvent({ action: "bridge_stop_execute", userId: "ou_allowed", messageId: "om_stop_confirm" }));
   assert.deepEqual(stops, ["lark"]);
   assert.match(replies.at(-1).text, /正在关闭飞书连接/);
+});
+
+test("processLarkEvent shows bridge stop confirmation during active takeover", async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-stop-during-takeover-"));
+  await activateHandoff({
+    dataDir,
+    threadId: "control-thread",
+    cwd: "/workspace",
+    activatedBy: "test",
+  });
+  await fs.writeFile(
+    takeoverFilePath(dataDir),
+    `${JSON.stringify({
+      version: 1,
+      state: "active",
+      mode: "dispatch",
+      target: { threadId: "target-thread", name: "检查并修复 codex-lark-remote 功能", cwd: "/workspace" },
+      lark: { messageId: "om_takeover", chatIdHash: "chat_hash" },
+    }, null, 2)}\n`,
+  );
+  const replies = [];
+  const cards = [];
+
+  await processLarkEvent(
+    {
+      config: {
+        dataDir,
+        lark: { allowedUsers: ["ou_allowed"] },
+        defaultRepo: "demo",
+        repos: { demo: { path: "/repo" } },
+      },
+      queue: {
+        findByMessageId: async () => null,
+        enqueue: async () => {
+          throw new Error("disconnect should not be enqueued as a target dispatch");
+        },
+      },
+      notifier: {
+        reply: async (messageId, text) => replies.push({ messageId, text }),
+        replyCard: async (messageId, card) => {
+          cards.push({ messageId, card });
+          return { ok: true };
+        },
+      },
+      runner: {
+        processAll: () => {
+          throw new Error("disconnect should not start the runner");
+        },
+      },
+    },
+    textEvent({ text: "断开连接", userId: "ou_allowed", messageId: "om_disconnect" }),
+  );
+
+  assert.deepEqual(replies, []);
+  assert.equal(cards.length, 1);
+  assert.equal(cards[0].messageId, "om_disconnect");
+  assert.match(JSON.stringify(cards[0].card), /确认关闭飞书连接/);
+  assert.match(JSON.stringify(cards[0].card), /bridge_stop_execute/);
 });
 
 test("processLarkEvent dispatches normal messages even when the selected target is busy", async () => {

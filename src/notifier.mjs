@@ -7,6 +7,7 @@ export class LarkNotifier {
     this.domain = larkDomainInfo(options);
     this.tenantToken = "";
     this.tenantTokenExpiresAt = 0;
+    this.recentReplyKeys = new Map();
   }
 
   async checkAuth() {
@@ -93,6 +94,7 @@ export class LarkNotifier {
   async replyMessage(messageId, { msgType, chunks }) {
     if (!messageId) return { ok: false, error: "Missing Lark message id" };
     if (!chunks.length) return noContentDelivery();
+    if (this.#isDuplicateTextReply(messageId, msgType, chunks)) return noContentDelivery({ duplicate: true });
     if (!this.appId || !this.appSecret) return { ok: false, error: "Missing Lark appId/appSecret" };
     const token = await this.#tenantToken();
     if (!token) return { ok: false, error: "Missing Lark tenant access token" };
@@ -182,9 +184,25 @@ export class LarkNotifier {
   #url(path) {
     return larkOpenApiUrl(this.domain, path);
   }
+
+  #isDuplicateTextReply(messageId, msgType, chunks) {
+    if (msgType !== "text" || chunks.length !== 1 || typeof chunks[0]?.text !== "string") return false;
+    const text = chunks[0].text.trim();
+    if (!text) return false;
+    const now = Date.now();
+    for (const [key, seenAt] of this.recentReplyKeys) {
+      if (now - seenAt > 2 * 60 * 1000 || this.recentReplyKeys.size > 500) {
+        this.recentReplyKeys.delete(key);
+      }
+    }
+    const key = `${messageId}\u0000${text}`;
+    if (this.recentReplyKeys.has(key)) return true;
+    this.recentReplyKeys.set(key, now);
+    return false;
+  }
 }
 
-function noContentDelivery() {
+function noContentDelivery(extra = {}) {
   return {
     ok: true,
     status: 204,
@@ -194,6 +212,7 @@ function noContentDelivery() {
     deliveredParts: 0,
     totalParts: 0,
     filtered: true,
+    ...extra,
   };
 }
 
@@ -261,7 +280,29 @@ function textChunksForLark(text) {
 }
 
 export function sanitizeLarkTextContent(text) {
-  return stripUnsupportedImageContent(stripInternalCodexMetadata(text));
+  return stripUnsupportedImageContent(stripInternalLarkRemoteText(stripInternalCodexMetadata(text)));
+}
+
+export function stripInternalLarkRemoteText(text) {
+  const value = String(text || "").trim();
+  if (!value) return "";
+  if (isInternalPromptEcho(value) || isTurnCompletedSummary(value)) return "";
+  return value
+    .replace(/\n*Codex turn completed\.?(?:\s+Tokens:\s*input=\d+\s*output=\d+)?\s*\n*/gi, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function isInternalPromptEcho(value) {
+  const text = String(value || "").trim();
+  if (/^(?:用户提示|User prompt)\s*[:：]?/i.test(text)) return true;
+  if (/^#\s*Files mentioned by the user\s*:/i.test(text)) return true;
+  if (/^#+\s*My request for Codex\s*:/i.test(text)) return true;
+  return false;
+}
+
+function isTurnCompletedSummary(value) {
+  return /^Codex turn completed\.?(?:\s+Tokens:\s*input=\d+\s*output=\d+)?$/i.test(String(value || "").trim());
 }
 
 export function stripInternalCodexMetadata(text) {

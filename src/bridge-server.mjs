@@ -5,7 +5,7 @@ import { DEFAULT_BRIDGE_HOST, configFilePath, ensureDir, loadConfig, nowIso, rea
 import { runApprovedAction } from "./actions.mjs";
 import { decryptLarkPayload, verifyLarkSignature } from "./crypto.mjs";
 import { updateRuntimeConfig } from "./config-writer.mjs";
-import { parseControlSemanticAction } from "./control-semantics.mjs";
+import { isBridgeStopText, parseControlSemanticAction } from "./control-semantics.mjs";
 import { activateHandoff, clearHandoff, readHandoff } from "./handoff.mjs";
 import { routeChatTextAction } from "./intent-router.mjs";
 import {
@@ -586,7 +586,7 @@ export async function processLarkEvent(ctx, body) {
     await ctx.notifier.reply(event.messageId, "Permission denied.");
     return { success: true, rejected: true };
   }
-  action = await routeChatTextAction(ctx, event, action);
+  action = isBridgeStopText(event.text) ? { kind: "bridge_stop_confirm" } : await routeChatTextAction(ctx, event, action);
   action = await withTakeoverSelectionContext(ctx, event, action);
   const takeoverAccessError = validateTakeoverAccess(action, event, ctx.config);
   if (takeoverAccessError) {

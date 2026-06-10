@@ -749,11 +749,9 @@ test("CodexCliRunner does not fall back to codex exec when local control routing
 
   assert.equal(command.status, "failed");
   assert.match(command.error, /bridge 状态不可用/);
-  assert.equal(replies.length, 2);
+  assert.equal(replies.length, 1);
   assert.equal(replies[0].messageId, "om_1");
-  assert.equal(replies[0].text, "已收到，Lark Remote 正在路由这条消息。");
-  assert.equal(replies[1].messageId, "om_1");
-  assert.match(replies[1].text, /bridge 状态不可用/);
+  assert.match(replies[0].text, /bridge 状态不可用/);
   await assert.rejects(fs.stat(argsPath), { code: "ENOENT" });
 });
 
@@ -1167,7 +1165,7 @@ test("CodexCliRunner accepts a real routed control-window dispatch record", asyn
   assert.equal(targetCommand.codexSessionId, "target-thread");
 });
 
-test("CodexCliRunner only echoes non-Lark user prompts during handoff progress", async () => {
+test("CodexCliRunner suppresses user prompt echoes during handoff progress", async () => {
   async function runCase({ source, prompt }) {
     const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `codex-lark-runner-user-prompt-${source}-`));
     const sessionPath = path.join(dataDir, "rollout-thread-1.jsonl");
@@ -1232,7 +1230,7 @@ test("CodexCliRunner only echoes non-Lark user prompts during handoff progress",
   assert.equal(larkReplies.some((text) => /正在继续处理。/.test(text)), true);
 
   const automationReplies = await runCase({ source: "automation", prompt: "自动化发起的新一轮输入" });
-  assert.equal(automationReplies.some((text) => text === "用户提示：\n自动化发起的新一轮输入"), true);
+  assert.equal(automationReplies.some((text) => /用户提示：/.test(text)), false);
   assert.equal(automationReplies.some((text) => /正在继续处理。/.test(text)), true);
 });
 
@@ -1761,15 +1759,12 @@ test("extractProgressSummary collects non-chat Codex JSONL events", () => {
 
   assert.equal(
     extractProgressSummary(stdout),
-    [
-      "Codex turn completed. Tokens: input=10 output=20",
-    ].join("\n"),
+    "",
   );
   assert.equal(
     extractProgressSummary(stdout, { showCommands: true }),
     [
       "Ran command:\nnpm test\nOutput:\nok",
-      "Codex turn completed. Tokens: input=10 output=20",
     ].join("\n"),
   );
 });

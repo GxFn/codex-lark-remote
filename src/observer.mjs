@@ -150,7 +150,6 @@ export class CodexSessionObserver {
     this.watcher = createSessionProgressWatcher({
       sessionPath: state.threadPath,
       onEvent: async (_event, summary) => this.#notify(summary),
-      includeUserPrompts: true,
       eventOptions: { language: state.language || this.config.intent?.language || "zh", includeFinalAnswers: true },
     });
     await this.watcher.start();
@@ -169,8 +168,6 @@ export class CodexSessionObserver {
     this.temporaryWatcher = createSessionProgressWatcher({
       sessionPath: state.threadPath,
       onEvent: async (_event, summary) => this.#notifyTemporary(summary),
-      includeUserPrompts: true,
-      userPromptText: (_event, prompt) => takeoverVisibleUserPrompt(prompt),
       eventOptions: { language: state.language || this.config.intent?.language || "zh", includeFinalAnswers: true },
     });
     await this.temporaryWatcher.start();
@@ -229,13 +226,4 @@ export class CodexSessionObserver {
       this.logger.warn?.(`Lark Remote temporary observer notify failed: ${error.message}`);
     }
   }
-}
-
-function takeoverVisibleUserPrompt(prompt) {
-  const text = String(prompt || "").trim();
-  if (!text) return "";
-  if (/^\[Lark Remote dispatch\]/i.test(text)) return "";
-  if (/\[Lark Remote (?:handoff|thread dispatch)\]/i.test(text)) return "";
-  if (/Feishu\/Lark user message to dispatch:/i.test(text)) return "";
-  return text;
 }

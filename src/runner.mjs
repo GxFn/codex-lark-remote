@@ -150,10 +150,6 @@ export class CodexCliRunner {
     try {
       if (await this.#isCancelled(command.id)) return;
       if (command.controlWindowCommand) {
-        if (shouldNotifyStarted(this.config, command)) {
-          const language = await resolveCommandLanguage(this.config, command);
-          await this.#notify(command, formatHandoffStarted({ language, dispatchTarget: command.dispatchTarget }));
-        }
         await this.#runRemoteControlCommand(command);
         return;
       }
@@ -311,8 +307,6 @@ export class CodexCliRunner {
         showCommands: this.config.handoff?.showCommands === true,
         language,
       },
-      includeUserPrompts: true,
-      userPromptText: (_event, promptText) => handoffVisibleUserPrompt(promptText, { command, submittedPrompt: prompt }),
     });
     await sessionWatcher.start();
     let result;
@@ -755,7 +749,7 @@ export function summarizeCodexEvent(event, { showCommands = false } = {}) {
   const itemType = String(item?.type || "");
 
   if (/turn[./]started/i.test(type)) return "";
-  if (/turn[./]completed/i.test(type)) return formatUsage(event?.usage || params.turn?.usage || params.usage);
+  if (/turn[./]completed/i.test(type)) return "";
 
   if (itemType === "message" && item.role === "assistant") {
     if (item.phase === "final_answer") return "";
@@ -925,49 +919,6 @@ function createProgressNotifier({ command, config, notify }) {
     lastText = summary;
     await notify(formatProgress(command, summary));
   };
-}
-
-function handoffVisibleUserPrompt(promptText, { command = {}, submittedPrompt = "" } = {}) {
-  const text = progressText(promptText);
-  if (!text) return "";
-  const submitted = isSubmittedHandoffPrompt(text, { command, submittedPrompt });
-  if (isFeishuLarkSource(command)) return submitted ? "" : text;
-  if (submitted) return command.prompt || extractThreadDispatchUserMessage(text) || text;
-  return text;
-}
-
-function isFeishuLarkSource(command = {}) {
-  const source = String(command.source || "lark").trim().toLowerCase();
-  return !source || source === "lark" || source === "feishu" || source === "feishu/lark";
-}
-
-function isSubmittedHandoffPrompt(text, { command = {}, submittedPrompt = "" } = {}) {
-  const normalized = comparablePrompt(text);
-  const submitted = comparablePrompt(submittedPrompt);
-  const raw = comparablePrompt(command.prompt || "");
-  return Boolean(
-    (submitted && normalized === submitted)
-    || (raw && normalized === raw)
-    || /\[(?:Codex )?Lark Remote (?:handoff|thread dispatch|control message|control|dispatch)\]/i.test(text)
-    || /Feishu\/Lark user message to dispatch:/i.test(text)
-  );
-}
-
-function extractThreadDispatchUserMessage(text) {
-  const match = String(text || "").match(/Feishu\/Lark user message to dispatch:\s*([\s\S]+)$/i);
-  return match?.[1]?.trim() || "";
-}
-
-function comparablePrompt(text) {
-  return progressText(text).replace(/\s+/g, " ").trim();
-}
-
-function formatUsage(usage) {
-  if (!usage) return "Codex turn completed.";
-  const input = usage.input_tokens ?? usage.inputTokens;
-  const output = usage.output_tokens ?? usage.outputTokens;
-  if (input || output) return `Codex turn completed. Tokens: input=${input || 0} output=${output || 0}`;
-  return "Codex turn completed.";
 }
 
 export function formatPermissionBoundaryNotice(value, options = {}) {

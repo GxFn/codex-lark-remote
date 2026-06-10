@@ -40,11 +40,10 @@ test("CodexSessionObserver forwards observed progress without per-message title"
       "",
     ].join("\n"),
   );
-  await waitFor(() => replies.length >= 2);
+  await waitFor(() => replies.length >= 1);
   await observer.stop();
 
   assert.deepEqual(replies, [
-    { messageId: "om_observe", text: "用户提示：\n请检查观察输出" },
     { messageId: "om_observe", text: "正在检查输出逻辑。" },
   ]);
   assert.doesNotMatch(replies.map((reply) => reply.text).join("\n"), /Title:|标题:/);
@@ -94,11 +93,10 @@ test("CodexSessionObserver forwards Mac-local prompts during active takeover", a
       "",
     ].join("\n"),
   );
-  await waitFor(() => replies.length >= 3);
+  await waitFor(() => replies.length >= 2);
   await observer.stop();
 
   assert.deepEqual(replies, [
-    { messageId: "om_takeover", text: "用户提示：\nMac 端继续输入" },
     { messageId: "om_takeover", text: "正在处理 Mac 输入。" },
     { messageId: "om_takeover", text: "Mac 输入处理完成。" },
   ]);
@@ -144,11 +142,10 @@ test("CodexSessionObserver restores active takeover streaming for later Mac task
       "",
     ].join("\n"),
   );
-  await waitFor(() => replies.length >= 2);
+  await waitFor(() => replies.length >= 1);
   await observer.stop();
 
   assert.deepEqual(replies, [
-    { messageId: "om_takeover_restore", text: "用户提示：\nMac 端新任务" },
     { messageId: "om_takeover_restore", text: "正在处理新任务。" },
   ]);
 });

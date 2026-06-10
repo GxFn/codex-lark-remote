@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { LarkNotifier, sanitizeLarkTextContent, splitForLarkText, stripInternalCodexMetadata } from "../src/notifier.mjs";
+import { LarkNotifier, sanitizeLarkTextContent, splitForLarkText, stripInternalCodexMetadata, stripInternalLarkRemoteText } from "../src/notifier.mjs";
 
 test("LarkNotifier.checkAuth reports missing credentials without throwing", async () => {
   const notifier = new LarkNotifier({ appId: "", appSecret: "" });
@@ -283,6 +283,59 @@ test("LarkNotifier.reply skips image-only content without calling Feishu APIs", 
   assert.equal(fetchCount, 0);
 });
 
+test("LarkNotifier.reply skips internal Lark Remote prompt echoes and turn-completed summaries", async (t) => {
+  const originalFetch = globalThis.fetch;
+  let fetchCount = 0;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async () => {
+    fetchCount += 1;
+    return Response.json({ code: 0, tenant_access_token: "token", expire: 3600 });
+  };
+
+  const notifier = new LarkNotifier({ appId: "cli_test", appSecret: "secret" });
+  for (const text of [
+    "用户提示：",
+    "用户提示：\n# Files mentioned by the user:\n## screenshot.png: /tmp/a.png\n## My request for Codex:\n不要发这个",
+    "# Files mentioned by the user:\n## screenshot.png: /tmp/a.png\n## My request for Codex:\n不要发这个",
+    "Codex turn completed. Tokens: input=261588481 output=737858",
+  ]) {
+    const result = await notifier.reply("om_test", text);
+    assert.equal(result.ok, true);
+    assert.equal(result.filtered, true);
+    assert.equal(result.deliveredParts, 0);
+  }
+  assert.equal(fetchCount, 0);
+});
+
+test("LarkNotifier.reply suppresses duplicate single-part replies for the same Feishu message", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const sentTexts = [];
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes("/auth/v3/tenant_access_token/internal")) {
+      return Response.json({ code: 0, tenant_access_token: "token", expire: 3600 });
+    }
+    const body = JSON.parse(init.body);
+    sentTexts.push(JSON.parse(body.content).text);
+    return Response.json({ code: 0, data: { message_id: `om_reply_${sentTexts.length}` } });
+  };
+
+  const notifier = new LarkNotifier({ appId: "cli_test", appSecret: "secret" });
+  const first = await notifier.reply("om_test", "已收到，Lark Remote 正在路由这条消息。");
+  const second = await notifier.reply("om_test", "已收到，Lark Remote 正在路由这条消息。");
+
+  assert.equal(first.ok, true);
+  assert.equal(second.ok, true);
+  assert.equal(second.duplicate, true);
+  assert.deepEqual(sentTexts, ["已收到，Lark Remote 正在路由这条消息。"]);
+});
+
 test("LarkNotifier.sendCard removes unsupported image elements and markdown images", async (t) => {
   const originalFetch = globalThis.fetch;
   const requests = [];
@@ -336,6 +389,12 @@ test("stripInternalCodexMetadata removes Codex environment metadata blocks", () 
     stripInternalCodexMetadata("A\n<permissions instructions>\nsecret policy"),
     "A",
   );
+});
+
+test("stripInternalLarkRemoteText removes internal progress-only text", () => {
+  assert.equal(stripInternalLarkRemoteText("用户提示："), "");
+  assert.equal(stripInternalLarkRemoteText("Codex turn completed. Tokens: input=1 output=2"), "");
+  assert.equal(stripInternalLarkRemoteText("先说一句\nCodex turn completed. Tokens: input=1 output=2\n再说一句"), "先说一句\n再说一句");
 });
 
 test("sanitizeLarkTextContent removes common image-only blocks", () => {
