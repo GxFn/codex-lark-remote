@@ -56,7 +56,7 @@ npx codex-marketplace add GxFn/codex-lark-remote --plugin
 如果要固定到当前审核版本：
 
 ```bash
-npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.7 --plugin
+npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.3.0 --plugin
 ```
 
 安装后如果 Codex 插件列表没有立刻刷新，重启或刷新 Codex。
@@ -66,7 +66,7 @@ npx codex-marketplace add https://github.com/GxFn/codex-lark-remote/tree/v0.2.7 
 如果 Codex 要求填写 GitHub target 或直接 artifact path，请填写仓库根目录：
 
 ```text
-https://github.com/GxFn/codex-lark-remote/tree/v0.2.7
+https://github.com/GxFn/codex-lark-remote/tree/v0.3.0
 ```
 
 如果 Codex 弹窗把来源、Git 引用、稀疏路径拆开填写，请这样填：
@@ -76,7 +76,7 @@ https://github.com/GxFn/codex-lark-remote/tree/v0.2.7
 https://github.com/GxFn/codex-lark-remote.git
 
 Git 引用：
-v0.2.7
+v0.3.0
 
 稀疏路径：
 留空
