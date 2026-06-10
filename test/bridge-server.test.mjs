@@ -781,7 +781,9 @@ test("processLarkEvent lists and starts explicit read-only observation", async (
   assert.match(replies[0].text, /Target chat/);
   assert.equal(started[0].threadId, "019e0000-0000-7000-8000-000000000001");
   assert.equal(started[0].messageId, "om_2");
-  assert.match(replies[1].text, /observation: active/);
+  assert.equal(replies[1].text.split("\n")[0], "Target chat");
+  assert.match(replies[1].text, /Observation: active/);
+  assert.match(replies[1].text, /Stop: reply "stop observing"/);
 });
 
 test("processLarkEvent updates command display preference", async () => {

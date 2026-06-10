@@ -193,7 +193,7 @@ commands off
 Codex 会话。开启 Lark Remote 的 Codex 会话仍然是锁定的控制窗口身份，但日常派发不再
 依赖重新启动一个 `codex exec` 控制窗口回合，也不再要求这个回合去调用 MCP 工具。
 
-JavaScript bridge 仍会拦截 `控制台`、`status`、`observe off`、`exit handoff`、
+JavaScript bridge 仍会拦截 `控制台`、`status`、`关闭观察`、`exit handoff`、
 `关闭飞书连接`、`控制:` / `control:` 这类确定性关键词和卡片动作。其他内容，包括
 项目/会话语义和 `派发:` / `dispatch:` 文本，都会进入本地路由/派发执行器，由它基于
 已保存的 remote command、控制窗口锁定状态和当前目标选择决定下一步 Lark Remote 动作。
@@ -234,7 +234,7 @@ session path，不会按工作目录猜测最近对话。bridge 连上后，你�
 
 ### 观察与接管
 
-观察是只读的。使用 `observe`、`observe <序号>` 和 `observe off` 可以把另一个
+观察是只读的。使用 `观察列表`、`观察 <序号>` 和 `关闭观察` 可以把另一个
 Codex 会话的进度串流到飞书/Lark，但不会把飞书/Lark 输入路由进被观察会话。
 观察回复会把新追加的用户提示词也作为 `用户提示：` 分隔消息发到飞书，避免多轮
 LLM 输出在聊天里连成一段。

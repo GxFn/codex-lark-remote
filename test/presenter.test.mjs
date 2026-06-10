@@ -38,7 +38,8 @@ import {
 
 test("formatHelp includes whoami command", () => {
   assert.match(formatHelp(), /\bwhoami\b/);
-  assert.match(formatHelp(), /\bobserve\b/);
+  assert.match(formatHelp(), /观察列表/);
+  assert.match(formatHelp(), /关闭观察/);
   assert.match(formatHelp(), /commands on\|off/);
   assert.doesNotMatch(formatHelp(), /\/codex/);
 });
@@ -229,9 +230,13 @@ test("formatObservationList and status describe read-only session streaming", ()
   });
 
   assert.match(list, /可观察的 Codex 会话/);
-  assert.match(list, /observe <序号或线程前缀>/);
-  assert.equal(active.split("\n")[0], "Current migration");
-  assert.match(active, /只读进度串流/);
+  assert.match(list, /观察 <序号或线程前缀>/);
+  assert.equal(active, [
+    "Current migration",
+    "观察：已开启",
+    "停止：回复“关闭观察”。",
+  ].join("\n"));
+  assert.doesNotMatch(active, /observe off|\/workspace|线程:/);
 });
 
 test("takeover cards use Chinese labels", () => {

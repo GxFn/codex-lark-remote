@@ -16,7 +16,7 @@ export function formatHelp(options = {}) {
       "close Lark connection",
       "observe",
       "observe <number|thread-prefix>",
-      "observe off",
+      "stop observing",
       "commands on|off",
       "handoff off",
     ].join("\n");
@@ -33,9 +33,9 @@ export function formatHelp(options = {}) {
     "takeover status",
     "takeover off",
     "关闭飞书连接",
-    "observe",
-    "observe <序号或线程前缀>",
-    "observe off",
+    "观察列表",
+    "观察 <序号或线程前缀>",
+    "关闭观察",
     "commands on|off",
     "handoff off",
   ].join("\n");
@@ -544,7 +544,7 @@ export function formatObservationList(targets = [], observation = null, options 
       ].filter(Boolean).join("\n")),
       "",
       "Reply observe <number or thread prefix> to observe a session.",
-      observation?.active ? "Reply observe off to stop the current observation." : "",
+      observation?.active ? "Reply stop observing to stop the current observation." : "",
     ].filter(Boolean).join("\n");
   }
   if (!targets.length) return "没有找到可观察的 Codex 会话。";
@@ -557,8 +557,8 @@ export function formatObservationList(targets = [], observation = null, options 
       thread.updatedAtMs ? `   更新: ${new Date(thread.updatedAtMs).toLocaleString()}` : "",
     ].filter(Boolean).join("\n")),
     "",
-    "回复 observe <序号或线程前缀> 可以观察某个会话。",
-    observation?.active ? "回复 observe off 可以停止当前观察。" : "",
+    "回复 观察 <序号或线程前缀> 可以观察某个会话。",
+    observation?.active ? "回复 关闭观察 可以停止当前观察。" : "",
   ].filter(Boolean).join("\n");
 }
 
@@ -566,23 +566,19 @@ export function formatObservationStatus(observation, options = {}) {
   const language = languageOf(options);
   if (language === "en") {
     if (!observation?.active) return "Lark Remote observation: off";
+    const title = observation.name || "Untitled Codex chat";
     return [
-      observation.name || "Untitled Codex chat",
-      "Lark Remote observation: active",
-      `Thread: ${String(observation.threadId || "").slice(0, 8) || "unknown"}`,
-      observation.cwd ? `Folder: ${observation.cwd}` : "",
-      "This is read-only progress streaming. Lark messages are not sent to the observed session.",
-      "Reply observe off to stop observing.",
+      title,
+      "Observation: active",
+      "Stop: reply \"stop observing\".",
     ].filter(Boolean).join("\n");
   }
   if (!observation?.active) return "Lark Remote 观察：已关闭";
+  const title = observation.name || "未命名 Codex 会话";
   return [
-    observation.name || "未命名 Codex 对话",
-    "Lark Remote 观察：已开启",
-    `线程: ${String(observation.threadId || "").slice(0, 8) || "unknown"}`,
-    observation.cwd ? `目录: ${observation.cwd}` : "",
-    "这是只读进度串流，飞书消息不会发送到被观察的会话。",
-    "回复 observe off 可以停止观察。",
+    title,
+    "观察：已开启",
+    "停止：回复“关闭观察”。",
   ].filter(Boolean).join("\n");
 }
 
