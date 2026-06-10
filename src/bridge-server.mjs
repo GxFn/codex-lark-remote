@@ -90,7 +90,7 @@ export async function startBridge(options = {}) {
   const runner = new CodexCliRunner({ queue, config, notifier });
   const logger = options.logger || console;
   const keepAwake = new KeepAwakeController({ config, logger });
-  const observer = new CodexSessionObserver({ config, notifier, logger });
+  const observer = new CodexSessionObserver({ config, notifier, logger, queue });
   const bridge = {
     config,
     queue,
@@ -810,21 +810,12 @@ async function handleChatAction(ctx, event, action) {
     return ctx.notifier.reply(event.messageId, formatTask(await ctx.queue.cancel(action.id)));
   }
   if (action.kind === "approve") {
-    try {
-      return ctx.notifier.reply(
-        event.messageId,
-        formatTask(
-          await runApprovedAction({
-            queue: ctx.queue,
-            config: ctx.config,
-            commandId: action.id,
-            action: action.action,
-          }),
-        ),
-      );
-    } catch (error) {
-      return ctx.notifier.reply(event.messageId, `Approval failed: ${error.message}`);
-    }
+    return ctx.notifier.reply(
+      event.messageId,
+      language === "en"
+        ? "Legacy worktree approval commands are no longer part of Lark Remote takeover. Send a new request and Lark Remote will dispatch it to the selected target session."
+        : "旧 worktree 审批命令已不属于 Lark Remote 接管链路。请直接发送新的需求，Lark Remote 会派发到当前目标会话。",
+    );
   }
   if (action.kind === "rejected" && !handoff) return ctx.notifier.reply(event.messageId, action.reason);
   if (action.kind === "rejected" && handoff) action = { kind: "task", repoKey: "current", taskText: event.text };
@@ -1716,11 +1707,7 @@ function routeControlAction(action = {}, { command = {} } = {}) {
     case "cancel":
       return control("lark_cancel_remote_command", { id: action.id || action.remoteCommandId || remoteCommandId }, "Cancel the remote command, then reply with lark_reply_remote_command.");
     case "approve":
-      return control(
-        "lark_approve_remote_command",
-        { id: action.id || action.remoteCommandId || remoteCommandId, action: action.action || "review" },
-        "Approve the remote command action, then reply with lark_reply_remote_command.",
-      );
+      return controlReplyRoute("旧 worktree 审批命令已不属于 Lark Remote 接管链路。接管后请直接发送新的需求，Lark Remote 会派发到当前目标会话。", remoteCommandId);
     default:
       return {
         action: "clarify",
@@ -1809,7 +1796,7 @@ function formatDispatchRecordText(command = {}, options = {}) {
     return options.error || (language === "en" ? "Waiting for clarification." : "等待确认。");
   }
   if (options.status === "blocked_retryable") {
-    const reason = options.error || (language === "en" ? "Host thread dispatch is temporarily unavailable." : "宿主线程派发暂时不可用。");
+    const reason = options.error || (language === "en" ? "The local dispatch executor is temporarily unavailable." : "本地派发执行器暂时不可用。");
     return language === "en"
       ? `Dispatch is blocked but retained.\nReason: ${reason}`
       : `暂时无法派发，消息已保留。\n原因：${reason}`;

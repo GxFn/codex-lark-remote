@@ -87,6 +87,9 @@ test("CodexSessionObserver forwards Mac-local prompts during active takeover", a
     sessionPath,
     [
       JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: "[Lark Remote dispatch]\n来自飞书的派发" } }),
+      JSON.stringify({ type: "event_msg", payload: { type: "agent_message", phase: "commentary", message: "派发任务不应由观察器回传。" } }),
+      JSON.stringify({ type: "event_msg", payload: { type: "agent_message", phase: "final_answer", message: "派发任务最终回复不应重复。" } }),
+      JSON.stringify({ type: "turn.completed", payload: {} }),
       JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: "Mac 端继续输入" } }),
       JSON.stringify({ type: "event_msg", payload: { type: "agent_message", phase: "commentary", message: "正在处理 Mac 输入。" } }),
       JSON.stringify({ type: "event_msg", payload: { type: "agent_message", phase: "final_answer", message: "Mac 输入处理完成。" } }),

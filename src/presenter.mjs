@@ -7,7 +7,7 @@ export function formatHelp(options = {}) {
       "",
       "Use the console to choose local Codex projects and sessions. After takeover, normal messages are routed by Lark Remote to the selected session.",
       "Console: send console, project list, session list, enter project 1, observe session 2, takeover 2.",
-      "Task control: status rcmd_..., diff rcmd_..., cancel rcmd_..., approve rcmd_... test.",
+      "Command control: status rcmd_..., diff rcmd_..., cancel rcmd_....",
       "whoami",
       "status",
       "windows",
@@ -26,7 +26,7 @@ export function formatHelp(options = {}) {
     "",
     "可以从控制台选择本机 Codex 项目和会话；接管后普通需求会由 Lark Remote 路由并派发到被选中会话。",
     "控制台：发送控制台、项目列表、会话列表、进入项目 1、观察会话 2、接管 2。",
-    "任务控制：status rcmd_...、diff rcmd_...、cancel rcmd_...、approve rcmd_... test。",
+    "命令控制：status rcmd_...、diff rcmd_...、cancel rcmd_...。",
     "whoami",
     "status",
     "windows",
@@ -1097,8 +1097,6 @@ export function formatFinal(command) {
     "",
     "Next actions:",
     `diff ${command.id}`,
-    `approve ${command.id} test`,
-    `approve ${command.id} commit`,
     `cancel ${command.id}`,
   ].join("\n");
 }

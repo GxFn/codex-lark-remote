@@ -115,6 +115,25 @@ test("ships a plugin-root agent guide for global Lark Remote behavior", async ()
   assert.doesNotMatch(guide, /codex_lark_/);
 });
 
+test("documents the current local dispatch architecture without retired main-path concepts", async () => {
+  const doc = await fs.readFile(
+    new URL("../docs/control-window-dispatch-implementation-plan.md", import.meta.url),
+    "utf8",
+  );
+  const manifest = JSON.parse(await fs.readFile(new URL("../.codex-plugin/plugin.json", import.meta.url), "utf8"));
+
+  assert.match(doc, /local bridge runner/);
+  assert.match(doc, /\/bridge\/remote-command\/route/);
+  assert.match(doc, /\/bridge\/dispatch\/execute/);
+  assert.match(doc, /Retired Main-Path Concepts/);
+  assert.match(manifest.interface.longDescription, /local bridge runner/);
+  assert.doesNotMatch(manifest.interface.longDescription, /target delivery is executed by the dedicated Lark Remote dispatch MCP/);
+  assert.doesNotMatch(doc, /send_message_to_thread/);
+  assert.doesNotMatch(doc, /Host thread/i);
+  assert.doesNotMatch(doc, /lark_approve_remote_command/);
+  assert.doesNotMatch(doc, /control window uses Codex/i);
+});
+
 test("keeps full plugin-root READMEs", async () => {
   for (const { rootUrl, language, requiredRootPatterns } of readmePairs) {
     const rootReadme = await fs.readFile(rootUrl, "utf8");

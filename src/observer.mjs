@@ -94,10 +94,11 @@ export async function resolveObservationThread(options = {}) {
 }
 
 export class CodexSessionObserver {
-  constructor({ config, notifier, logger = console }) {
+  constructor({ config, notifier, logger = console, queue = null }) {
     this.config = config;
     this.notifier = notifier;
     this.logger = logger;
+    this.queue = queue;
     this.watcher = null;
     this.state = null;
     this.temporaryWatcher = null;
@@ -169,6 +170,7 @@ export class CodexSessionObserver {
       sessionPath: state.threadPath,
       onEvent: async (_event, summary) => this.#notifyTemporary(summary),
       eventOptions: { language: state.language || this.config.intent?.language || "zh", includeFinalAnswers: true },
+      suppressTurnFromUserPrompt: isLarkRemoteDispatchPrompt,
     });
     await this.temporaryWatcher.start();
     return this.status();
@@ -217,13 +219,33 @@ export class CodexSessionObserver {
   }
 
   async #notifyTemporary(summary) {
-    if (!summary || !this.temporaryState?.active) return;
+    const state = this.temporaryState;
+    if (!summary || !state?.active) return;
     const takeover = await readTakeover({ dataDir: this.config.dataDir });
-    if (!["pending", "active"].includes(takeover?.state || "") || takeover.target?.threadId !== this.temporaryState.threadId) return;
+    if (!["pending", "active"].includes(takeover?.state || "") || takeover.target?.threadId !== state.threadId) return;
+    if (await this.#hasActiveTargetDispatch(state.threadId)) return;
     try {
-      await this.notifier.reply(this.temporaryState.messageId, summary);
+      await this.notifier.reply(state.messageId, summary);
     } catch (error) {
       this.logger.warn?.(`Lark Remote temporary observer notify failed: ${error.message}`);
     }
   }
+
+  async #hasActiveTargetDispatch(threadId) {
+    if (!threadId || typeof this.queue?.list !== "function") return false;
+    try {
+      const commands = await this.queue.list({ limit: 100 });
+      return commands.some((command) =>
+        command?.targetWindowDispatch === true
+        && command.codexSessionId === threadId
+        && ["pending", "running"].includes(command.status || "")
+      );
+    } catch {
+      return false;
+    }
+  }
+}
+
+function isLarkRemoteDispatchPrompt(prompt) {
+  return /^\s*\[Lark Remote dispatch\]/i.test(String(prompt || ""));
 }

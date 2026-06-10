@@ -609,11 +609,6 @@ async function callBridgeControlTool(state, tool, input = {}, { fetchBridge = br
       return fetchBridge(state, `/bridge/tasks/${encodeURIComponent(input.id || input.remoteCommandId || "")}/cancel`, {
         method: "POST",
       });
-    case "lark_approve_remote_command":
-      return fetchBridge(state, `/bridge/tasks/${encodeURIComponent(input.id || input.remoteCommandId || "")}/approve`, {
-        method: "POST",
-        body: { action: input.action || "review" },
-      });
     case "lark_unlock_control_window":
       return fetchBridge(state, "/bridge/handoff", { method: "DELETE" });
     case "lark_stop":
@@ -873,6 +868,7 @@ export function createSessionProgressWatcher({
   eventOptions = {},
   includeUserPrompts = false,
   userPromptText,
+  suppressTurnFromUserPrompt,
 } = {}) {
   let offset = 0;
   let buffer = "";
@@ -880,6 +876,7 @@ export function createSessionProgressWatcher({
   let reading = false;
   let chain = Promise.resolve();
   let lastSummary = "";
+  let suppressCurrentTurn = false;
 
   const readNew = async () => {
     if (reading || !sessionPath || !onEvent) return;
@@ -910,9 +907,15 @@ export function createSessionProgressWatcher({
     if (!line.trim()) return;
     try {
       const event = JSON.parse(line);
+      const prompt = userPromptFromEvent(event);
+      if (prompt && typeof suppressTurnFromUserPrompt === "function") {
+        suppressCurrentTurn = Boolean(suppressTurnFromUserPrompt(prompt, event));
+      }
       const summary = summarizeSessionProgressEvent(event, eventOptions)
         || summarizeWatcherUserPrompt(event, { eventOptions, includeUserPrompts, userPromptText });
-      if (!summary || summary === lastSummary) return;
+      const completed = isTurnCompletedEvent(event);
+      if (completed) suppressCurrentTurn = false;
+      if (!summary || suppressCurrentTurn || summary === lastSummary) return;
       lastSummary = summary;
       chain = chain.then(() => onEvent(event, summary)).catch(() => {});
     } catch {
