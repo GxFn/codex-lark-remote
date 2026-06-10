@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sanitizeBridgeStatus } from "../src/sanitize.mjs";
+import { sanitizeBridgeStatus } from "../plugins/codex-lark-remote/src/sanitize.mjs";
 
 test("sanitizeBridgeStatus redacts local bridge credentials", () => {
   const status = sanitizeBridgeStatus({

@@ -293,12 +293,14 @@ Feishu/Lark should not see:
 Before releasing architecture changes, verify:
 
 1. `npm test` passes.
-2. The plugin manifest and package versions match.
-3. `runtime.tgz` contains the current package version.
-4. Local plugin cache and installed plugin directory are refreshed if testing in
+2. The nested plugin manifest and package versions match.
+3. The marketplace source path points at `./plugins/codex-lark-remote`.
+4. The nested plugin bundle does not contain root-only development files such as
+   `test/`, `scripts/`, or generated runtime archives.
+5. Local plugin cache and installed plugin directory are refreshed if testing in
    Codex Desktop.
-5. The running bridge process is restarted, because already-running bridge code
+6. The running bridge process is restarted, because already-running bridge code
    is not hot-reloaded.
-6. A takeover smoke test dispatches one Feishu/Lark message to the selected
+7. A takeover smoke test dispatches one Feishu/Lark message to the selected
    target and returns exactly one concise dispatch acknowledgement.
-7. Target output streams back without internal prompt echoes or runner metadata.
+8. Target output streams back without internal prompt echoes or runner metadata.

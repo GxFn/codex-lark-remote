@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { diagnoseLarkRemote, formatDiagnostics, formatHandoff } from "../src/diagnostics.mjs";
+import { diagnoseLarkRemote, formatDiagnostics, formatHandoff } from "../plugins/codex-lark-remote/src/diagnostics.mjs";
 
 test("diagnoseLarkRemote reports sanitized websocket-first readiness", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-diagnostics-"));

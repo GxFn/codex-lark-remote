@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { bridgeStatus } from "../src/supervisor.mjs";
-import { stateFilePath } from "../src/config.mjs";
+import { bridgeStatus } from "../plugins/codex-lark-remote/src/supervisor.mjs";
+import { stateFilePath } from "../plugins/codex-lark-remote/src/config.mjs";
 
 test("bridgeStatus requests restart when the running bridge has no version", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-supervisor-"));

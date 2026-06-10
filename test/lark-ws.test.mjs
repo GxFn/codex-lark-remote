@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { LarkWebSocketReceiver, larkWebSocketEnabled, loadLarkSdk } from "../src/lark-ws.mjs";
+import { LarkWebSocketReceiver, larkWebSocketEnabled, loadLarkSdk } from "../plugins/codex-lark-remote/src/lark-ws.mjs";
 
 test("larkWebSocketEnabled defaults to websocket-first", () => {
   assert.equal(larkWebSocketEnabled({ lark: {} }), true);

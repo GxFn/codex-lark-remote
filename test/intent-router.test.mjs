@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { routeChatTextAction, classifyHandoffDirectText, intentToAction } from "../src/intent-router.mjs";
-import { activateHandoff } from "../src/handoff.mjs";
-import { setIntentSessionMode } from "../src/intent-state.mjs";
+import { routeChatTextAction, classifyHandoffDirectText, intentToAction } from "../plugins/codex-lark-remote/src/intent-router.mjs";
+import { activateHandoff } from "../plugins/codex-lark-remote/src/handoff.mjs";
+import { setIntentSessionMode } from "../plugins/codex-lark-remote/src/intent-state.mjs";
 
 test("handoff direct mode sends ordinary control-looking text to Codex", () => {
   assert.deepEqual(classifyHandoffDirectText("窗口列表", { defaultRepo: "main", repos: { main: {} } }), {

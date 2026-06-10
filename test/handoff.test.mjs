@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { activateHandoff, clearHandoff, findCodexThreadById, listCodexThreads, readHandoff, resolveCodexThread } from "../src/handoff.mjs";
+import { activateHandoff, clearHandoff, findCodexThreadById, listCodexThreads, readHandoff, resolveCodexThread } from "../plugins/codex-lark-remote/src/handoff.mjs";
 
 test("activateHandoff stores an explicit thread id", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-handoff-"));

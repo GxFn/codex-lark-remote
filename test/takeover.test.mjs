@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { readHandoff } from "../src/handoff.mjs";
+import { readHandoff } from "../plugins/codex-lark-remote/src/handoff.mjs";
 import {
   activatePendingTakeoverIfIdle,
   clearPendingTakeoverInputs,
@@ -19,7 +19,7 @@ import {
   selectTakeoverTarget,
   setTakeoverProjectPage,
   setTakeoverSelectionPage,
-} from "../src/takeover.mjs";
+} from "../plugins/codex-lark-remote/src/takeover.mjs";
 
 test("takeover scope lists every project window including the starter thread", async () => {
   const { dataDir, codexHome, sessions } = await fixture();

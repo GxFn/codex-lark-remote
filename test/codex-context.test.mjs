@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { applyCodexContext, extractCodexContext } from "../src/codex-context.mjs";
+import { applyCodexContext, extractCodexContext } from "../plugins/codex-lark-remote/src/codex-context.mjs";
 
 test("extractCodexContext reads current thread id from request metadata", () => {
   const request = {

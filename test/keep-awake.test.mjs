@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { KeepAwakeController } from "../src/keep-awake.mjs";
+import { KeepAwakeController } from "../plugins/codex-lark-remote/src/keep-awake.mjs";
 
 test("KeepAwakeController starts caffeinate on macOS and stops it", () => {
   const spawned = [];

@@ -16,9 +16,9 @@ import {
   summarizeCodexEvent,
   summarizeSessionProgressEvent,
   summarizeSessionUserPromptEvent,
-} from "../src/runner.mjs";
-import { activateHandoff } from "../src/handoff.mjs";
-import { RemoteCommandQueue } from "../src/queue.mjs";
+} from "../plugins/codex-lark-remote/src/runner.mjs";
+import { activateHandoff } from "../plugins/codex-lark-remote/src/handoff.mjs";
+import { RemoteCommandQueue } from "../plugins/codex-lark-remote/src/queue.mjs";
 
 test("buildCodexExecArgs uses supported codex exec flags", () => {
   const args = buildCodexExecArgs({

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { normalizeIntent, parseIntentJson, translateTextToIntent } from "../src/intent-translator.mjs";
+import { normalizeIntent, parseIntentJson, translateTextToIntent } from "../plugins/codex-lark-remote/src/intent-translator.mjs";
 
 test("parseIntentJson accepts fenced JSON", () => {
   assert.deepEqual(parseIntentJson("```json\n{\"intent\":\"system.status\"}\n```"), { intent: "system.status" });

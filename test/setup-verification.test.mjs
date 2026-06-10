@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildLarkSetupVerificationReport, verifyLarkSetup } from "../src/setup-verification.mjs";
-import { buildSetupVerificationCard, formatSetupVerification } from "../src/presenter.mjs";
+import { buildLarkSetupVerificationReport, verifyLarkSetup } from "../plugins/codex-lark-remote/src/setup-verification.mjs";
+import { buildSetupVerificationCard, formatSetupVerification } from "../plugins/codex-lark-remote/src/presenter.mjs";
 
 test("buildLarkSetupVerificationReport separates platform readiness from live event checks", () => {
   const report = buildLarkSetupVerificationReport({

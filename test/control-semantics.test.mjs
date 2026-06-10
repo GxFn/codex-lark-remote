@@ -5,7 +5,7 @@ import {
   parseControlDirective,
   parseControlSemanticAction,
   parseDispatchDirective,
-} from "../src/control-semantics.mjs";
+} from "../plugins/codex-lark-remote/src/control-semantics.mjs";
 
 test("control semantics normalize project and session phrases", () => {
   assert.deepEqual(parseControlSemanticAction("项目列表", { mode: "console" }), { kind: "takeover_list" });

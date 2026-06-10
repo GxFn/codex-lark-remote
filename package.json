@@ -1,40 +1,15 @@
 {
-  "name": "codex-lark-remote",
-  "version": "0.3.0",
+  "name": "codex-lark-remote-repo",
+  "version": "0.0.0",
   "private": true,
-  "description": "Control Codex sessions from Feishu/Lark chat.",
+  "description": "Development workspace for the Lark Remote plugin.",
   "type": "module",
-  "bin": {
-    "codex-lark-remote": "./bin/codex-lark-bridge.mjs",
-    "codex-lark-remote-mcp": "./bin/codex-lark-remote-mcp.mjs"
-  },
+  "workspaces": [
+    "plugins/codex-lark-remote"
+  ],
   "scripts": {
-    "prepare:codex-plugin-runtime": "node ./scripts/prepare-codex-plugin-runtime.mjs",
-    "bridge": "node ./bin/codex-lark-bridge.mjs",
-    "mcp": "node ./bin/codex-lark-remote-mcp.mjs",
-    "mcp:wrapper": "node ./bin/codex-lark-remote-mcp-wrapper.mjs",
     "test": "node --test",
     "fixture": "node ./scripts/lark-event-fixture.mjs"
-  },
-  "keywords": [
-    "codex",
-    "codex-plugin",
-    "lark",
-    "feishu",
-    "mcp",
-    "remote",
-    "remote-control",
-    "local-first"
-  ],
-  "author": {
-    "name": "gaoxuefeng",
-    "url": "https://github.com/GxFn"
-  },
-  "homepage": "https://github.com/GxFn/codex-lark-remote#readme",
-  "repository": "https://github.com/GxFn/codex-lark-remote",
-  "license": "MIT",
-  "dependencies": {
-    "@larksuiteoapi/node-sdk": "^1.63.1"
   },
   "overrides": {
     "axios": "^1.16.0"

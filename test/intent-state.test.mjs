@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { intentConsoleFilePath } from "../src/config.mjs";
+import { intentConsoleFilePath } from "../plugins/codex-lark-remote/src/config.mjs";
 import {
   detectIntentLanguage,
   readIntentSession,
@@ -11,7 +11,7 @@ import {
   resolveIntentSessionMode,
   setIntentSessionLanguage,
   setIntentSessionMode,
-} from "../src/intent-state.mjs";
+} from "../plugins/codex-lark-remote/src/intent-state.mjs";
 
 test("intent session state stores console and handoff modes by chat", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-intent-state-"));

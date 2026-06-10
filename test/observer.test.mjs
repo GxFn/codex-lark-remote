@@ -4,8 +4,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { observationFilePath, takeoverFilePath } from "../src/config.mjs";
-import { CodexSessionObserver } from "../src/observer.mjs";
+import { observationFilePath, takeoverFilePath } from "../plugins/codex-lark-remote/src/config.mjs";
+import { CodexSessionObserver } from "../plugins/codex-lark-remote/src/observer.mjs";
 
 test("CodexSessionObserver forwards observed progress without per-message title", async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-lark-observer-"));

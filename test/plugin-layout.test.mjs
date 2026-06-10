@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
 const repoRootUrl = new URL("../", import.meta.url);
+const pluginRootUrl = new URL("../plugins/codex-lark-remote/", import.meta.url);
 const marketplaceUrl = new URL("../.agents/plugins/marketplace.json", import.meta.url);
 
-const rootPluginEntries = [
+const bundledPluginEntries = [
   ".codex-plugin",
   ".mcp.json",
   "AGENTS.md",
@@ -17,20 +17,41 @@ const rootPluginEntries = [
   "bin",
   "config",
   "package.json",
-  "runtime.tgz",
   "skills",
   "src",
+];
+
+const forbiddenPluginEntries = [
+  "docs",
+  "node_modules",
+  "runtime.tgz",
+  "scripts",
+  "test",
+];
+
+const forbiddenRootPluginEntries = [
+  ".codex-plugin",
+  ".mcp.json",
+  "AGENTS.md",
+  "assets",
+  "bin",
+  "config",
+  "skills",
+  "src",
+  "runtime.tgz",
 ];
 
 const readmePairs = [
   {
     rootUrl: new URL("../README.md", import.meta.url),
+    bundledUrl: new URL("../plugins/codex-lark-remote/README.md", import.meta.url),
     language: "English",
     requiredRootPatterns: [
       /## Install/,
       /## Start With The Console/,
       /## Configure Feishu\/Lark/,
       /## Start From Codex/,
+      /plugins\/codex-lark-remote/,
       /https:\/\/github\.com\/GxFn\/codex-lark-remote\.git/,
       /lark_configure/,
       /lark_verify_setup/,
@@ -41,12 +62,14 @@ const readmePairs = [
   },
   {
     rootUrl: new URL("../README.zh-CN.md", import.meta.url),
+    bundledUrl: new URL("../plugins/codex-lark-remote/README.zh-CN.md", import.meta.url),
     language: "Chinese",
     requiredRootPatterns: [
       /## 安装/,
       /## 先从控制台开始/,
       /## 配置飞书\/Lark/,
       /## 从 Codex 启动/,
+      /plugins\/codex-lark-remote/,
       /https:\/\/github\.com\/GxFn\/codex-lark-remote\.git/,
       /lark_configure/,
       /lark_verify_setup/,
@@ -57,19 +80,53 @@ const readmePairs = [
   },
 ];
 
-test("keeps repository-local marketplace metadata pointed at the plugin root", async () => {
+test("keeps repository-local marketplace metadata pointed at the nested plugin bundle", async () => {
   const marketplace = JSON.parse(await fs.readFile(marketplaceUrl, "utf8"));
   assert.equal(marketplace.name, "gxfn");
   assert.equal(marketplace.interface?.displayName, "GxFn");
   assert.equal(marketplace.plugins[0]?.name, "codex-lark-remote");
   assert.equal(marketplace.plugins[0]?.source?.source, "local");
-  assert.equal(marketplace.plugins[0]?.source?.path, ".");
+  assert.equal(marketplace.plugins[0]?.source?.path, "./plugins/codex-lark-remote");
+});
+
+test("keeps the marketplace scan surface limited to the nested plugin bundle", async () => {
+  const pluginRootStat = await fs.lstat(pluginRootUrl);
+  assert.equal(pluginRootStat.isDirectory(), true, "plugin bundle must live under plugins/codex-lark-remote");
+  assert.equal(pluginRootStat.isSymbolicLink(), false, "plugin bundle must be a real directory");
+
+  for (const entry of bundledPluginEntries) {
+    const bundledPath = path.join(pluginRootUrl.pathname, entry);
+    const bundledStat = await fs.lstat(bundledPath);
+    assert.equal(bundledStat.isSymbolicLink(), false, `${entry} must be a real bundled file or directory`);
+  }
+
+  for (const entry of forbiddenPluginEntries) {
+    const bundledPath = path.join(pluginRootUrl.pathname, entry);
+    await assert.rejects(fs.lstat(bundledPath), { code: "ENOENT" }, `${entry} must not ship in the plugin bundle`);
+  }
+
+  for (const entry of forbiddenRootPluginEntries) {
+    const rootPath = path.join(repoRootUrl.pathname, entry);
+    await assert.rejects(fs.lstat(rootPath), { code: "ENOENT" }, `${entry} should not exist at repo root`);
+  }
 });
 
 test("keeps plugin metadata aligned with repository-local marketplace conventions", async () => {
-  const manifest = JSON.parse(await fs.readFile(new URL("../.codex-plugin/plugin.json", import.meta.url), "utf8"));
-  const packageJson = JSON.parse(await fs.readFile(new URL("../package.json", import.meta.url), "utf8"));
+  const manifest = JSON.parse(
+    await fs.readFile(new URL("../plugins/codex-lark-remote/.codex-plugin/plugin.json", import.meta.url), "utf8"),
+  );
+  const packageJson = JSON.parse(
+    await fs.readFile(new URL("../plugins/codex-lark-remote/package.json", import.meta.url), "utf8"),
+  );
+  const rootPackageJson = JSON.parse(await fs.readFile(new URL("../package.json", import.meta.url), "utf8"));
 
+  assert.equal(rootPackageJson.name, "codex-lark-remote-repo");
+  assert.deepEqual(rootPackageJson.workspaces, ["plugins/codex-lark-remote"]);
+
+  assert.equal(manifest.name, "codex-lark-remote");
+  assert.equal(packageJson.name, "codex-lark-remote");
+  assert.equal(manifest.version, packageJson.version);
+  assert.equal(manifest.version, "0.3.0");
   assert.equal(manifest.author?.name, "gaoxuefeng");
   assert.equal(manifest.author?.url, "https://github.com/GxFn");
   assert.equal(manifest.homepage, "https://github.com/GxFn/codex-lark-remote#readme");
@@ -86,23 +143,29 @@ test("keeps plugin metadata aligned with repository-local marketplace convention
   assert.equal(packageJson.repository, manifest.repository);
 });
 
-test("keeps the repository root as the plugin root", async () => {
-  const rootStat = await fs.lstat(repoRootUrl);
-  assert.equal(rootStat.isDirectory(), true, "plugin root must be the repository root");
-  assert.equal(rootStat.isSymbolicLink(), false, "plugin root must be a real directory");
+test("keeps full root READMEs alongside bundled plugin docs", async () => {
+  for (const { rootUrl, bundledUrl, language, requiredRootPatterns } of readmePairs) {
+    const rootReadme = await fs.readFile(rootUrl, "utf8");
+    const bundledReadme = await fs.readFile(bundledUrl, "utf8");
 
-  for (const entry of rootPluginEntries) {
-    const rootPath = path.join(repoRootUrl.pathname, entry);
-    const entryStat = await fs.lstat(rootPath);
-    assert.equal(entryStat.isSymbolicLink(), false, `${entry} must be a real plugin-root file or directory`);
+    assert.match(rootReadme, /plugins\/codex-lark-remote\//, `${language} root README must point at the bundle`);
+    assert.doesNotMatch(rootReadme, /runtime\.tgz/, `${language} root README must not document the rejected tarball path`);
+    assert.doesNotMatch(bundledReadme, /runtime\.tgz/, `${language} bundled README must not document the rejected tarball path`);
+
+    const rootLineCount = rootReadme.trim().split(/\n/).length;
+    const bundledLineCount = bundledReadme.trim().split(/\n/).length;
+
+    assert.ok(rootLineCount >= 80, `${language} root README should be a full first-time user guide`);
+    assert.ok(bundledLineCount >= 60, `${language} bundled README should stay useful inside the plugin package`);
+
+    for (const pattern of requiredRootPatterns) {
+      assert.match(rootReadme, pattern, `${language} root README is missing ${pattern}`);
+    }
   }
-
-  const docsStat = await fs.lstat(new URL("../docs", import.meta.url));
-  assert.equal(docsStat.isDirectory(), true, "implementation docs may ship at the plugin root");
 });
 
-test("ships a plugin-root agent guide for global Lark Remote behavior", async () => {
-  const guide = await fs.readFile(new URL("../AGENTS.md", import.meta.url), "utf8");
+test("ships a plugin-bundle agent guide for global Lark Remote behavior", async () => {
+  const guide = await fs.readFile(new URL("../plugins/codex-lark-remote/AGENTS.md", import.meta.url), "utf8");
 
   assert.match(guide, /Global Contract/);
   assert.match(guide, /lark-remote-control-window/);
@@ -120,7 +183,9 @@ test("documents the current local dispatch architecture without retired main-pat
     new URL("../docs/control-window-dispatch-implementation-plan.md", import.meta.url),
     "utf8",
   );
-  const manifest = JSON.parse(await fs.readFile(new URL("../.codex-plugin/plugin.json", import.meta.url), "utf8"));
+  const manifest = JSON.parse(
+    await fs.readFile(new URL("../plugins/codex-lark-remote/.codex-plugin/plugin.json", import.meta.url), "utf8"),
+  );
 
   assert.match(doc, /local bridge runner/);
   assert.match(doc, /\/bridge\/remote-command\/route/);
@@ -134,24 +199,9 @@ test("documents the current local dispatch architecture without retired main-pat
   assert.doesNotMatch(doc, /control window uses Codex/i);
 });
 
-test("keeps full plugin-root READMEs", async () => {
-  for (const { rootUrl, language, requiredRootPatterns } of readmePairs) {
-    const rootReadme = await fs.readFile(rootUrl, "utf8");
-    assert.doesNotMatch(rootReadme, /plugins\/codex-lark-remote\//, `${language} README must not point at a nested bundle`);
-
-    const rootLineCount = rootReadme.trim().split(/\n/).length;
-
-    assert.ok(rootLineCount >= 80, `${language} root README should be a full first-time user guide`);
-
-    for (const pattern of requiredRootPatterns) {
-      assert.match(rootReadme, pattern, `${language} root README is missing ${pattern}`);
-    }
-  }
-});
-
 test("keeps startup guidance on the plugin MCP path", async () => {
   const skill = await fs.readFile(
-    new URL("../skills/lark-remote/SKILL.md", import.meta.url),
+    new URL("../plugins/codex-lark-remote/skills/lark-remote/SKILL.md", import.meta.url),
     "utf8",
   );
   assert.match(skill, /Use Lark Remote MCP tools only/);
@@ -163,15 +213,15 @@ test("keeps startup guidance on the plugin MCP path", async () => {
 
 test("exposes control-window MCP tools and skill guidance", async () => {
   const server = await fs.readFile(
-    new URL("../bin/codex-lark-remote-mcp.mjs", import.meta.url),
+    new URL("../plugins/codex-lark-remote/bin/codex-lark-remote-mcp.mjs", import.meta.url),
     "utf8",
   );
   const controlSkill = await fs.readFile(
-    new URL("../skills/lark-remote-control-window/SKILL.md", import.meta.url),
+    new URL("../plugins/codex-lark-remote/skills/lark-remote-control-window/SKILL.md", import.meta.url),
     "utf8",
   );
   const startupSkill = await fs.readFile(
-    new URL("../skills/lark-remote/SKILL.md", import.meta.url),
+    new URL("../plugins/codex-lark-remote/skills/lark-remote/SKILL.md", import.meta.url),
     "utf8",
   );
   const requiredTools = [
@@ -215,61 +265,31 @@ test("exposes control-window MCP tools and skill guidance", async () => {
   assert.doesNotMatch(controlSkill, /lark_context/);
 });
 
-test("declares a plugin-root cwd for the MCP server", async () => {
-  const config = JSON.parse(await fs.readFile(new URL("../.mcp.json", import.meta.url), "utf8"));
+test("declares a direct plugin-bundle MCP server without the rejected runtime tarball wrapper", async () => {
+  const config = JSON.parse(
+    await fs.readFile(new URL("../plugins/codex-lark-remote/.mcp.json", import.meta.url), "utf8"),
+  );
   const server = config.mcpServers?.["lark-remote"];
 
   assert.equal(server?.command, "node");
   assert.deepEqual(server?.args, [
-    "./bin/codex-lark-remote-mcp-wrapper.mjs",
+    "./bin/codex-lark-remote-mcp.mjs",
   ]);
   assert.equal(server?.cwd, ".");
   assert.equal(server?.default_tools_approval_mode, "approve");
 });
 
 test("keeps example runner config compatible with plugin tools", async () => {
-  const config = JSON.parse(await fs.readFile(new URL("../config/example.config.json", import.meta.url), "utf8"));
+  const config = JSON.parse(
+    await fs.readFile(new URL("../plugins/codex-lark-remote/config/example.config.json", import.meta.url), "utf8"),
+  );
 
   assert.equal(config.runner?.ignoreUserConfig, false);
 });
 
-test("ships a self-contained runtime package for Node dependencies", async () => {
-  const packageJson = JSON.parse(await fs.readFile(new URL("../package.json", import.meta.url), "utf8"));
-  const wrapper = await fs.readFile(
-    new URL("../bin/codex-lark-remote-mcp-wrapper.mjs", import.meta.url),
-    "utf8",
-  );
-  const runtimeUrl = new URL("../runtime.tgz", import.meta.url);
-  const runtimeStat = await fs.lstat(runtimeUrl);
-  const tar = spawnSync("tar", ["-tzf", runtimeUrl.pathname], { encoding: "utf8" });
-  const runtimePackage = spawnSync("tar", ["-xOf", runtimeUrl.pathname, "package/package.json"], { encoding: "utf8" });
-  const runtimeMcp = spawnSync("tar", ["-xOf", runtimeUrl.pathname, "package/bin/codex-lark-remote-mcp.mjs"], {
-    encoding: "utf8",
-  });
-
-  assert.equal(packageJson.scripts?.["prepare:codex-plugin-runtime"], "node ./scripts/prepare-codex-plugin-runtime.mjs");
-  assert.equal(packageJson.scripts?.["mcp:wrapper"], "node ./bin/codex-lark-remote-mcp-wrapper.mjs");
-  assert.equal(runtimeStat.isFile(), true, "runtime.tgz must ship with the plugin root");
-  assert.equal(tar.status, 0, tar.stderr);
-  assert.equal(runtimePackage.status, 0, runtimePackage.stderr);
-  assert.equal(runtimeMcp.status, 0, runtimeMcp.stderr);
-  assert.match(tar.stdout, /package\/node_modules\/@larksuiteoapi\/node-sdk\/package\.json/);
-  assert.match(tar.stdout, /package\/node_modules\/@larksuiteoapi\/node-sdk\/lib\/index\.js/);
-  assert.equal(JSON.parse(runtimePackage.stdout).version, packageJson.version);
-  assert.match(runtimeMcp.stdout, /name: "lark_dispatch_remote_command"/);
-  assert.match(runtimeMcp.stdout, /name === "lark_dispatch_remote_command"/);
-  assert.match(wrapper, /runtime\.tgz/);
-  assert.match(wrapper, /codex-lark-remote-mcp/);
-  assert.match(wrapper, /"--offline"/);
-  assert.match(wrapper, /npm_config_offline/);
-  assert.match(wrapper, /npm_config_ignore_scripts/);
-  assert.match(wrapper, /lockScope/);
-  assert.match(wrapper, /CODEX_LARK_REMOTE_NPM_CACHE/);
-});
-
 test("requires explicit consent for conversation handoff", async () => {
   const server = await fs.readFile(
-    new URL("../bin/codex-lark-remote-mcp.mjs", import.meta.url),
+    new URL("../plugins/codex-lark-remote/bin/codex-lark-remote-mcp.mjs", import.meta.url),
     "utf8",
   );
 
@@ -289,7 +309,7 @@ test("requires explicit consent for conversation handoff", async () => {
 
 test("keeps startup tools from circular start and handoff guidance", async () => {
   const server = await fs.readFile(
-    new URL("../bin/codex-lark-remote-mcp.mjs", import.meta.url),
+    new URL("../plugins/codex-lark-remote/bin/codex-lark-remote-mcp.mjs", import.meta.url),
     "utf8",
   );
 
@@ -302,7 +322,7 @@ test("keeps startup tools from circular start and handoff guidance", async () =>
 
 test("keeps bridge runtime isolated from the MCP stdio process", async () => {
   const server = await fs.readFile(
-    new URL("../bin/codex-lark-remote-mcp.mjs", import.meta.url),
+    new URL("../plugins/codex-lark-remote/bin/codex-lark-remote-mcp.mjs", import.meta.url),
     "utf8",
   );
 
